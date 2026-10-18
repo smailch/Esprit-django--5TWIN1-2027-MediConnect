@@ -1,0 +1,35 @@
+{% extends "auth_base.html" %}
+
+{% block title %}File du médecin (test) — MediConnect{% endblock %}
+{% block largeur %}max-w-3xl{% endblock %}
+
+{% block page %}
+<p class="inline-flex rounded-full bg-soft px-3 py-1 text-xs text-primary-dark">Page de test — l'interface finale sera celle du module médecin</p>
+<h1 class="mt-3 text-2xl font-light text-gray-800">File de {{ medecin.nom }}</h1>
+<p class="mt-1 text-sm text-gray-600">Patients en attente, triés par urgence puis par heure d'arrivée.</p>
+
+<nav aria-label="Choisir un médecin de test" class="mt-4 flex flex-wrap gap-2">
+  {% for m in medecins %}
+  <a href="{% url 'patients:file_medecin_test' m.id %}" {% if m.id == medecin.id %}aria-current="page"{% endif %}
+     class="inline-flex min-h-[44px] items-center rounded-full border px-4 text-sm {% if m.id == medecin.id %}border-primary bg-primary text-white{% else %}border-gray-300 text-gray-800 hover:bg-white{% endif %}">{{ m.nom }}</a>
+  {% endfor %}
+</nav>
+
+<ol class="mt-6 space-y-3">
+  {% for d in demandes %}
+  <li class="rounded-xl bg-white p-4 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm font-medium text-gray-800">{{ d.patient }}</p>
+      <p class="rounded-full px-3 py-1 text-xs {% if d.niveau_effectif == 1 %}bg-red-100 text-red-900{% elif d.niveau_effectif == 2 %}bg-orange-100 text-orange-900{% elif d.niveau_effectif == 3 %}bg-yellow-100 text-yellow-900{% else %}bg-soft text-primary-dark{% endif %}">
+        Niveau {{ d.niveau_effectif }}
+      </p>
+    </div>
+    <p class="mt-1 text-xs text-gray-600">Reçue le {{ d.cree_le|date:"d/m/Y à H:i" }}</p>
+    <p class="mt-2 text-sm text-gray-700">{{ d.explication }}</p>
+    {% if d.texte_libre %}<p class="mt-2 text-sm text-gray-700">« {{ d.texte_libre }} »</p>{% endif %}
+  </li>
+  {% empty %}
+  <li class="rounded-xl bg-white p-5 text-sm text-gray-600 shadow-sm">Aucun patient en attente.</li>
+  {% endfor %}
+</ol>
+{% endblock %}

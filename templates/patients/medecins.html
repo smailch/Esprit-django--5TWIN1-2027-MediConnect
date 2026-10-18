@@ -1,0 +1,44 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Choisir un médecin — MediConnect{% endblock %}
+{% block largeur %}max-w-3xl{% endblock %}
+
+{% block page %}
+<h1 class="text-2xl font-light text-gray-800">Choisissez votre médecin</h1>
+<p class="mt-1 text-sm text-gray-600">Sélectionnez le médecin avec qui vous souhaitez prendre rendez-vous. Vous décrirez ensuite vos symptômes.</p>
+
+<form method="get" class="mt-6 grid gap-3 rounded-xl bg-white p-4 shadow-sm sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+  <div>
+    <label for="f-specialite" class="mb-1 block text-xs text-gray-700">Spécialité</label>
+    <select id="f-specialite" name="specialite" class="block w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30">
+      <option value="">Toutes</option>
+      {% for s in specialites %}<option value="{{ s }}" {% if s == specialite %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-ville" class="mb-1 block text-xs text-gray-700">Ville</label>
+    <select id="f-ville" name="ville" class="block w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30">
+      <option value="">Toutes</option>
+      {% for v in villes %}<option value="{{ v }}" {% if v == ville %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="inline-flex min-h-[44px] items-center justify-center rounded-full border border-primary px-6 text-sm text-primary transition-colors hover:bg-soft">Filtrer</button>
+</form>
+
+<ul class="mt-6 grid gap-4 sm:grid-cols-2">
+  {% for m in medecins %}
+  <li class="flex flex-col rounded-xl bg-white p-5 shadow-sm">
+    <h2 class="text-base font-medium text-gray-800">{{ m.nom }}</h2>
+    <p class="mt-1 text-sm text-gray-600">{{ m.specialite }} · {{ m.ville }}</p>
+    <p class="mt-2 text-xs {% if m.disponible %}text-green-800{% else %}text-gray-600{% endif %}">
+      {% if m.disponible %}Disponible{% else %}Indisponible actuellement{% endif %}
+    </p>
+    <a href="{% url 'patients:symptomes' m.id %}" class="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-full bg-primary px-5 text-sm text-white transition-colors hover:bg-primary-dark">
+      Choisir ce médecin
+    </a>
+  </li>
+  {% empty %}
+  <li class="rounded-xl bg-white p-5 text-sm text-gray-600 shadow-sm sm:col-span-2">Aucun médecin ne correspond à ces critères.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

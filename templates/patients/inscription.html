@@ -1,0 +1,50 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Créer un compte patient — MediConnect{% endblock %}
+{% block largeur %}max-w-xl{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'patients:connexion' %}" class="text-sm text-primary hover:text-primary-dark min-h-[44px] inline-flex items-center">Se connecter</a>
+{% endblock %}
+
+{% block page %}
+<div class="rounded-xl bg-white p-6 sm:p-8 shadow-sm">
+  <h1 class="text-2xl font-light text-gray-800">Créer votre compte patient</h1>
+  <p class="mt-2 text-sm text-gray-600">Quelques informations suffisent. Vous pourrez compléter votre dossier médical ensuite.</p>
+
+  <form method="post" novalidate class="mt-6 space-y-4">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div role="alert" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+      {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    <fieldset class="space-y-4">
+      <legend class="mb-1 text-sm font-medium text-primary-dark">Votre compte</legend>
+      {% for field in form %}
+        {% if field.name in "username first_name last_name email password1 password2" %}
+          {% include "patients/_champ.html" %}
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+
+    <fieldset class="space-y-4 pt-2">
+      <legend class="mb-1 text-sm font-medium text-primary-dark">Vos informations</legend>
+      {% for field in form %}
+        {% if field.name in "date_naissance sexe telephone ville" %}
+          {% include "patients/_champ.html" %}
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+
+    <button type="submit" class="mt-2 inline-flex w-full items-center justify-center rounded-full bg-primary px-6 py-3 text-sm text-white transition-colors hover:bg-primary-dark">
+      Créer mon compte
+    </button>
+  </form>
+
+  <p class="mt-5 text-center text-sm text-gray-600">
+    Déjà inscrit ? <a href="{% url 'patients:connexion' %}" class="text-primary underline underline-offset-2">Se connecter</a>
+  </p>
+</div>
+{% endblock %}

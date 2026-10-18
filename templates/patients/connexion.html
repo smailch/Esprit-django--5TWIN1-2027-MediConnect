@@ -1,0 +1,33 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Connexion — MediConnect{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'patients:inscription' %}" class="text-sm text-primary hover:text-primary-dark min-h-[44px] inline-flex items-center">Créer un compte</a>
+{% endblock %}
+
+{% block page %}
+<div class="rounded-xl bg-white p-6 sm:p-8 shadow-sm">
+  <h1 class="text-2xl font-light text-gray-800">Connexion</h1>
+  <p class="mt-2 text-sm text-gray-600">Accédez à votre espace patient.</p>
+
+  <form method="post" novalidate class="mt-6 space-y-4">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div role="alert" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+      {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    {% for field in form %}{% include "patients/_champ.html" %}{% endfor %}
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <button type="submit" class="inline-flex w-full items-center justify-center rounded-full bg-primary px-6 py-3 text-sm text-white transition-colors hover:bg-primary-dark">
+      Se connecter
+    </button>
+  </form>
+
+  <p class="mt-5 text-center text-sm text-gray-600">
+    Pas encore de compte ? <a href="{% url 'patients:inscription' %}" class="text-primary underline underline-offset-2">Créer un compte</a>
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="min-h-[100dvh] bg-soft flex flex-col">
+  <a href="#contenu" class="skip-link">Aller au contenu principal</a>
+
+  <header class="flex items-center justify-between px-5 sm:px-8 md:px-12 py-5">
+    <a href="{% url 'home' %}" class="flex items-center gap-2 min-h-[44px]">
+      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white">
+        <i data-lucide="stethoscope" class="h-5 w-5"></i>
+      </span>
+      <span class="font-medium text-base">MediConnect</span>
+    </a>
+    <div class="flex items-center gap-3">
+      {% block header_actions %}{% endblock %}
+      {% if user.is_authenticated %}
+      <form method="post" action="{% url 'patients:deconnexion' %}">
+        {% csrf_token %}
+        <button type="submit" class="inline-flex min-h-[44px] items-center rounded-full border border-primary px-5 text-sm text-primary transition-colors hover:bg-white">Se déconnecter</button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if user.is_authenticated and user.patient %}
+  {% with page=request.resolver_match.url_name %}
+  <nav aria-label="Espace patient" class="flex flex-wrap gap-2 px-5 sm:px-8 md:px-12 pb-4">
+    <a href="{% url 'patients:tableau_de_bord' %}" {% if page == 'tableau_de_bord' %}aria-current="page"{% endif %}
+       class="inline-flex min-h-[44px] items-center rounded-full px-5 text-sm transition-colors {% if page == 'tableau_de_bord' %}bg-primary text-white{% else %}bg-white/80 text-gray-800 hover:bg-white{% endif %}">Tableau de bord</a>
+    <a href="{% url 'patients:medecins' %}" {% if page == 'medecins' or page == 'symptomes' %}aria-current="page"{% endif %}
+       class="inline-flex min-h-[44px] items-center rounded-full px-5 text-sm transition-colors {% if page == 'medecins' or page == 'symptomes' %}bg-primary text-white{% else %}bg-white/80 text-gray-800 hover:bg-white{% endif %}">Prendre rendez-vous</a>
+    <a href="{% url 'patients:profil' %}" {% if page == 'profil' %}aria-current="page"{% endif %}
+       class="inline-flex min-h-[44px] items-center rounded-full px-5 text-sm transition-colors {% if page == 'profil' %}bg-primary text-white{% else %}bg-white/80 text-gray-800 hover:bg-white{% endif %}">Mon profil</a>
+  </nav>
+  {% endwith %}
+  {% endif %}
+
+  <main id="contenu" class="flex-1 px-5 sm:px-8 pb-12">
+    <div class="mx-auto w-full {% block largeur %}max-w-md{% endblock %}">
+      {% if messages %}
+      <div class="mb-4 space-y-2" role="status">
+        {% for message in messages %}
+        <p class="rounded-xl bg-white px-4 py-3 text-sm text-primary-dark shadow-sm border border-primary/20">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block page %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}
