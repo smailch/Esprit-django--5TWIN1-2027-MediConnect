@@ -6,54 +6,51 @@
 <section class="min-h-[100dvh] relative overflow-hidden flex flex-col bg-soft">
 
   <!-- Vidéo de fond -->
-  <video id="hero-video" class="absolute inset-0 w-full h-full object-cover" autoplay loop muted playsinline
+  <video id="hero-video" class="hero-video absolute inset-0 w-full h-full object-cover" autoplay loop muted playsinline
          poster="{% static 'img/doctor-poster.jpg' %}" aria-hidden="true">
     <source src="{% static 'video/doctor.mp4' %}" type="video/mp4">
   </video>
 
-  <!-- Overlay de lisibilité -->
-  <div class="absolute inset-0 bg-white/80 md:bg-transparent md:bg-gradient-to-r md:from-white/95 md:via-white/75 md:to-transparent" aria-hidden="true"></div>
+  <!-- Voile clair pour la lisibilité -->
+  <div class="hero-veil absolute inset-0" aria-hidden="true"></div>
 
   <!-- NAV -->
-  <header class="relative z-10"><nav class="flex items-center justify-between px-5 sm:px-8 md:px-12 py-5" aria-label="Navigation principale">
-    <a href="{% url 'home' %}" class="fade-down flex items-center gap-2 min-h-[44px]" style="--i:0">
-      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white">
-        <i data-lucide="stethoscope" class="h-5 w-5"></i>
-      </span>
-      <span class="font-medium text-base">MediConnect</span>
-    </a>
-
-    <ul class="hidden lg:flex items-center gap-8 rounded-full bg-white/80 backdrop-blur shadow-sm px-7 py-2.5 text-sm text-[#1F2937] whitespace-nowrap">
-      <li class="fade-down" style="--i:1"><a href="{% url 'home' %}" class="hover:text-primary transition-colors">Accueil</a></li>
-      <li class="fade-down" style="--i:2"><a href="#specialites" class="hover:text-primary transition-colors">Spécialités</a></li>
-      <li class="fade-down" style="--i:3"><a href="#medecins" class="hover:text-primary transition-colors">Médecins</a></li>
-      <li class="fade-down" style="--i:4"><a href="#a-propos" class="hover:text-primary transition-colors">À propos</a></li>
-      <li class="fade-down" style="--i:5"><a href="#contact" class="hover:text-primary transition-colors">Contact</a></li>
-    </ul>
-
-    <div class="flex items-center gap-3">
-      <a href="{% url 'patients:connexion' %}" class="fade-down hidden sm:inline-flex items-center whitespace-nowrap min-h-[44px] px-3 text-sm text-primary hover:text-primary-dark transition-colors" style="--i:6">Connexion</a>
-      <a href="{% url 'patients:inscription' %}" class="fade-down hidden sm:inline-flex whitespace-nowrap rounded-full bg-primary text-white text-sm px-5 py-2 hover:bg-primary-dark transition-colors" style="--i:6">
-        Prendre rendez-vous
+  <header class="relative z-10">
+    <nav class="flex items-center justify-between px-5 sm:px-8 md:px-12 py-5" aria-label="Navigation principale">
+      <a href="{% url 'home' %}" class="fade-down flex items-center gap-2 min-h-[44px]" style="--i:0">
+        <span class="logo-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="font-medium text-base">MediConnect</span>
       </a>
-      <button type="button" id="menu-open" class="lg:hidden flex h-11 w-11 items-center justify-center rounded-full bg-white/85 shadow-sm text-[#1F2937]"
-              aria-label="Ouvrir le menu" aria-controls="mobile-menu" aria-expanded="false">
-        <i data-lucide="menu" class="h-6 w-6"></i>
-      </button>
-    </div>
-  </nav>
+
+      <ul class="glass glass-pill hidden xl:flex items-center gap-8 px-8 py-2.5 text-sm text-[#1F2937] whitespace-nowrap">
+        <li class="fade-down" style="--i:1"><a href="{% url 'home' %}" class="hover:text-primary transition-colors">Accueil</a></li>
+        <li class="fade-down" style="--i:2"><a href="#specialites" class="hover:text-primary transition-colors">Spécialités</a></li>
+        <li class="fade-down" style="--i:3"><a href="#medecins" class="hover:text-primary transition-colors">Médecins</a></li>
+        <li class="fade-down" style="--i:4"><a href="#a-propos" class="hover:text-primary transition-colors">À propos</a></li>
+        <li class="fade-down" style="--i:5"><a href="#contact" class="hover:text-primary transition-colors">Contact</a></li>
+      </ul>
+
+      <div class="flex items-center gap-3">
+        <div class="fade-down hidden sm:flex items-center gap-3" style="--i:6">
+          <a href="{% url 'patients:connexion' %}" class="btn btn-glass">Connexion</a>
+          <a href="{% url 'patients:inscription' %}" class="btn btn-primary">Prendre rendez-vous</a>
+        </div>
+        <button type="button" id="menu-open" class="btn btn-glass btn-icon xl:hidden"
+                aria-label="Ouvrir le menu" aria-controls="mobile-menu" aria-expanded="false">
+          <i data-lucide="menu" class="h-6 w-6"></i>
+        </button>
+      </div>
+    </nav>
   </header>
 
   <!-- MENU MOBILE -->
-  <div id="mobile-menu" class="hidden fixed inset-0 z-50 bg-white flex-col px-5 sm:px-8 py-5" role="dialog" aria-modal="true" aria-label="Menu">
+  <div id="mobile-menu" class="menu-panel hidden fixed inset-0 z-50 flex-col px-5 sm:px-8 py-5" role="dialog" aria-modal="true" aria-label="Menu">
     <div class="flex items-center justify-between">
       <a href="{% url 'home' %}" class="flex items-center gap-2 min-h-[44px]">
-        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white">
-          <i data-lucide="stethoscope" class="h-5 w-5"></i>
-        </span>
+        <span class="logo-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
         <span class="font-medium text-base">MediConnect</span>
       </a>
-      <button type="button" id="menu-close" class="flex h-10 w-10 items-center justify-center rounded-full text-[#1F2937]" aria-label="Fermer le menu">
+      <button type="button" id="menu-close" class="btn btn-glass btn-icon" aria-label="Fermer le menu">
         <i data-lucide="x" class="h-6 w-6"></i>
       </button>
     </div>
@@ -64,53 +61,53 @@
       <li><a href="#a-propos" class="menu-link">À propos</a></li>
       <li><a href="#contact" class="menu-link">Contact</a></li>
     </ul>
-    <a href="{% url 'patients:connexion' %}" class="menu-link mt-auto mb-3 flex w-full items-center justify-center rounded-full border border-primary text-primary text-sm px-5 py-3 hover:bg-soft transition-colors">Connexion</a>
-    <a href="{% url 'patients:inscription' %}" class="menu-link flex w-full items-center justify-center rounded-full bg-primary text-white text-sm px-5 py-3 hover:bg-primary-dark transition-colors">
-      Prendre rendez-vous
-    </a>
+    <a href="{% url 'patients:connexion' %}" class="menu-link btn btn-glass mt-auto mb-3 w-full">Connexion</a>
+    <a href="{% url 'patients:inscription' %}" class="menu-link btn btn-primary w-full">Prendre rendez-vous</a>
   </div>
 
   <!-- HERO -->
   <main id="contenu" class="relative z-10 flex-1 flex items-center px-5 sm:px-8 md:px-12 py-8">
     <div class="max-w-xl w-full">
-      <span class="fade-up inline-flex rounded-full bg-soft text-primary text-xs px-3 py-1" style="--i:1">
-        Santé connectée, simplement
-      </span>
+      <span class="chip fade-up" style="--i:1">Santé connectée, simplement</span>
 
-      <h1 class="mt-5 font-light leading-tight text-gray-800" style="font-size: clamp(1.75rem, 4vw, 3rem);">
+      <h1 class="mt-5 font-light leading-tight text-gray-800" style="font-size: clamp(1.9rem, 4.4vw, 3.25rem);">
         <span class="block overflow-hidden"><span class="line block" style="--w:0">Votre médecin,</span></span>
         <span class="block overflow-hidden"><span class="line block" style="--w:1">à portée de clic</span></span>
       </h1>
 
-      <p class="fade-up mt-5 text-sm sm:text-base text-gray-700 font-light" style="--i:5">
+      <p class="fade-up mt-5 text-sm sm:text-base text-gray-700 font-light max-w-md" style="--i:5">
         Trouvez un spécialiste, prenez rendez-vous et suivez votre dossier médical en toute sécurité.
       </p>
 
-      <div class="mt-7 flex flex-col sm:flex-row gap-3">
-        <a href="{% url 'patients:inscription' %}" class="fade-up inline-flex items-center justify-center gap-2 rounded-full bg-primary text-white text-sm px-6 py-3 hover:bg-primary-dark transition-colors" style="--i:6">
+      <div class="fade-up mt-7 flex flex-col sm:flex-row gap-3" style="--i:6">
+        <a href="{% url 'patients:inscription' %}" class="btn btn-primary">
           Prendre rendez-vous
           <i data-lucide="arrow-right" class="h-4 w-4"></i>
         </a>
-        <a href="#medecins" class="fade-up inline-flex items-center justify-center rounded-full border border-primary text-primary text-sm px-6 py-3 hover:bg-soft transition-colors" style="--i:7">
-          Découvrir les médecins
-        </a>
+        <a href="#medecins" class="btn btn-glass">Découvrir les médecins</a>
       </div>
+
+      <ul class="fade-up mt-6 flex flex-wrap gap-2" style="--i:7" aria-label="Nos points forts">
+        <li class="chip"><i data-lucide="activity" class="h-3.5 w-3.5"></i>Triage intelligent</li>
+        <li class="chip"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>Médecins vérifiés</li>
+        <li class="chip"><i data-lucide="lock" class="h-3.5 w-3.5"></i>Dossier sécurisé</li>
+      </ul>
     </div>
   </main>
 
   <!-- STATS -->
   <div class="relative z-10 px-5 sm:px-8 md:px-12 pb-8 md:pb-12">
     <dl aria-label="Chiffres clés" class="grid grid-cols-3 gap-3 max-w-xl">
-      <div class="fade-up flex flex-col-reverse bg-white/85 backdrop-blur rounded-xl p-3 sm:p-4 shadow-sm" style="--i:8">
-        <dt class="text-xs text-gray-500">Médecins</dt>
+      <div class="glass fade-up flex flex-col-reverse p-3 sm:p-4" style="--i:8">
+        <dt class="text-xs text-gray-700">Médecins</dt>
         <dd class="text-xl sm:text-2xl font-light text-primary">500+</dd>
       </div>
-      <div class="fade-up flex flex-col-reverse bg-white/85 backdrop-blur rounded-xl p-3 sm:p-4 shadow-sm" style="--i:9">
-        <dt class="text-xs text-gray-500">Patients</dt>
+      <div class="glass fade-up flex flex-col-reverse p-3 sm:p-4" style="--i:9">
+        <dt class="text-xs text-gray-700">Patients</dt>
         <dd class="text-xl sm:text-2xl font-light text-primary">10 000+</dd>
       </div>
-      <div class="fade-up flex flex-col-reverse bg-white/85 backdrop-blur rounded-xl p-3 sm:p-4 shadow-sm" style="--i:10">
-        <dt class="text-xs text-gray-500">Disponibilité</dt>
+      <div class="glass fade-up flex flex-col-reverse p-3 sm:p-4" style="--i:10">
+        <dt class="text-xs text-gray-700">Disponibilité</dt>
         <dd class="text-xl sm:text-2xl font-light text-primary">24/7</dd>
       </div>
     </dl>

@@ -3,11 +3,11 @@
 {% block title %}Connexion — MediConnect{% endblock %}
 
 {% block header_actions %}
-<a href="{% url 'patients:inscription' %}" class="text-sm text-primary hover:text-primary-dark min-h-[44px] inline-flex items-center">Créer un compte</a>
+<a href="{% url 'patients:inscription' %}" class="btn btn-glass">Créer un compte</a>
 {% endblock %}
 
 {% block page %}
-<div class="rounded-xl bg-white p-6 sm:p-8 shadow-sm">
+<div class="glass p-6 sm:p-8">
   <h1 class="text-2xl font-light text-gray-800">Connexion</h1>
   <p class="mt-2 text-sm text-gray-600">Accédez à votre espace patient.</p>
 
@@ -21,7 +21,7 @@
     {% for field in form %}{% include "patients/_champ.html" %}{% endfor %}
     <input type="hidden" name="next" value="{{ next }}">
 
-    <button type="submit" class="inline-flex w-full items-center justify-center rounded-full bg-primary px-6 py-3 text-sm text-white transition-colors hover:bg-primary-dark">
+    <button type="submit" class="btn btn-primary w-full">
       Se connecter
     </button>
   </form>

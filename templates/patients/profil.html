@@ -7,14 +7,14 @@
 <h1 class="text-2xl font-light text-gray-800">Bonjour {{ user.first_name|default:user.username }}</h1>
 <p class="mt-1 text-sm text-gray-600">Gardez vos informations à jour : elles aident le médecin à mieux vous soigner.</p>
 
-<a href="{% url 'patients:medecins' %}" class="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-primary px-6 text-sm text-white transition-colors hover:bg-primary-dark">
+<a href="{% url 'patients:medecins' %}" class="btn btn-primary mt-5">
   Prendre rendez-vous avec un médecin
 </a>
 
 <form method="post" novalidate class="mt-6 space-y-6">
   {% csrf_token %}
 
-  <section class="rounded-xl bg-white p-6 shadow-sm" aria-labelledby="titre-identite">
+  <section class="glass p-6" aria-labelledby="titre-identite">
     <h2 id="titre-identite" class="text-base font-medium text-primary-dark">Mes informations</h2>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
       {% for field in profil_form %}
@@ -25,14 +25,14 @@
     </div>
   </section>
 
-  <section class="rounded-xl bg-white p-6 shadow-sm" aria-labelledby="titre-dossier">
+  <section class="glass p-6" aria-labelledby="titre-dossier">
     <h2 id="titre-dossier" class="text-base font-medium text-primary-dark">Mon dossier médical</h2>
     <div class="mt-4 space-y-4">
       {% for field in dossier_form %}{% include "patients/_champ.html" %}{% endfor %}
     </div>
   </section>
 
-  <button type="submit" class="inline-flex w-full items-center justify-center rounded-full bg-primary px-6 py-3 text-sm text-white transition-colors hover:bg-primary-dark sm:w-auto">
+  <button type="submit" class="btn btn-primary w-full sm:w-auto">
     Enregistrer
   </button>
 </form>

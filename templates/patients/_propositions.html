@@ -1,10 +1,10 @@
 {% if propositions %}
-<section class="mt-5 rounded-xl border border-primary/30 bg-soft p-4" aria-labelledby="prop-{{ triage.pk }}">
+<section class="glass mt-5 p-4" aria-labelledby="prop-{{ triage.pk }}">
   <h2 id="prop-{{ triage.pk }}" class="text-sm font-medium text-primary-dark">Des médecins disponibles peuvent vous prendre en charge plus vite</h2>
   <p class="mt-1 text-xs text-gray-700">Votre situation est très urgente. Vous pouvez transférer votre demande, ou rester chez {{ triage.medecin_nom }} : le choix vous appartient.</p>
   <ul class="mt-3 space-y-2">
     {% for m in propositions %}
-    <li class="flex flex-col gap-3 rounded-xl bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+    <li class="glass flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p class="text-sm font-medium text-gray-800">{{ m.nom }}</p>
         <p class="text-xs text-gray-600">
@@ -14,7 +14,7 @@
       </div>
       <form method="post" action="{% url 'patients:transferer' triage.pk m.id %}">
         {% csrf_token %}
-        <button type="submit" class="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-primary px-5 text-sm text-white transition-colors hover:bg-primary-dark sm:w-auto">
+        <button type="submit" class="btn btn-primary w-full sm:w-auto">
           Transférer ma demande
           <span class="sr-only"> à {{ m.nom }}</span>
         </button>

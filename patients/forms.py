@@ -7,11 +7,7 @@ from .models import DossierMedical, Patient, Symptome
 
 User = get_user_model()
 
-INPUT_CLASSES = (
-    "block w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm "
-    "text-[#1F2937] placeholder:text-gray-400 focus:border-primary "
-    "focus:outline-none focus:ring-2 focus:ring-primary/30"
-)
+INPUT_CLASSES = "field"  # style « verre » défini dans static/css/ui.css
 
 
 class StyledFormMixin:

@@ -40,7 +40,7 @@
   });
 
   // Repasse en mise en page desktop : referme le menu s'il était ouvert.
-  window.matchMedia('(min-width: 1024px)').addEventListener('change', function (m) {
+  window.matchMedia('(min-width: 1280px)').addEventListener('change', function (m) {
     if (m.matches && menu.classList.contains('is-open')) setOpen(false);
   });
 })();

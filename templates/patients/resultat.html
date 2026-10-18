@@ -4,7 +4,7 @@
 
 {% block page %}
 {% with n=triage.niveau_effectif %}
-<div class="rounded-xl bg-white p-6 sm:p-8 shadow-sm">
+<div class="glass p-6 sm:p-8">
   <h1 class="text-2xl font-light text-gray-800">Votre demande a été envoyée</h1>
   <p class="mt-1 text-sm text-gray-600">Médecin : {{ triage.medecin_nom }} ({{ triage.medecin_specialite }})</p>
 
@@ -35,11 +35,11 @@
   </p>
 
   <div class="mt-6 flex flex-col gap-3 sm:flex-row">
-    <a href="{% url 'patients:tableau_de_bord' %}" class="inline-flex min-h-[44px] items-center justify-center rounded-full bg-primary px-6 text-sm text-white transition-colors hover:bg-primary-dark">Retour à mon tableau de bord</a>
+    <a href="{% url 'patients:tableau_de_bord' %}" class="btn btn-primary">Retour à mon tableau de bord</a>
     {% if triage.statut == "en_attente" %}
     <form method="post" action="{% url 'patients:annuler' triage.pk %}">
       {% csrf_token %}
-      <button type="submit" class="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-gray-400 px-6 text-sm text-gray-800 transition-colors hover:bg-gray-50 sm:w-auto">Annuler ma demande</button>
+      <button type="submit" class="btn btn-glass btn-neutral w-full sm:w-auto">Annuler ma demande</button>
     </form>
     {% else %}
     <p class="inline-flex min-h-[44px] items-center text-sm text-gray-600">Statut : {{ triage.get_statut_display }}</p>

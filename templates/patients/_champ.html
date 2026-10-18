@@ -4,7 +4,7 @@
   </label>
   {{ field }}
   {% if field.help_text %}
-  <p class="mt-1 text-xs text-gray-600">{{ field.help_text|safe }}</p>
+  <div class="mt-1 text-xs text-gray-600 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-0.5">{{ field.help_text|safe }}</div>
   {% endif %}
   {% for erreur in field.errors %}
   <p class="mt-1 text-xs text-red-700" role="alert">{{ erreur }}</p>
