@@ -1,21 +1,22 @@
-{% extends "auth_base.html" %}
+{% extends "patients/layout.html" %}
 
 {% block title %}File du médecin (test) — MediConnect{% endblock %}
-{% block largeur %}max-w-3xl{% endblock %}
 
 {% block page %}
+<div class="glass p-5 sm:p-6">
 <p class="chip">Page de test — l'interface finale sera celle du module médecin</p>
 <h1 class="mt-3 text-2xl font-light text-gray-800">File de {{ medecin.nom }}</h1>
 <p class="mt-1 text-sm text-gray-600">Patients en attente, triés par urgence puis par heure d'arrivée.</p>
+</div>
 
 <nav aria-label="Choisir un médecin de test" class="mt-4 flex flex-wrap gap-2">
   {% for m in medecins %}
   <a href="{% url 'patients:file_medecin_test' m.id %}" {% if m.id == medecin.id %}aria-current="page"{% endif %}
-     class="btn btn-sm {% if m.id == medecin.id %}btn-primary{% else %}btn-glass{% endif %}">{{ m.nom }}</a>
+     class="btn btn-sm {% if m.id == medecin.id %}btn-light{% else %}btn-glass{% endif %}">{{ m.nom }}</a>
   {% endfor %}
 </nav>
 
-<ol class="mt-6 space-y-3">
+<ol class="mt-6 grid gap-3 lg:grid-cols-2">
   {% for d in demandes %}
   <li class="glass p-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -29,7 +30,7 @@
     {% if d.texte_libre %}<p class="mt-2 text-sm text-gray-700">« {{ d.texte_libre }} »</p>{% endif %}
   </li>
   {% empty %}
-  <li class="glass p-5 text-sm text-gray-600">Aucun patient en attente.</li>
+  <li class="glass p-5 text-sm text-gray-600 lg:col-span-2">Aucun patient en attente.</li>
   {% endfor %}
 </ol>
 {% endblock %}

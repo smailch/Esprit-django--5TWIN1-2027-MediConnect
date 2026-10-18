@@ -1,0 +1,18 @@
+{% extends "core/layout.html" %}
+
+{# Cadre des pages patient : le cadre commun + la navigation de l'espace patient. #}
+
+{% block sous_entete %}
+{% if user.is_authenticated and user.patient %}
+{% with page=request.resolver_match.url_name %}
+<nav aria-label="Espace patient" class="mx-auto flex w-full max-w-7xl flex-wrap gap-2 px-5 pb-4 sm:px-8 lg:px-12">
+  <a href="{% url 'patients:tableau_de_bord' %}" {% if page == 'tableau_de_bord' %}aria-current="page"{% endif %}
+     class="btn btn-sm {% if page == 'tableau_de_bord' %}btn-light{% else %}btn-glass{% endif %}">Tableau de bord</a>
+  <a href="{% url 'patients:medecins' %}" {% if page == 'medecins' or page == 'symptomes' %}aria-current="page"{% endif %}
+     class="btn btn-sm {% if page == 'medecins' or page == 'symptomes' %}btn-light{% else %}btn-glass{% endif %}">Prendre rendez-vous</a>
+  <a href="{% url 'patients:profil' %}" {% if page == 'profil' %}aria-current="page"{% endif %}
+     class="btn btn-sm {% if page == 'profil' %}btn-light{% else %}btn-glass{% endif %}">Mon profil</a>
+</nav>
+{% endwith %}
+{% endif %}
+{% endblock %}

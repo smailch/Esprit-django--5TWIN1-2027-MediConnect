@@ -142,6 +142,6 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 # Authentification
-LOGIN_URL = 'patients:connexion'
-LOGIN_REDIRECT_URL = 'patients:tableau_de_bord'
+LOGIN_URL = 'core:connexion'
+LOGIN_REDIRECT_URL = 'home'  # repli ; la destination réelle dépend du rôle (core.views.ConnexionView)
 LOGOUT_REDIRECT_URL = 'home'

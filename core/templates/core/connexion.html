@@ -1,9 +1,10 @@
-{% extends "auth_base.html" %}
+{% extends "core/layout.html" %}
 
 {% block title %}Connexion — MediConnect{% endblock %}
+{% block largeur %}max-w-md{% endblock %}
 
 {% block header_actions %}
-<a href="{% url 'patients:inscription' %}" class="btn btn-glass">Créer un compte</a>
+<a href="{% url 'patients:inscription' %}" class="btn btn-glass btn-sm">Créer un compte</a>
 {% endblock %}
 
 {% block page %}
@@ -18,7 +19,7 @@
       {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
     </div>
     {% endif %}
-    {% for field in form %}{% include "patients/_champ.html" %}{% endfor %}
+    {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
     <input type="hidden" name="next" value="{{ next }}">
 
     <button type="submit" class="btn btn-primary w-full">

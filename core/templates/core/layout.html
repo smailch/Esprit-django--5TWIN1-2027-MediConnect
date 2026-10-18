@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load static %}
+
+{# Cadre commun à toutes les pages « intérieures » : large sur ordinateur (jusqu'à 1280 px),
+   une colonne sur mobile. Chaque app l'étend et peut remplir `sous_entete` (sa navigation),
+   `header_actions`, `largeur` (ex. max-w-md pour une carte étroite) et `page`. #}
+
+{% block content %}
+<div class="page-bg min-h-[100dvh] flex flex-col" style="--page-img: url('{% static 'img/doctor-poster.jpg' %}')">
+  <a href="#contenu" class="skip-link">Aller au contenu principal</a>
+
+  <header class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-5 sm:px-8 lg:px-12">
+    <a href="{% url 'home' %}" class="flex items-center gap-2 min-h-[44px]">
+      <span class="logo-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+      <span class="text-base font-medium text-white">MediConnect</span>
+    </a>
+    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+      {% block header_actions %}{% endblock %}
+      {% if user.is_authenticated %}
+      <form method="post" action="{% url 'core:deconnexion' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-glass btn-sm">Se déconnecter</button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+
+  {% block sous_entete %}{% endblock %}
+
+  <main id="contenu" class="mx-auto w-full max-w-7xl flex-1 px-5 pb-12 sm:px-8 lg:px-12">
+    <div class="mx-auto w-full {% block largeur %}{% endblock %}">
+      {% if messages %}
+      <div class="mb-4 space-y-2" role="status">
+        {% for message in messages %}
+        <p class="glass px-4 py-3 text-sm text-primary-dark">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block page %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

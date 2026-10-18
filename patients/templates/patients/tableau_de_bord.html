@@ -1,10 +1,9 @@
-{% extends "auth_base.html" %}
+{% extends "patients/layout.html" %}
 
 {% block title %}Tableau de bord — MediConnect{% endblock %}
-{% block largeur %}max-w-3xl{% endblock %}
 
 {% block page %}
-<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+<div class="glass flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
   <div>
     <h1 class="text-2xl font-light text-gray-800">Bonjour {{ user.first_name|default:user.username }}</h1>
     <p class="mt-1 text-sm text-gray-600">Suivez ici vos demandes de rendez-vous.</p>
@@ -15,8 +14,9 @@
   </a>
 </div>
 
-<section class="mt-8" aria-labelledby="titre-en-cours">
-  <h2 id="titre-en-cours" class="text-base font-medium text-primary-dark">En cours ({{ en_cours|length }})</h2>
+<div class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+<section class="lg:col-span-8" aria-labelledby="titre-en-cours">
+  <h2 id="titre-en-cours" class="text-lg font-medium text-white">En cours ({{ en_cours|length }})</h2>
 
   {% if en_cours %}
   <ul class="mt-3 space-y-4">
@@ -69,8 +69,8 @@
   {% endif %}
 </section>
 
-<section class="mt-8" aria-labelledby="titre-historique">
-  <h2 id="titre-historique" class="text-base font-medium text-primary-dark">Historique ({{ historique|length }})</h2>
+<section class="lg:col-span-4" aria-labelledby="titre-historique">
+  <h2 id="titre-historique" class="text-lg font-medium text-white">Historique ({{ historique|length }})</h2>
   {% if historique %}
   <ul class="glass mt-3 divide-y divide-gray-300/50">
     {% for t in historique %}
@@ -87,9 +87,10 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="mt-3 text-sm text-gray-600">Votre historique est vide.</p>
+  <p class="glass mt-3 p-5 text-sm text-gray-700">Votre historique est vide.</p>
   {% endif %}
 </section>
+</div>
 {% endblock %}
 
 {% block extra_js %}{% endblock %}

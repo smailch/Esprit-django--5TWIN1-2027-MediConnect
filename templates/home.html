@@ -11,7 +11,10 @@
     <source src="{% static 'video/doctor.mp4' %}" type="video/mp4">
   </video>
 
-  <!-- Voile clair pour la lisibilité -->
+  <!-- Relève les zones sombres de la vidéo (la rend plus claire) -->
+  <div class="hero-lift absolute inset-0" aria-hidden="true"></div>
+
+  <!-- Voile clair, côté texte, pour la lisibilité -->
   <div class="hero-veil absolute inset-0" aria-hidden="true"></div>
 
   <!-- NAV -->
@@ -32,7 +35,7 @@
 
       <div class="flex items-center gap-3">
         <div class="fade-down hidden sm:flex items-center gap-3" style="--i:6">
-          <a href="{% url 'patients:connexion' %}" class="btn btn-glass">Connexion</a>
+          <a href="{% url 'core:connexion' %}" class="btn btn-glass">Connexion</a>
           <a href="{% url 'patients:inscription' %}" class="btn btn-primary">Prendre rendez-vous</a>
         </div>
         <button type="button" id="menu-open" class="btn btn-glass btn-icon xl:hidden"
@@ -61,7 +64,7 @@
       <li><a href="#a-propos" class="menu-link">À propos</a></li>
       <li><a href="#contact" class="menu-link">Contact</a></li>
     </ul>
-    <a href="{% url 'patients:connexion' %}" class="menu-link btn btn-glass mt-auto mb-3 w-full">Connexion</a>
+    <a href="{% url 'core:connexion' %}" class="menu-link btn btn-glass mt-auto mb-3 w-full">Connexion</a>
     <a href="{% url 'patients:inscription' %}" class="menu-link btn btn-primary w-full">Prendre rendez-vous</a>
   </div>
 

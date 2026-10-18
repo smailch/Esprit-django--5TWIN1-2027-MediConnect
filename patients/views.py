@@ -1,7 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,13 +8,13 @@ from django.views.decorators.http import require_POST
 
 from . import medecins_test
 from .forms import (
-    ConnexionForm,
     DossierMedicalForm,
     InscriptionPatientForm,
     ProfilPatientForm,
     SymptomesForm,
 )
 from .models import (
+    AutoEvaluation,
     ConstantesVitales,
     DossierMedical,
     Patient,
@@ -37,16 +36,6 @@ def inscription(request):
         messages.success(request, "Votre compte a bien été créé. Bienvenue sur MediConnect !")
         return redirect("patients:tableau_de_bord")
     return render(request, "patients/inscription.html", {"form": form})
-
-
-class ConnexionView(LoginView):
-    template_name = "patients/connexion.html"
-    authentication_form = ConnexionForm
-    redirect_authenticated_user = True
-
-
-class DeconnexionView(LogoutView):
-    """Déconnexion en POST uniquement."""
 
 
 @login_required
@@ -119,7 +108,8 @@ def declarer_symptomes(request, medecin_id):
             for sy in choisis
         ]
         constantes = form.constantes()
-        resultat = evaluer(symptomes, constantes)
+        auto_evaluation = form.auto_evaluation()
+        resultat = evaluer(symptomes, constantes, auto_evaluation)
         triage = Triage.objects.create(
             patient=patient,
             medecin_id=medecin["id"],
@@ -130,6 +120,7 @@ def declarer_symptomes(request, medecin_id):
                 for d in symptomes
             ],
             constantes=ConstantesVitales(**constantes) if constantes else None,
+            auto_evaluation=AutoEvaluation(**auto_evaluation),
             texte_libre=form.cleaned_data["texte_libre"],
             score=resultat.score,
             niveau=resultat.niveau,

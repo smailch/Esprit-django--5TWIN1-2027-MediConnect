@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django_mongodb_backend.fields import (
@@ -7,6 +8,8 @@ from django_mongodb_backend.fields import (
     EmbeddedModelField,
 )
 from django_mongodb_backend.models import EmbeddedModel
+
+from .echelles import ECHELLES, NIVEAU_MAX, NIVEAU_MIN
 
 
 class Patient(models.Model):
@@ -89,6 +92,17 @@ class Symptome(models.Model):
     class Meta:
         ordering = ["nom"]
 
+    def clean(self):
+        super().clean()
+        if self.drapeau_rouge and self.niveau_minimal is None:
+            raise ValidationError(
+                {"niveau_minimal": "Indiquez le niveau d'urgence imposé par ce drapeau rouge."}
+            )
+        if not self.drapeau_rouge and self.niveau_minimal is not None:
+            raise ValidationError(
+                {"niveau_minimal": "Le niveau minimal ne s'applique qu'à un drapeau rouge."}
+            )
+
     def __str__(self):
         return self.nom
 
@@ -113,6 +127,23 @@ class ConstantesVitales(EmbeddedModel):
     )
     saturation_oxygene = models.PositiveSmallIntegerField(
         null=True, blank=True, help_text="SpO2 en %"
+    )
+
+
+class AutoEvaluation(EmbeddedModel):
+    """Ce que le patient dit ressentir, sur des échelles de 0 à 5 (voir echelles.py)."""
+
+    douleur = models.PositiveSmallIntegerField(
+        default=0, validators=[MinValueValidator(NIVEAU_MIN), MaxValueValidator(NIVEAU_MAX)]
+    )
+    fievre = models.PositiveSmallIntegerField(
+        default=0, validators=[MinValueValidator(NIVEAU_MIN), MaxValueValidator(NIVEAU_MAX)]
+    )
+    respiration = models.PositiveSmallIntegerField(
+        default=0, validators=[MinValueValidator(NIVEAU_MIN), MaxValueValidator(NIVEAU_MAX)]
+    )
+    etat_general = models.PositiveSmallIntegerField(
+        default=0, validators=[MinValueValidator(NIVEAU_MIN), MaxValueValidator(NIVEAU_MAX)]
     )
 
 
@@ -148,6 +179,7 @@ class Triage(models.Model):
     # Ce que déclare le patient
     symptomes = EmbeddedModelArrayField(SymptomeDeclare, blank=True, default=list)
     constantes = EmbeddedModelField(ConstantesVitales, null=True, blank=True)
+    auto_evaluation = EmbeddedModelField(AutoEvaluation, null=True, blank=True)
     texte_libre = models.TextField(blank=True)
 
     # Résultat du triage IA
@@ -176,6 +208,20 @@ class Triage(models.Model):
     def niveau_effectif(self):
         """Le niveau du médecin prime sur celui de l'IA."""
         return self.niveau_medecin or self.niveau
+
+    def auto_evaluation_resume(self):
+        """Valeurs non nulles de l'auto-évaluation, prêtes à afficher."""
+        ae = self.auto_evaluation
+        if not ae:
+            return []
+        resume = []
+        for nom, echelle in ECHELLES.items():
+            valeur = getattr(ae, nom, 0) or 0
+            if valeur:
+                resume.append(
+                    {"nom": echelle["court"], "valeur": valeur, "libelle": echelle["niveaux"][valeur]}
+                )
+        return resume
 
     @property
     def est_actif(self):

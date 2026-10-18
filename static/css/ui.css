@@ -1,5 +1,6 @@
 /* ==========================================================================
    MediConnect : style « verre » commun à toutes les pages
+   Verre dépoli = fond translucide + flou + reflet + bordure lumineuse.
    ========================================================================== */
 
 :root {
@@ -11,19 +12,17 @@
 
 /* ---- Panneaux en verre -------------------------------------------------- */
 .glass {
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: 1.25rem;
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
   box-shadow:
-    0 12px 40px -18px rgba(10, 60, 70, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 18px 44px -20px rgba(10, 60, 70, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35);
 }
-
-.glass-pill {
-  border-radius: 9999px;
-}
+.glass-pill { border-radius: 9999px; }
 
 /* Petite pastille d'information */
 .chip {
@@ -34,15 +33,20 @@
   border-radius: 9999px;
   font-size: 0.75rem;
   color: var(--teal-dark);
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.45));
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  backdrop-filter: blur(14px) saturate(170%);
+  box-shadow: inset 0 1px 0 #fff;
 }
 
-/* ---- Boutons en verre --------------------------------------------------- */
+/* ---- Boutons : verre dépoli ----------------------------------------------
+   ::before = reflet brillant (moitié haute) ; ::after = liseré intérieur.
+   Les deux sont sous le texte (isolation + z-index négatif). */
 .btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -57,64 +61,71 @@
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
-  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(190%);
+  backdrop-filter: blur(16px) saturate(190%);
   transition:
     transform 0.25s var(--ease),
     box-shadow 0.25s var(--ease),
-    background-color 0.25s var(--ease);
+    filter 0.25s var(--ease);
 }
+.btn::before,
+.btn::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.btn::before {
+  inset: 1px 1px 50% 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.06));
+}
+.btn::after {
+  inset: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    inset 0 -12px 18px -12px rgba(255, 255, 255, 0.5);
+}
+.btn:hover { transform: translateY(-2px); filter: brightness(1.04); }
 .btn:active { transform: translateY(0) scale(0.98); }
 
-/* Verre teinté teal : action principale */
+/* Verre teinté teal : action principale (assez foncé pour le texte blanc) */
 .btn-primary {
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 55%),
-    linear-gradient(135deg, rgba(14, 124, 134, 0.95), rgba(10, 92, 100, 0.95));
+  text-shadow: 0 1px 1px rgba(0, 50, 60, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, rgba(10, 104, 114, 0.94), rgba(6, 72, 82, 0.96));
   box-shadow:
-    0 10px 26px -10px rgba(14, 124, 134, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    0 14px 30px -12px rgba(14, 124, 134, 0.75),
+    0 2px 6px rgba(6, 72, 82, 0.25);
+}
+.btn-primary::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.03));
 }
 .btn-primary:hover {
-  transform: translateY(-2px);
   box-shadow:
-    0 16px 32px -12px rgba(14, 124, 134, 0.8),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    0 20px 38px -14px rgba(14, 124, 134, 0.85),
+    0 2px 6px rgba(6, 72, 82, 0.3);
 }
 
 /* Verre givré clair : action secondaire */
 .btn-glass {
   color: var(--teal-dark);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.25));
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.3));
   box-shadow:
-    0 8px 22px -12px rgba(10, 60, 70, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    0 12px 26px -14px rgba(10, 60, 70, 0.5),
+    0 1px 3px rgba(10, 60, 70, 0.12);
 }
 .btn-glass:hover {
-  transform: translateY(-2px);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.5));
   box-shadow:
-    0 14px 28px -14px rgba(10, 60, 70, 0.5),
-    inset 0 1px 0 #fff;
+    0 18px 32px -16px rgba(10, 60, 70, 0.55),
+    0 1px 3px rgba(10, 60, 70, 0.14);
 }
 
-/* Verre neutre (annuler, actions discrètes) */
-.btn-neutral {
-  color: var(--ink);
-}
-
-/* Verre actif dans un groupe de navigation : même rendu que le principal */
+.btn-neutral { color: var(--ink); }
 .btn-sm { min-height: 44px; padding: 0 1.1rem; }
-
-/* Bouton rond (menu burger…) */
-.btn-icon {
-  width: 44px;
-  padding: 0;
-}
+.btn-icon { width: 44px; padding: 0; }
 
 /* Marque : pastille du logo en verre teal */
 .logo-mark {
@@ -125,43 +136,86 @@
   height: 2.25rem;
   border-radius: 9999px;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 55%),
     linear-gradient(135deg, #0E7C86, #0A5C64);
-  box-shadow: 0 6px 16px -6px rgba(14, 124, 134, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 18px -8px rgba(14, 124, 134, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-/* ---- Fond des pages intérieures (même ambiance que l'accueil) ---------- */
+/* ---- Pages intérieures : fond bleu foncé ----------------------------------
+   Dégradé bleu nuit -> bleu océan, deux halos de couleur et l'image du médecin
+   en gris très discret. ::before = image ; ::after = halos. */
 .page-bg {
   position: relative;
   isolation: isolate;
+  color: #fff; /* texte posé directement sur le fond */
+  background: linear-gradient(135deg, #0A2540 0%, #0B3B63 52%, #0E5C86 100%);
 }
-.page-bg::before {
+.page-bg::before,
+.page-bg::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
+}
+.page-bg::before {
+  background: var(--page-img) center / cover no-repeat;
+  opacity: 0.16;
+  filter: grayscale(1) contrast(1.1);
+}
+.page-bg::after {
   background:
-    radial-gradient(60rem 40rem at 8% -10%, rgba(14, 124, 134, 0.2), transparent 60%),
-    radial-gradient(50rem 36rem at 100% 0%, rgba(120, 200, 210, 0.28), transparent 60%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(234, 246, 247, 0.94)),
-    var(--page-img) center / cover no-repeat;
+    radial-gradient(58rem 34rem at 92% -8%, rgba(20, 150, 170, 0.42), transparent 62%),
+    radial-gradient(48rem 30rem at 0% 100%, rgba(52, 120, 246, 0.26), transparent 62%);
 }
 
-/* ---- Accueil : voile plus clair sur la vidéo ---------------------------- */
-.hero-video { filter: brightness(1.12) saturate(0.85); }
-.hero-veil { background: rgba(255, 255, 255, 0.82); }
+/* Cartes : bleu très pâle (et non blanc pur) ; le texte reste foncé. */
+.page-bg .glass {
+  color: var(--ink);
+  background: linear-gradient(135deg, rgba(238, 246, 255, 0.95), rgba(214, 230, 248, 0.92));
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 22px 50px -24px rgba(2, 14, 34, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+.page-bg .glass .glass {
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 6px 16px -10px rgba(10, 37, 64, 0.35);
+}
+/* Boutons clairs sur fond foncé : assez opaques pour rester lisibles. */
+.page-bg .btn-glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(222, 236, 250, 0.88));
+}
+/* Onglet actif de la navigation : pastille claire. */
+.btn-light {
+  color: #0A2540;
+  font-weight: 500;
+  border: 1px solid #fff;
+  background: linear-gradient(180deg, #ffffff, #DCEBFA);
+  box-shadow: 0 10px 24px -10px rgba(2, 14, 34, 0.8), 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+.btn-light::before { background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0)); }
+.page-bg a:not(.btn):focus-visible { outline-color: #fff; }
+
+/* ---- Accueil : vidéo plus claire ------------------------------------------
+   brightness/contrast éclaircissent la vidéo ; .hero-lift (mode « écran »)
+   relève les zones sombres ; le voile blanc ne couvre plus que la gauche. */
+.hero-video { filter: brightness(1.45) contrast(0.88) saturate(1.2); }
+.hero-lift {
+  background: linear-gradient(180deg, rgba(140, 224, 232, 0.58), rgba(190, 238, 244, 0.3));
+  mix-blend-mode: screen;
+}
+.hero-veil { background: rgba(255, 255, 255, 0.7); }
 @media (min-width: 768px) {
   .hero-veil {
     background:
-      radial-gradient(40rem 30rem at 0% 100%, rgba(14, 124, 134, 0.12), transparent 70%),
+      radial-gradient(40rem 30rem at 0% 100%, rgba(14, 124, 134, 0.1), transparent 70%),
       linear-gradient(
         90deg,
-        rgba(255, 255, 255, 0.96) 0%,
-        rgba(255, 255, 255, 0.84) 38%,
-        rgba(255, 255, 255, 0.4) 70%,
-        rgba(234, 246, 247, 0.18) 100%
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(255, 255, 255, 0.8) 33%,
+        rgba(255, 255, 255, 0.1) 64%,
+        rgba(255, 255, 255, 0) 100%
       );
   }
 }
@@ -171,29 +225,6 @@
   backdrop-filter: blur(22px) saturate(160%);
 }
 
-/* ---- Repli et préférences utilisateur ----------------------------------- */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass, .chip, .btn-glass, .menu-panel { background: rgba(255, 255, 255, 0.94); }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .glass, .chip, .btn-glass, .menu-panel {
-    background: #fff;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .btn-primary { background: linear-gradient(135deg, #0E7C86, #0A5C64); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
-  .btn-primary:hover, .btn-glass:hover { transform: none; }
-}
-
-@media (forced-colors: active) {
-  .btn, .glass, .chip { border: 1px solid ButtonText; }
-}
-
 /* ---- Champs de formulaire en verre -------------------------------------- */
 .field {
   display: block;
@@ -201,13 +232,13 @@
   padding: 0.625rem 1rem;
   border-radius: 0.875rem;
   border: 1px solid rgba(75, 85, 99, 0.6);
-  background: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.78);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   color: var(--ink);
   font-family: inherit;
   font-size: 0.875rem;
-  box-shadow: inset 0 1px 2px rgba(10, 60, 70, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 2px rgba(10, 60, 70, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.85);
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
 .field::placeholder { color: #6B7280; }
@@ -216,6 +247,28 @@
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(14, 124, 134, 0.25), inset 0 1px 2px rgba(10, 60, 70, 0.06);
 }
+
+/* ---- Repli et préférences utilisateur ----------------------------------- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .chip, .btn-glass, .menu-panel, .field { background: rgba(255, 255, 255, 0.94); }
+}
+
 @media (prefers-reduced-transparency: reduce) {
-  .field { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass, .chip, .btn-glass, .menu-panel, .field {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .btn-primary { background: linear-gradient(135deg, #0A6872, #064852); }
+  .btn::before { display: none; }
+  .page-bg::before { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn { transition: none; }
+  .btn:hover { transform: none; }
+}
+
+@media (forced-colors: active) {
+  .btn, .glass, .chip, .field { border: 1px solid ButtonText; }
 }

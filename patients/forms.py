@@ -1,34 +1,14 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import UserCreationForm
 from django.db import transaction
 
+from core.forms import StyledFormMixin
+
+from .echelles import ECHELLES, NIVEAU_MAX, choix
 from .models import DossierMedical, Patient, Symptome
 
 User = get_user_model()
-
-INPUT_CLASSES = "field"  # style « verre » défini dans static/css/ui.css
-
-
-class StyledFormMixin:
-    """Applique le même style Tailwind à tous les champs."""
-
-    def _style_fields(self):
-        for field in self.fields.values():
-            widget = field.widget
-            if isinstance(widget, forms.CheckboxInput):
-                continue
-            widget.attrs["class"] = INPUT_CLASSES
-            if isinstance(widget, forms.Textarea):
-                widget.attrs.setdefault("rows", 3)
-
-
-class ConnexionForm(StyledFormMixin, AuthenticationForm):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["username"].label = "Identifiant"
-        self.fields["password"].label = "Mot de passe"
-        self._style_fields()
 
 
 class InscriptionPatientForm(StyledFormMixin, UserCreationForm):
@@ -128,8 +108,37 @@ class DossierMedicalForm(StyledFormMixin, forms.ModelForm):
         return [a.strip() for a in brut.split(",") if a.strip()]
 
 
-class SymptomesForm(StyledFormMixin, forms.Form):
-    """Déclaration des symptômes et des constantes pour un triage."""
+def _champ_echelle(nom):
+    return forms.TypedChoiceField(
+        label=ECHELLES[nom]["question"],
+        choices=choix(nom),
+        coerce=int,
+        empty_value=0,
+        initial=0,
+        required=False,
+        widget=forms.RadioSelect(attrs={"class": "sr-only"}),
+    )
+
+
+class AutoEvaluationForm(forms.Form):
+    """Ce que le patient ressent, sur des échelles de 0 à 5 en mots simples."""
+
+    douleur = _champ_echelle("douleur")
+    fievre = _champ_echelle("fievre")
+    respiration = _champ_echelle("respiration")
+    etat_general = _champ_echelle("etat_general")
+
+    def echelles(self):
+        """Champs d'échelle, dans l'ordre d'affichage."""
+        return [self[nom] for nom in ECHELLES]
+
+    def auto_evaluation(self):
+        return {nom: self.cleaned_data.get(nom) or 0 for nom in ECHELLES}
+
+
+class SymptomesForm(StyledFormMixin, AutoEvaluationForm):
+    """Déclaration des symptômes d'un patient : cases à cocher, échelles de 0 à 5,
+    température facultative et texte libre."""
 
     symptomes = forms.ModelMultipleChoiceField(
         label="Symptômes",
@@ -138,17 +147,13 @@ class SymptomesForm(StyledFormMixin, forms.Form):
         widget=forms.CheckboxSelectMultiple,
     )
     temperature = forms.DecimalField(
-        label="Température (°C)", required=False, min_value=30, max_value=45,
-        max_digits=4, decimal_places=1,
-    )
-    tension_systolique = forms.IntegerField(
-        label="Tension systolique (mmHg)", required=False, min_value=40, max_value=300
-    )
-    frequence_cardiaque = forms.IntegerField(
-        label="Fréquence cardiaque (battements/min)", required=False, min_value=20, max_value=250
-    )
-    saturation_oxygene = forms.IntegerField(
-        label="Saturation en oxygène (%)", required=False, min_value=50, max_value=100
+        label="Température mesurée (facultatif)",
+        required=False,
+        min_value=30,
+        max_value=45,
+        max_digits=4,
+        decimal_places=1,
+        help_text="Si vous avez pris votre température, indiquez-la : elle remplace l'échelle de fièvre.",
     )
     texte_libre = forms.CharField(
         label="Décrivez ce que vous ressentez",
@@ -157,9 +162,7 @@ class SymptomesForm(StyledFormMixin, forms.Form):
         max_length=2000,
     )
 
-    CONSTANTES = (
-        "temperature", "tension_systolique", "frequence_cardiaque", "saturation_oxygene",
-    )
+    CONSTANTES = ("temperature",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -168,9 +171,14 @@ class SymptomesForm(StyledFormMixin, forms.Form):
 
     def clean(self):
         data = super().clean()
-        if not data.get("symptomes") and not (data.get("texte_libre") or "").strip():
+        if (
+            not data.get("symptomes")
+            and not (data.get("texte_libre") or "").strip()
+            and not any(data.get(nom) for nom in ECHELLES)
+        ):
             raise forms.ValidationError(
-                "Cochez au moins un symptôme ou décrivez ce que vous ressentez."
+                "Cochez un symptôme, indiquez ce que vous ressentez sur les échelles "
+                "ou décrivez-le avec vos mots."
             )
         return data
 

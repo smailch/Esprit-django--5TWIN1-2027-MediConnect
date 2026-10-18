@@ -1,0 +1,75 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Votre demande — MediConnect{% endblock %}
+
+{% block page %}
+{% with n=triage.niveau_effectif %}
+<div class="grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <!-- Colonne principale : niveau, explication, ce que le patient a indiqué -->
+  <div class="glass p-6 sm:p-8 lg:col-span-7">
+    <h1 class="text-2xl font-light text-gray-800">Votre demande a été envoyée</h1>
+    <p class="mt-1 text-sm text-gray-600">Médecin : {{ triage.medecin_nom }} ({{ triage.medecin_specialite }})</p>
+
+    <div class="mt-5 rounded-xl p-4 {% if n == 1 %}bg-red-50 text-red-900 border border-red-300{% elif n == 2 %}bg-orange-50 text-orange-900 border border-orange-300{% elif n == 3 %}bg-yellow-50 text-yellow-900 border border-yellow-300{% else %}bg-soft text-primary-dark border border-primary/20{% endif %}">
+      <p class="text-xs">Niveau d'urgence</p>
+      <p class="text-xl font-medium">{{ triage.get_niveau_display }}</p>
+      <p class="mt-2 text-sm">{{ message }}</p>
+    </div>
+
+    <section class="mt-5" aria-labelledby="t-expl">
+      <h2 id="t-expl" class="text-sm font-medium text-gray-800">Comment ce niveau a été calculé</h2>
+      <p class="mt-1 text-sm text-gray-700">{{ triage.explication }}</p>
+    </section>
+
+    <div class="mt-5 grid gap-5 sm:grid-cols-2">
+      {% if triage.symptomes %}
+      <section aria-labelledby="t-sym">
+        <h2 id="t-sym" class="text-sm font-medium text-gray-800">Symptômes déclarés</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm text-gray-700">
+          {% for s in triage.symptomes %}<li>{{ s.nom }}</li>{% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% with resume=triage.auto_evaluation_resume %}
+      {% if resume %}
+      <section aria-labelledby="t-auto">
+        <h2 id="t-auto" class="text-sm font-medium text-gray-800">Ce que vous avez indiqué</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm text-gray-700">
+          {% for e in resume %}<li>{{ e.nom|capfirst }} : {{ e.libelle|lower }} ({{ e.valeur }}/5)</li>{% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+      {% endwith %}
+    </div>
+  </div>
+
+  <!-- Colonne latérale : médecins proposés, avertissement, actions -->
+  <div class="space-y-6 lg:col-span-5">
+    <div class="[&>section]:!mt-0">
+      {% include "patients/_propositions.html" %}
+    </div>
+
+    <div class="glass p-6">
+      <p class="rounded-xl bg-white/70 px-4 py-3 text-xs text-gray-700">
+        Cette évaluation est indicative et ne remplace pas un avis médical. Le médecin garde la décision finale et peut modifier le niveau.
+      </p>
+
+      <div class="mt-5 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
+        <a href="{% url 'patients:tableau_de_bord' %}" class="btn btn-primary">Retour à mon tableau de bord</a>
+        {% if triage.statut == "en_attente" %}
+        <form method="post" action="{% url 'patients:annuler' triage.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-glass btn-neutral w-full sm:w-auto lg:w-full xl:w-auto">Annuler ma demande</button>
+        </form>
+        {% else %}
+        <p class="inline-flex min-h-[44px] items-center text-sm text-gray-600">Statut : {{ triage.get_statut_display }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endwith %}
+{% endblock %}

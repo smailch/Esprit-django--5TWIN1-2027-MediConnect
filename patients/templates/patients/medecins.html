@@ -1,13 +1,15 @@
-{% extends "auth_base.html" %}
+{% extends "patients/layout.html" %}
 
 {% block title %}Choisir un médecin — MediConnect{% endblock %}
-{% block largeur %}max-w-3xl{% endblock %}
 
 {% block page %}
+<div class="glass p-5 sm:p-6 lg:flex lg:items-end lg:justify-between lg:gap-10">
+<div>
 <h1 class="text-2xl font-light text-gray-800">Choisissez votre médecin</h1>
-<p class="mt-1 text-sm text-gray-600">Sélectionnez le médecin avec qui vous souhaitez prendre rendez-vous. Vous décrirez ensuite vos symptômes.</p>
+<p class="mt-1 max-w-xl text-sm text-gray-600">Sélectionnez le médecin avec qui vous souhaitez prendre rendez-vous. Vous décrirez ensuite vos symptômes.</p>
+</div>
 
-<form method="get" class="glass mt-6 grid gap-3 p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+<form method="get" class="mt-5 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end lg:mt-0 lg:w-[36rem] lg:shrink-0">
   <div>
     <label for="f-specialite" class="mb-1 block text-xs text-gray-700">Spécialité</label>
     <select id="f-specialite" name="specialite" class="field">
@@ -24,8 +26,9 @@
   </div>
   <button type="submit" class="btn btn-glass">Filtrer</button>
 </form>
+</div>
 
-<ul class="mt-6 grid gap-4 sm:grid-cols-2">
+<ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
   {% for m in medecins %}
   <li class="glass flex flex-col p-5">
     <h2 class="text-base font-medium text-gray-800">{{ m.nom }}</h2>
@@ -38,7 +41,7 @@
     </a>
   </li>
   {% empty %}
-  <li class="glass p-5 text-sm text-gray-600 sm:col-span-2">Aucun médecin ne correspond à ces critères.</li>
+  <li class="glass p-5 text-sm text-gray-600 sm:col-span-2 lg:col-span-3">Aucun médecin ne correspond à ces critères.</li>
   {% endfor %}
 </ul>
 {% endblock %}

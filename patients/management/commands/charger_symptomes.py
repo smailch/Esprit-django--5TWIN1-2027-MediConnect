@@ -13,7 +13,6 @@ SYMPTOMES = [
     ("Convulsions", 9, True, 2),
     ("Douleur abdominale intense", 8, True, 2),
     # Symptômes courants
-    ("Fièvre", 4, False, None),
     ("Toux", 2, False, None),
     ("Mal de gorge", 2, False, None),
     ("Maux de tête", 3, False, None),
@@ -25,6 +24,10 @@ SYMPTOMES = [
     ("Fatigue", 1, False, None),
     ("Douleur musculaire ou articulaire", 2, False, None),
 ]
+
+# Symptômes remplacés par une échelle d'auto-évaluation (voir echelles.py) :
+# on les désactive pour ne pas compter deux fois la même chose.
+REMPLACES_PAR_UNE_ECHELLE = ["Fièvre"]
 
 
 class Command(BaseCommand):
@@ -43,6 +46,11 @@ class Command(BaseCommand):
                 },
             )
             crees += cree
+        desactives = Symptome.objects.filter(
+            nom__in=REMPLACES_PAR_UNE_ECHELLE, actif=True
+        ).update(actif=False)
+        if desactives:
+            self.stdout.write(f"{desactives} symptôme(s) remplacé(s) par une échelle : désactivé(s).")
         self.stdout.write(
             self.style.SUCCESS(f"{crees} symptôme(s) créé(s), {len(SYMPTOMES) - crees} mis à jour.")
         )

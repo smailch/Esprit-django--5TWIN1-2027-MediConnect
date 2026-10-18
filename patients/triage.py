@@ -8,10 +8,30 @@ Niveaux : 1 = vital … 5 = non urgent (plus le chiffre est petit, plus c'est ur
 
 from dataclasses import dataclass, field
 
+from .echelles import ECHELLES, NIVEAU_MAX, libelle
+
 # Score minimal pour atteindre un niveau (du plus urgent au moins urgent).
 SEUILS = [(20, 2), (12, 3), (5, 4)]
 NIVEAU_PAR_DEFAUT = 5
 NIVEAU_DRAPEAU_ROUGE_PAR_DEFAUT = 2
+
+
+# Auto-évaluation du patient, échelles de 0 à 5.
+# Pour chaque valeur : (points ajoutés au score, niveau d'urgence minimal imposé ou None).
+POINTS_ECHELLES = {
+    "douleur": {
+        0: (0, None), 1: (0, None), 2: (1, None), 3: (3, None), 4: (6, None), 5: (9, 2),
+    },
+    "fievre": {
+        0: (0, None), 1: (1, None), 2: (3, None), 3: (5, None), 4: (7, None), 5: (9, 3),
+    },
+    "respiration": {
+        0: (0, None), 1: (2, None), 2: (4, None), 3: (8, 3), 4: (12, 2), 5: (16, 1),
+    },
+    "etat_general": {
+        0: (0, None), 1: (0, None), 2: (2, None), 3: (4, None), 4: (7, 3), 5: (10, 2),
+    },
+}
 
 
 @dataclass
@@ -77,12 +97,39 @@ def _evaluer_constantes(c):
     return points, minimal, notes
 
 
-def evaluer(symptomes, constantes=None):
+def _evaluer_echelles(auto, temperature_mesuree=False):
+    """Renvoie (points, niveau_minimal ou None, [messages]) pour l'auto-évaluation.
+
+    Si la température a été mesurée, elle remplace l'échelle de fièvre
+    (sinon la fièvre serait comptée deux fois)."""
+    points, minimal, notes = 0, None, []
+    for nom, table in POINTS_ECHELLES.items():
+        if nom == "fievre" and temperature_mesuree:
+            continue
+        try:
+            valeur = int(auto.get(nom) or 0)
+        except (TypeError, ValueError):
+            continue
+        valeur = max(0, min(NIVEAU_MAX, valeur))
+        pts, niveau_min = table[valeur]
+        points += pts
+        if niveau_min is not None:
+            minimal = niveau_min if minimal is None else min(minimal, niveau_min)
+        if valeur >= 2:  # les valeurs 0 et 1 ne méritent pas d'être citées
+            notes.append(
+                f"{ECHELLES[nom]['court']} : {libelle(nom, valeur).lower()} ({valeur}/{NIVEAU_MAX})"
+            )
+    return points, minimal, notes
+
+
+def evaluer(symptomes, constantes=None, auto_evaluation=None):
     """Évalue l'urgence.
 
     symptomes : liste de dicts {nom, poids, drapeau_rouge, niveau_minimal}.
     constantes : dict facultatif (temperature, saturation_oxygene,
         frequence_cardiaque, tension_systolique) ; valeurs None ignorées.
+    auto_evaluation : dict facultatif {douleur, fievre, respiration, etat_general}
+        avec des valeurs de 0 à 5 données par le patient.
     """
     score = sum(int(s.get("poids") or 0) for s in symptomes)
     niveaux_minimaux = []
@@ -106,6 +153,15 @@ def evaluer(symptomes, constantes=None):
     raisons.extend(notes)
     if minimal_constantes is not None:
         niveaux_minimaux.append(minimal_constantes)
+
+    pts_e, minimal_e, notes_e = _evaluer_echelles(
+        auto_evaluation or {},
+        temperature_mesuree=(constantes or {}).get("temperature") is not None,
+    )
+    score += pts_e
+    raisons.extend(notes_e)
+    if minimal_e is not None:
+        niveaux_minimaux.append(minimal_e)
 
     niveau = _niveau_depuis_score(score)
     if niveaux_minimaux:

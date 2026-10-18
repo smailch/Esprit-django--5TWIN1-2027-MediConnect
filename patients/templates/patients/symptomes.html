@@ -1,0 +1,93 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Vos symptômes — MediConnect{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'patients:medecins' %}" class="btn btn-glass btn-sm">Changer de médecin</a>
+{% endblock %}
+
+{% block page %}
+<div class="glass flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+  <div>
+    <h1 class="text-2xl font-light text-gray-800">Décrivez vos symptômes</h1>
+    <p class="mt-1 text-sm text-gray-600">
+      Rendez-vous avec <strong class="font-medium">{{ medecin.nom }}</strong> ({{ medecin.specialite }}, {{ medecin.ville }}).
+    </p>
+  </div>
+  <p class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-900 lg:max-w-md" role="note">
+    En cas de danger immédiat (douleur thoracique, difficulté à respirer, perte de connaissance), appelez directement les urgences : 190 / 15 / 112.
+  </p>
+</div>
+
+<form method="post" novalidate class="mt-6 grid gap-6 lg:grid-cols-12 lg:items-start">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800 lg:col-span-12">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Colonne de gauche : symptômes et description (sur mobile, les blocs se rangent via `order`) -->
+  <div class="contents lg:col-span-5 lg:flex lg:flex-col lg:gap-6">
+
+  <!-- 1. Symptômes à cocher -->
+  <section class="glass order-1 p-6 lg:order-none" role="group" aria-labelledby="titre-symptomes">
+    <h2 id="titre-symptomes" class="text-base font-medium text-primary-dark">Quels symptômes ressentez-vous ?</h2>
+    {% if form.symptomes.field.queryset %}
+    <div class="mt-3 grid gap-2 sm:grid-cols-2">
+      {% for checkbox in form.symptomes %}
+      <label for="{{ checkbox.id_for_label }}" class="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-[#B9CCE3] bg-white/70 px-3 py-2 text-sm text-gray-800 transition-colors hover:bg-white has-[:checked]:border-primary has-[:checked]:bg-white has-[:checked]:ring-1 has-[:checked]:ring-primary">
+        <span class="h-4 w-4 shrink-0 [&>input]:h-4 [&>input]:w-4 [&>input]:accent-[#0E7C86]">{{ checkbox.tag }}</span>
+        <span>{{ checkbox.choice_label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="mt-3 text-sm text-gray-600">Le catalogue de symptômes est vide. Décrivez vos symptômes dans le champ de description.</p>
+    {% endif %}
+  </section>
+
+  <!-- 4. Description libre -->
+  <section class="glass order-4 p-6 lg:order-none">
+    {% with field=form.texte_libre %}{% include "core/_champ.html" %}{% endwith %}
+  </section>
+
+  </div>
+
+  <!-- Colonne de droite : échelles et température -->
+  <div class="contents lg:col-span-7 lg:flex lg:flex-col lg:gap-6">
+
+  <!-- 2. Échelles de 0 à 5 -->
+  <section class="glass order-2 p-6 lg:order-none" aria-labelledby="titre-echelles">
+    <h2 id="titre-echelles" class="text-base font-medium text-primary-dark">Comment vous sentez-vous ?</h2>
+    <p class="mt-1 text-xs text-gray-600">Choisissez pour chaque question le niveau qui vous correspond le mieux : 0 = aucun, 5 = le plus fort.</p>
+
+    {% for field in form.echelles %}
+    <fieldset class="mt-5">
+      <legend class="text-sm font-medium text-gray-800">{{ field.label }}</legend>
+      <div class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {% for radio in field %}
+        <label for="{{ radio.id_for_label }}"
+               class="flex min-h-[56px] cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl border border-[#B9CCE3] bg-white/70 px-1.5 py-2 text-center text-gray-800 transition-colors hover:bg-white has-[:checked]:border-primary has-[:checked]:bg-primary has-[:checked]:text-white has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/50">
+          {{ radio.tag }}
+          <span class="text-base font-medium leading-none" aria-hidden="true">{{ radio.data.value }}</span>
+          <span class="text-xs leading-tight">{{ radio.choice_label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+  </section>
+
+  <!-- 3. Température (facultatif) -->
+  <section class="glass order-3 p-6 lg:order-none">
+    {% with field=form.temperature %}{% include "core/_champ.html" %}{% endwith %}
+  </section>
+
+  </div>
+
+  <div class="order-5 flex lg:order-none lg:col-span-12 lg:justify-end">
+    <button type="submit" class="btn btn-primary w-full sm:w-auto">Envoyer ma demande</button>
+  </div>
+</form>
+{% endblock %}
