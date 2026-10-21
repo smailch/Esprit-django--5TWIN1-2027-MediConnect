@@ -315,3 +315,23 @@
 .dl dt { font-size: 0.75rem; color: var(--a-muted); }
 .dl dd { margin: 0.1rem 0 0; font-size: 0.9rem; word-break: break-word; }
 .dl .wide { grid-column: 1 / -1; }
+
+/* ---- Dossier médical : allergies ------------------------------------------------ */
+.sev {
+  display: inline-flex; align-items: center; padding: 0.15rem 0.65rem; border-radius: 0.5rem;
+  font-size: 0.75rem; font-weight: 500; color: #0B1220; white-space: nowrap;
+}
+.sev-legere { background: var(--u4); }
+.sev-moderee { background: var(--u3); }
+.sev-severe { background: var(--u1); }
+.scale-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.item-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--a-line);
+}
+.item-row:last-child { border-bottom: 0; }
+.item-name { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
+.item-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.check-row { display: flex; align-items: center; gap: 0.7rem; min-height: 44px; font-size: 0.9rem; cursor: pointer; }
+.check-row input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--a-accent); flex: none; }
+.check-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }

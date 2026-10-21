@@ -10,12 +10,14 @@ from core.utils import objet_ou_404
 
 from . import medecins_test
 from .forms import (
+    AllergieForm,
     DossierMedicalForm,
     InscriptionPatientForm,
     ProfilPatientForm,
     SymptomesForm,
 )
 from .models import (
+    Allergie,
     AutoEvaluation,
     ConstantesVitales,
     DossierMedical,
@@ -248,3 +250,57 @@ def tableau_de_bord(request):
         "en_cours": en_cours,
         "historique": historique,
     })
+
+
+# --- Allergies : liste, ajout, modification, suppression -------------------------------
+
+_ORDRE_GRAVITE = {Allergie.Gravite.SEVERE: 0, Allergie.Gravite.MODEREE: 1, Allergie.Gravite.LEGERE: 2}
+
+
+@login_required
+def allergies(request):
+    patient = _patient_connecte(request)
+    toutes = list(Allergie.objects.filter(patient=patient))
+    actives = sorted((a for a in toutes if a.active), key=lambda a: (_ORDRE_GRAVITE[a.gravite], a.substance.lower()))
+    inactives = sorted((a for a in toutes if not a.active), key=lambda a: a.substance.lower())
+    return render(request, "patients/allergies.html", {
+        "actives": actives,
+        "inactives": inactives,
+        "severes": [a for a in actives if a.est_severe],
+    })
+
+
+@login_required
+def allergie_creer(request):
+    patient = _patient_connecte(request)
+    form = AllergieForm(request.POST if request.method == "POST" else None, patient=patient)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "L'allergie a été ajoutée à votre dossier.")
+        return redirect("patients:allergies")
+    return render(request, "patients/allergie_form.html", {"form": form, "allergie": None})
+
+
+@login_required
+def allergie_modifier(request, pk):
+    patient = _patient_connecte(request)
+    allergie = objet_ou_404(Allergie, pk=pk, patient=patient)
+    form = AllergieForm(request.POST if request.method == "POST" else None, instance=allergie, patient=patient)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "L'allergie a été mise à jour.")
+        return redirect("patients:allergies")
+    return render(request, "patients/allergie_form.html", {"form": form, "allergie": allergie})
+
+
+@login_required
+def allergie_supprimer(request, pk):
+    """GET : demande de confirmation ; POST : suppression."""
+    patient = _patient_connecte(request)
+    allergie = objet_ou_404(Allergie, pk=pk, patient=patient)
+    if request.method == "POST":
+        nom = allergie.substance
+        allergie.delete()
+        messages.success(request, f"L'allergie « {nom} » a été supprimée.")
+        return redirect("patients:allergies")
+    return render(request, "patients/allergie_supprimer.html", {"allergie": allergie})

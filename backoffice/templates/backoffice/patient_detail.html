@@ -27,12 +27,30 @@
       </dl>
     </section>
 
+    <section class="panel panel-pad" aria-labelledby="titre-allergies">
+      <h2 id="titre-allergies" class="section-title">Allergies <span class="count">{{ allergies|length }}</span></h2>
+      {% if allergies %}
+      <ul class="mt-4 space-y-3">
+        {% for a in allergies %}
+        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>
+            <strong class="font-medium {% if not a.active %}muted{% endif %}">{{ a.substance }}</strong>
+            <span class="muted">· {{ a.get_type_display }}{% if a.reaction %} · {{ a.reaction }}{% endif %}{% if not a.active %} · disparue{% endif %}</span>
+          </span>
+          <span class="sev sev-{{ a.gravite }}">{{ a.get_gravite_display }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted mt-3 text-sm">Aucune allergie déclarée.</p>
+      {% endif %}
+    </section>
+
     <section class="panel panel-pad" aria-labelledby="titre-dossier">
       <h2 id="titre-dossier" class="section-title">Dossier médical</h2>
       {% if dossier %}
       <dl class="dl mt-4">
         <div><dt>Groupe sanguin</dt><dd>{{ dossier.groupe_sanguin|default:"—" }}</dd></div>
-        <div><dt>Allergies</dt><dd>{{ dossier.allergies|join:", "|default:"—" }}</dd></div>
         <div class="wide"><dt>Antécédents</dt><dd>{{ dossier.antecedents|default:"—" }}</dd></div>
         <div class="wide"><dt>Traitements en cours</dt><dd>{{ dossier.traitements_en_cours|default:"—" }}</dd></div>
       </dl>

@@ -6,7 +6,7 @@ from django.db import transaction
 from core.forms import StyledFormMixin
 
 from .echelles import ECHELLES, NIVEAU_MAX, choix
-from .models import DossierMedical, Patient, Symptome
+from .models import Allergie, DossierMedical, Patient, Symptome
 
 User = get_user_model()
 
@@ -82,15 +82,11 @@ class ProfilPatientForm(StyledFormMixin, forms.ModelForm):
 
 
 class DossierMedicalForm(StyledFormMixin, forms.ModelForm):
-    allergies = forms.CharField(
-        label="Allergies",
-        required=False,
-        help_text="Séparées par des virgules (ex. pénicilline, arachide).",
-    )
+    """Les allergies ne sont plus saisies ici : elles ont leur propre page (modèle Allergie)."""
 
     class Meta:
         model = DossierMedical
-        fields = ("groupe_sanguin", "allergies", "antecedents", "traitements_en_cours")
+        fields = ("groupe_sanguin", "antecedents", "traitements_en_cours")
         labels = {
             "groupe_sanguin": "Groupe sanguin",
             "antecedents": "Antécédents médicaux",
@@ -99,13 +95,7 @@ class DossierMedicalForm(StyledFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance and self.instance.pk:
-            self.initial["allergies"] = ", ".join(self.instance.allergies or [])
         self._style_fields()
-
-    def clean_allergies(self):
-        brut = self.cleaned_data.get("allergies", "")
-        return [a.strip() for a in brut.split(",") if a.strip()]
 
 
 def _champ_echelle(nom):
@@ -188,3 +178,29 @@ class SymptomesForm(StyledFormMixin, AutoEvaluationForm):
             for k in self.CONSTANTES
             if self.cleaned_data.get(k) is not None
         }
+
+
+class AllergieForm(StyledFormMixin, forms.ModelForm):
+    """Ajout et modification d'une allergie. Le patient est imposé par la vue (jamais saisi)."""
+
+    class Meta:
+        model = Allergie
+        fields = ("substance", "type", "gravite", "reaction", "decouverte_le", "active")
+        labels = {
+            "substance": "Allergique à",
+            "type": "Type d'allergie",
+            "gravite": "Gravité",
+            "reaction": "Réaction",
+            "decouverte_le": "Date de la première réaction",
+            "active": "Cette allergie est toujours d'actualité",
+        }
+        widgets = {
+            "gravite": forms.RadioSelect(attrs={"class": "sr-only"}),
+            "decouverte_le": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+        }
+
+    def __init__(self, *args, patient, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Imposé ici pour que les règles du modèle (doublon, date de naissance) s'appliquent.
+        self.instance.patient = patient
+        self._style_fields()

@@ -35,7 +35,10 @@
   <section class="settings lg:grid-cols-12" aria-labelledby="titre-dossier">
     <div class="lg:col-span-4">
       <h2 id="titre-dossier" class="section-title">Mon dossier médical</h2>
-      <p class="muted mt-2 max-w-xs text-sm">Allergies, antécédents et traitements : le médecin les consulte avant votre rendez-vous.</p>
+      <p class="muted mt-2 max-w-xs text-sm">Antécédents et traitements : le médecin les consulte avant votre rendez-vous.</p>
+      <a href="{% url 'patients:allergies' %}" class="abtn abtn-outline mt-4">
+        <i data-lucide="shield-alert" class="h-4 w-4"></i>Gérer mes allergies
+      </a>
     </div>
     <div class="panel panel-pad lg:col-span-8">
       <div class="space-y-5">

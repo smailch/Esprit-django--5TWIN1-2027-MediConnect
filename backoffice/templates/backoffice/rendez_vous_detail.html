@@ -61,6 +61,9 @@
           <dt>Place dans la file</dt>
           <dd>{% if place %}{{ place.0 }} sur {{ place.1 }} chez {{ triage.medecin_nom }}{% else %}—{% endif %}</dd>
         </div>
+        {% if allergies_severes %}
+        <div class="wide"><dt>Allergies sévères du patient</dt><dd><span class="sev sev-severe">Attention</span> {% for a in allergies_severes %}{{ a.substance }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>
+        {% endif %}
         {% if triage.drapeaux_rouges %}
         <div class="wide"><dt>Signes d'alerte</dt><dd>{{ triage.drapeaux_rouges|join:", " }}</dd></div>
         {% endif %}

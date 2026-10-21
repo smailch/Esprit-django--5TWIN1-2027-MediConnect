@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.shortcuts import redirect, render
 
 from core.utils import objet_ou_404
-from patients.models import DossierMedical, Patient, Symptome, Triage
+from patients.models import Allergie, DossierMedical, Patient, Symptome, Triage
 
 from .forms import FiltreRendezVousForm, MajRendezVousForm
 from .permissions import administrateur_requis
@@ -72,6 +72,9 @@ def rendez_vous_detail(request, pk):
         "triage": triage,
         "form": form,
         "place": triage.place_dans_la_file(),
+        "allergies_severes": Allergie.objects.filter(
+            patient=triage.patient, gravite=Allergie.Gravite.SEVERE, active=True
+        ),
     })
 
 
@@ -104,6 +107,7 @@ def patient_detail(request, pk):
     return render(request, "backoffice/patient_detail.html", {
         "patient": patient,
         "dossier": DossierMedical.objects.filter(patient=patient).first(),
+        "allergies": Allergie.objects.filter(patient=patient).order_by("-active", "substance"),
         "demandes": Triage.objects.filter(patient=patient).order_by("-cree_le"),
     })
 

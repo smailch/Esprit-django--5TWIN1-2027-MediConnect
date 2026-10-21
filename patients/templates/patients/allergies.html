@@ -1,0 +1,89 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Mes allergies — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mes allergies</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Le médecin les consulte avant votre rendez-vous. Elles l'aident à éviter un médicament ou un aliment dangereux pour vous.</p>
+  </div>
+  <a href="{% url 'patients:allergie_creer' %}" class="abtn abtn-primary">
+    <i data-lucide="plus" class="h-4 w-4"></i>Ajouter une allergie
+  </a>
+</header>
+
+{% if severes %}
+<p class="alert alert-danger mt-6" role="note">
+  <strong class="font-medium">Allergie sévère enregistrée :</strong>
+  {% for a in severes %}{{ a.substance }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+  Signalez-la toujours à votre médecin, à votre pharmacien et aux secours.
+</p>
+{% endif %}
+
+<div class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+
+  <div class="space-y-8 lg:col-span-8">
+    <section aria-labelledby="titre-actives">
+      <h2 id="titre-actives" class="section-title">En cours <span class="count">{{ actives|length }}</span></h2>
+      {% if actives %}
+      <ul class="panel mt-4">
+        {% for a in actives %}
+        <li class="item-row">
+          <div>
+            <p class="item-name">{{ a.substance }}</p>
+            <p class="muted mt-1 text-sm">
+              {{ a.get_type_display }}{% if a.reaction %} · {{ a.reaction }}{% endif %}{% if a.decouverte_le %} · depuis le {{ a.decouverte_le|date:"d/m/Y" }}{% endif %}
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="sev sev-{{ a.gravite }}">{{ a.get_gravite_display }}</span>
+            <span class="item-actions">
+              <a href="{% url 'patients:allergie_modifier' a.pk %}" class="abtn abtn-outline">Modifier<span class="sr-only"> l'allergie {{ a.substance }}</span></a>
+              <a href="{% url 'patients:allergie_supprimer' a.pk %}" class="abtn abtn-danger">Supprimer<span class="sr-only"> l'allergie {{ a.substance }}</span></a>
+            </span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="panel panel-pad mt-4 text-center">
+        <p class="muted text-sm">Vous n'avez enregistré aucune allergie.</p>
+        <p class="muted mt-1 text-sm">Si vous n'en avez pas, vous n'avez rien à faire.</p>
+        <a href="{% url 'patients:allergie_creer' %}" class="abtn abtn-primary mt-4">Ajouter une allergie</a>
+      </div>
+      {% endif %}
+    </section>
+
+    {% if inactives %}
+    <section aria-labelledby="titre-inactives">
+      <h2 id="titre-inactives" class="section-title">Disparues <span class="count">{{ inactives|length }}</span></h2>
+      <ul class="panel mt-4">
+        {% for a in inactives %}
+        <li class="item-row">
+          <div>
+            <p class="item-name muted">{{ a.substance }}</p>
+            <p class="muted mt-1 text-sm">{{ a.get_type_display }} · {{ a.get_gravite_display|lower }}</p>
+          </div>
+          <span class="item-actions">
+            <a href="{% url 'patients:allergie_modifier' a.pk %}" class="abtn abtn-outline">Modifier<span class="sr-only"> l'allergie {{ a.substance }}</span></a>
+            <a href="{% url 'patients:allergie_supprimer' a.pk %}" class="abtn abtn-danger">Supprimer<span class="sr-only"> l'allergie {{ a.substance }}</span></a>
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="panel panel-pad lg:col-span-4" aria-labelledby="titre-aide">
+    <h2 id="titre-aide" class="section-title">Que renseigner ?</h2>
+    <ul class="muted mt-3 list-disc space-y-2 pl-5 text-sm">
+      <li>Médicaments, aliments, pollen, piqûres… tout ce qui vous a déjà causé une réaction.</li>
+      <li>La gravité : <strong class="font-medium text-gray-800">sévère</strong> si la réaction a gêné la respiration ou nécessité les urgences.</li>
+      <li>Une allergie disparue reste utile : décochez « toujours d'actualité » plutôt que de la supprimer.</li>
+    </ul>
+  </aside>
+
+</div>
+{% endblock %}

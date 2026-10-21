@@ -68,6 +68,73 @@ class DossierMedical(models.Model):
         return f"Dossier de {self.patient}"
 
 
+class Allergie(models.Model):
+    """Une allergie d'un patient. Un patient peut en avoir plusieurs (relation ForeignKey)."""
+
+    class Type(models.TextChoices):
+        MEDICAMENT = "medicament", "Médicament"
+        ALIMENT = "aliment", "Aliment"
+        ENVIRONNEMENT = "environnement", "Environnement (pollen, acariens…)"
+        AUTRE = "autre", "Autre"
+
+    class Gravite(models.TextChoices):
+        LEGERE = "legere", "Légère"
+        MODEREE = "moderee", "Modérée"
+        SEVERE = "severe", "Sévère"
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="allergies")
+    substance = models.CharField(
+        max_length=100, help_text="Ce qui provoque l'allergie (ex. pénicilline, arachide, pollen)."
+    )
+    type = models.CharField(max_length=20, choices=Type.choices, default=Type.AUTRE)
+    gravite = models.CharField(max_length=10, choices=Gravite.choices, default=Gravite.MODEREE)
+    reaction = models.CharField(
+        max_length=200, blank=True, help_text="Ce que vous ressentez (ex. éruption, gonflement, gêne respiratoire)."
+    )
+    decouverte_le = models.DateField(null=True, blank=True, help_text="Date approximative de la première réaction.")
+    active = models.BooleanField(default=True, help_text="Décochez si l'allergie a disparu.")
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "allergie"
+        verbose_name_plural = "allergies"
+        ordering = ["substance"]
+
+    def __str__(self):
+        return f"{self.substance} ({self.get_gravite_display().lower()})"
+
+    @property
+    def est_severe(self):
+        return self.gravite == self.Gravite.SEVERE
+
+    def _doublon_existe(self):
+        """Une autre allergie du même patient porte-t-elle la même substance (sans tenir compte des majuscules) ?"""
+        autres = Allergie.objects.filter(patient=self.patient, substance__iexact=self.substance)
+        if self.pk:
+            autres = autres.exclude(pk=self.pk)
+        return autres.exists()
+
+    def clean(self):
+        super().clean()
+        erreurs = {}
+        self.substance = " ".join((self.substance or "").split())  # espaces superflus retirés
+
+        if self.substance and self.patient_id is not None and self._doublon_existe():
+            erreurs["substance"] = "Cette allergie est déjà enregistrée pour ce patient."
+
+        if self.decouverte_le:
+            from django.utils import timezone
+
+            if self.decouverte_le > timezone.localdate():
+                erreurs["decouverte_le"] = "La date ne peut pas être dans le futur."
+            else:
+                naissance = getattr(self.patient, "date_naissance", None) if self.patient_id is not None else None
+                if naissance and self.decouverte_le < naissance:
+                    erreurs["decouverte_le"] = "La date ne peut pas être avant la naissance du patient."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+
 class Symptome(models.Model):
     """Catalogue des symptômes, géré par l'administrateur."""
 

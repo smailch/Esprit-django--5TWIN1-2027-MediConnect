@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DossierMedical, Patient, Symptome, Triage
+from .models import Allergie, DossierMedical, Patient, Symptome, Triage
 
 
 class DossierMedicalInline(admin.StackedInline):
@@ -12,6 +12,14 @@ class DossierMedicalInline(admin.StackedInline):
     can_delete = False
     verbose_name = "dossier médical"
     verbose_name_plural = "dossier médical"
+
+
+class AllergieInline(admin.TabularInline):
+    """Allergies éditées sur la même page que le patient."""
+
+    model = Allergie
+    extra = 0
+    fields = ("substance", "type", "gravite", "reaction", "active")
 
 
 @admin.register(Patient)
@@ -28,7 +36,7 @@ class PatientAdmin(admin.ModelAdmin):
         "ville",
     )
     autocomplete_fields = ("user",)
-    inlines = [DossierMedicalInline]
+    inlines = [DossierMedicalInline, AllergieInline]
 
 
 @admin.register(DossierMedical)
@@ -37,6 +45,15 @@ class DossierMedicalAdmin(admin.ModelAdmin):
     list_select_related = ("patient__user",)
     list_filter = ("groupe_sanguin",)
     search_fields = ("patient__user__last_name", "patient__user__first_name")
+    autocomplete_fields = ("patient",)
+
+
+@admin.register(Allergie)
+class AllergieAdmin(admin.ModelAdmin):
+    list_display = ("substance", "patient", "type", "gravite", "active", "decouverte_le")
+    list_select_related = ("patient__user",)
+    list_filter = ("gravite", "type", "active")
+    search_fields = ("substance", "patient__user__last_name", "patient__user__first_name")
     autocomplete_fields = ("patient",)
 
 

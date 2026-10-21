@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from patients import medecins_test
 from patients.models import (
+    Allergie,
     AutoEvaluation,
     ConstantesVitales,
     DossierMedical,
@@ -26,6 +27,15 @@ PATIENTS = [
     ("hichem", "Hichem", "Ben Ali", "Tunis", "H", datetime.date(1963, 11, 8), "20777888"),
     ("nour", "Nour", "Chaabane", "Sfax", "F", datetime.date(2001, 6, 30), "20999000"),
     ("rami", "Rami", "Gharbi", "Tunis", "H", datetime.date(1990, 2, 17), "20121314"),
+]
+
+# (patient, substance, type, gravité, réaction)
+ALLERGIES = [
+    ("sonia", "Pénicilline", "medicament", "severe", "Gonflement du visage, gêne respiratoire"),
+    ("hichem", "Aspirine", "medicament", "moderee", "Éruption cutanée"),
+    ("karim", "Pollen de graminées", "environnement", "legere", "Éternuements, yeux qui piquent"),
+    ("amel", "Arachide", "aliment", "severe", "Urticaire, malaise"),
+    ("amel", "Œufs", "aliment", "legere", "Maux de ventre"),
 ]
 
 # (patient, médecin, symptômes, auto-évaluation, température, texte, statut, il y a (heures), niveau médecin)
@@ -57,7 +67,11 @@ class Command(BaseCommand):
             return self.supprimer(User)
 
         if User.objects.filter(username__startswith=PREFIXE).exists():
-            self.stdout.write("Les données de démonstration sont déjà chargées (utilisez --supprimer pour les retirer).")
+            ajoutees = self.ajouter_allergies(User)
+            self.stdout.write(
+                "Les données de démonstration sont déjà chargées (utilisez --supprimer pour les retirer)."
+                + (f" {ajoutees} allergie(s) de démonstration ajoutée(s)." if ajoutees else "")
+            )
             return
         if not Symptome.objects.exists():
             self.stdout.write(self.style.ERROR("Le catalogue est vide : lancez d'abord charger_symptomes."))
@@ -104,8 +118,20 @@ class Command(BaseCommand):
             # La date d'arrivée est posée automatiquement : on la recule pour varier les exemples.
             Triage.objects.filter(pk=triage.pk).update(cree_le=maintenant - datetime.timedelta(hours=heures))
 
+        ajoutees = self.ajouter_allergies(User)
         self.stdout.write(self.style.SUCCESS(
-            f"{len(PATIENTS)} patients et {len(DEMANDES)} demandes de démonstration créés."))
+            f"{len(PATIENTS)} patients, {len(DEMANDES)} demandes et {ajoutees} allergies de démonstration créés."))
+
+    def ajouter_allergies(self, User):
+        """Allergies de démonstration (sans doublon si la commande est relancée)."""
+        ajoutees = 0
+        for ident, substance, type_, gravite, reaction in ALLERGIES:
+            patient = Patient.objects.filter(user__username=PREFIXE + ident).first()
+            if patient is None or Allergie.objects.filter(patient=patient, substance__iexact=substance).exists():
+                continue
+            Allergie.objects.create(patient=patient, substance=substance, type=type_, gravite=gravite, reaction=reaction)
+            ajoutees += 1
+        return ajoutees
 
     def supprimer(self, User):
         # MongoDB ne supprime pas à travers plusieurs collections : objet par objet.
@@ -114,6 +140,8 @@ class Command(BaseCommand):
             for patient in Patient.objects.filter(user=user):
                 for triage in Triage.objects.filter(patient=patient):
                     triage.delete()
+                for allergie in Allergie.objects.filter(patient=patient):
+                    allergie.delete()
                 for dossier in DossierMedical.objects.filter(patient=patient):
                     dossier.delete()
                 patient.delete()

@@ -1,0 +1,32 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Supprimer une allergie — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:allergies' %}" class="link text-sm">← Mes allergies</a>
+    <h1 class="page-title mt-2">Supprimer cette allergie ?</h1>
+  </div>
+</header>
+
+<section class="panel panel-pad mt-8 max-w-2xl" aria-labelledby="titre-confirmation">
+  <h2 id="titre-confirmation" class="item-name">{{ allergie.substance }}</h2>
+  <p class="muted mt-1 text-sm">{{ allergie.get_type_display }} · gravité {{ allergie.get_gravite_display|lower }}</p>
+
+  {% if allergie.est_severe %}
+  <p class="alert alert-danger mt-4" role="note">Il s'agit d'une allergie sévère. Si elle a seulement disparu, préférez la modifier et décocher « toujours d'actualité » : le médecin gardera l'information.</p>
+  {% else %}
+  <p class="muted mt-4 text-sm">Cette action est définitive. Si l'allergie a seulement disparu, vous pouvez plutôt la modifier et décocher « toujours d'actualité ».</p>
+  {% endif %}
+
+  <div class="mt-6 flex flex-wrap gap-3">
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="abtn abtn-danger abtn-lg">Oui, supprimer</button>
+    </form>
+    <a href="{% url 'patients:allergies' %}" class="abtn abtn-outline abtn-lg">Non, la garder</a>
+    <a href="{% url 'patients:allergie_modifier' allergie.pk %}" class="abtn abtn-ghost abtn-lg">Modifier à la place</a>
+  </div>
+</section>
+{% endblock %}
