@@ -10,6 +10,7 @@ from patients.models import (
     AutoEvaluation,
     ConstantesVitales,
     DossierMedical,
+    Mesure,
     Patient,
     Symptome,
     SymptomeDeclare,
@@ -36,6 +37,26 @@ ALLERGIES = [
     ("karim", "Pollen de graminées", "environnement", "legere", "Éternuements, yeux qui piquent"),
     ("amel", "Arachide", "aliment", "severe", "Urticaire, malaise"),
     ("amel", "Œufs", "aliment", "legere", "Maux de ventre"),
+]
+
+# (patient, type, valeur, second chiffre (tension), il y a (heures), remarque)
+MESURES = [
+    ("hichem", "tension", 152, 96, 2, "Au repos"),
+    ("hichem", "tension", 148, 94, 26, ""),
+    ("hichem", "tension", 141, 90, 74, "Après la marche"),
+    ("hichem", "tension", 138, 88, 170, ""),
+    ("hichem", "poids", 85.2, None, 170, "Le matin"),
+    ("hichem", "poids", 84.8, None, 98, "Le matin"),
+    ("hichem", "poids", 84.5, None, 24, "Le matin"),
+    ("hichem", "frequence", 78, None, 2, "Au repos"),
+    ("amel", "glycemie", 0.95, None, 30, "À jeun"),
+    ("amel", "glycemie", 1.02, None, 6, "Après le repas"),
+    ("amel", "poids", 61, None, 48, ""),
+    ("amel", "saturation", 98, None, 30, ""),
+    ("karim", "temperature", 38.4, None, 6, "Avec frissons"),
+    ("karim", "temperature", 37.8, None, 30, ""),
+    ("sonia", "poids", 58.2, None, 72, ""),
+    ("sonia", "saturation", 92, None, 5, "Après la toux"),
 ]
 
 # (patient, médecin, symptômes, auto-évaluation, température, texte, statut, il y a (heures), niveau médecin)
@@ -68,9 +89,11 @@ class Command(BaseCommand):
 
         if User.objects.filter(username__startswith=PREFIXE).exists():
             ajoutees = self.ajouter_allergies(User)
+            mesures = self.ajouter_mesures()
             self.stdout.write(
                 "Les données de démonstration sont déjà chargées (utilisez --supprimer pour les retirer)."
                 + (f" {ajoutees} allergie(s) de démonstration ajoutée(s)." if ajoutees else "")
+                + (f" {mesures} mesure(s) de démonstration ajoutée(s)." if mesures else "")
             )
             return
         if not Symptome.objects.exists():
@@ -119,8 +142,10 @@ class Command(BaseCommand):
             Triage.objects.filter(pk=triage.pk).update(cree_le=maintenant - datetime.timedelta(hours=heures))
 
         ajoutees = self.ajouter_allergies(User)
+        mesures = self.ajouter_mesures()
         self.stdout.write(self.style.SUCCESS(
-            f"{len(PATIENTS)} patients, {len(DEMANDES)} demandes et {ajoutees} allergies de démonstration créés."))
+            f"{len(PATIENTS)} patients, {len(DEMANDES)} demandes, {ajoutees} allergies "
+            f"et {mesures} mesures de démonstration créés."))
 
     def ajouter_allergies(self, User):
         """Allergies de démonstration (sans doublon si la commande est relancée)."""
@@ -133,6 +158,25 @@ class Command(BaseCommand):
             ajoutees += 1
         return ajoutees
 
+    def ajouter_mesures(self):
+        """Mesures de santé de démonstration (sans doublon si la commande est relancée)."""
+        maintenant = timezone.now().replace(second=0, microsecond=0)
+        ajoutees = 0
+        for ident, type_, valeur, valeur2, heures, note in MESURES:
+            patient = Patient.objects.filter(user__username=PREFIXE + ident).first()
+            quand = maintenant - datetime.timedelta(hours=heures)
+            if patient is None:
+                continue
+            existante = Mesure.objects.filter(patient=patient, type=type_, valeur=valeur).first()
+            if existante is not None:
+                if existante.valeur2 is None and valeur2 is not None:  # mesure créée avant l'ajout du second chiffre
+                    existante.valeur2 = valeur2
+                    existante.save(update_fields=["valeur2"])
+                continue
+            Mesure.objects.create(patient=patient, type=type_, valeur=valeur, valeur2=valeur2, mesure_le=quand, note=note)
+            ajoutees += 1
+        return ajoutees
+
     def supprimer(self, User):
         # MongoDB ne supprime pas à travers plusieurs collections : objet par objet.
         comptes = 0
@@ -142,6 +186,8 @@ class Command(BaseCommand):
                     triage.delete()
                 for allergie in Allergie.objects.filter(patient=patient):
                     allergie.delete()
+                for mesure in Mesure.objects.filter(patient=patient):
+                    mesure.delete()
                 for dossier in DossierMedical.objects.filter(patient=patient):
                     dossier.delete()
                 patient.delete()

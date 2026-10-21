@@ -771,3 +771,594 @@ class AllergieAdministrationEtCommandesTests(SimpleTestCase):
         profil = (racine / "patients" / "templates" / "patients" / "profil.html").read_text(encoding="utf-8")
         self.assertIn("patients:allergies", profil)
         self.assertIn("Gérer mes allergies", profil)
+
+
+# --- CRUD Mesure de santé (relation ForeignKey vers Patient) ----------------------------
+from django.utils import timezone  # noqa: E402
+
+from .admin import MesureInline  # noqa: E402
+from .forms import MesureForm  # noqa: E402
+from .models import Mesure  # noqa: E402
+
+RECHERCHE_DOUBLON_MESURE = Mesure._doublon_existe  # l'original, avant les remplacements des tests
+
+
+def une_mesure(patient=None, **kw):
+    valeurs = {"type": "poids", "valeur": 70, "mesure_le": timezone.now() - datetime.timedelta(hours=2)}
+    valeurs.update(kw)
+    if valeurs["type"] == "tension" and "valeur2" not in valeurs and valeurs["valeur"] is not None:
+        valeurs["valeur2"] = min(valeurs["valeur"] - 1, 80)  # second chiffre cohérent par défaut
+    return Mesure(patient=patient or un_patient(), **valeurs)
+
+
+class MesureModeleTests(SimpleTestCase):
+    def setUp(self):
+        p = mock.patch.object(Mesure, "_doublon_existe", return_value=False)
+        self.doublon = p.start()
+        self.addCleanup(p.stop)
+
+    def test_la_relation_est_une_cle_etrangere_vers_le_patient(self):
+        champ = Mesure._meta.get_field("patient")
+        self.assertTrue(champ.many_to_one)
+        self.assertIs(champ.related_model, Patient)
+        self.assertTrue(Patient._meta.get_field("mesures").one_to_many)
+
+    def test_les_six_types(self):
+        self.assertEqual([c[0] for c in Mesure.Type.choices],
+                         ["poids", "tension", "glycemie", "temperature", "frequence", "saturation"])
+        self.assertEqual(set(Mesure.REGLES), {c[0] for c in Mesure.Type.choices})
+
+    def test_unite_automatique_selon_le_type(self):
+        attendu = {"poids": "kg", "tension": "mmHg", "glycemie": "g/L", "temperature": "°C", "frequence": "bpm", "saturation": "%"}
+        for type_, unite in attendu.items():
+            with self.subTest(type=type_):
+                self.assertEqual(une_mesure(type=type_).unite, unite)
+
+    def test_texte_affiche(self):
+        self.assertEqual(une_mesure(type="temperature", valeur=38.5).valeur_affichee, "38.5 °C")
+        self.assertEqual(une_mesure(type="poids", valeur=70.0).valeur_affichee, "70 kg")
+        self.assertEqual(str(une_mesure(type="tension", valeur=120, valeur2=80)), "Tension artérielle : 120/80 mmHg")
+        self.assertEqual(une_mesure(type="tension", valeur=120, valeur2=None).valeur_affichee, "120 mmHg")
+
+    def test_valeurs_plausibles_acceptees(self):
+        for type_, valeur in (("poids", 70), ("tension", 120), ("glycemie", 0.9), ("temperature", 37),
+                              ("frequence", 72), ("saturation", 97)):
+            with self.subTest(type=type_):
+                une_mesure(type=type_, valeur=valeur).clean()
+
+    def test_valeurs_improbables_refusees_pour_chaque_type(self):
+        for type_, valeur in (("poids", 1), ("poids", 401), ("tension", 49), ("tension", 261),
+                              ("glycemie", 0.1), ("glycemie", 7), ("temperature", 29), ("temperature", 46),
+                              ("frequence", 19), ("frequence", 251), ("saturation", 49), ("saturation", 101)):
+            with self.subTest(type=type_, valeur=valeur):
+                with self.assertRaises(ValidationError) as ctx:
+                    une_mesure(type=type_, valeur=valeur).clean()
+                self.assertIn("improbable", ctx.exception.message_dict["valeur"][0])
+
+    def test_bornes_incluses(self):
+        for type_, (unite, mini, maxi, *_) in Mesure.REGLES.items():
+            for valeur in (mini, maxi):
+                with self.subTest(type=type_, valeur=valeur):
+                    une_mesure(type=type_, valeur=valeur).clean()
+
+    def test_date_dans_le_futur_refusee(self):
+        with self.assertRaises(ValidationError) as ctx:
+            une_mesure(mesure_le=timezone.now() + datetime.timedelta(hours=1)).clean()
+        self.assertIn("futur", ctx.exception.message_dict["mesure_le"][0])
+
+    def test_la_date_est_arrondie_a_la_minute(self):
+        m = une_mesure(mesure_le=timezone.now().replace(second=42, microsecond=5) - datetime.timedelta(hours=1))
+        m.clean()
+        self.assertEqual((m.mesure_le.second, m.mesure_le.microsecond), (0, 0))
+
+    def test_deux_mesures_du_meme_type_a_la_meme_minute_refusees(self):
+        self.doublon.return_value = True
+        with self.assertRaises(ValidationError) as ctx:
+            une_mesure().clean()
+        self.assertIn("existe déjà", ctx.exception.message_dict["mesure_le"][0])
+
+    def test_pas_de_doublon_pas_d_erreur(self):
+        une_mesure().clean()
+        self.doublon.assert_called_once()
+
+    def test_la_recherche_de_doublon_garde_le_type_et_la_minute(self):
+        # un autre type, ou une autre minute, ne sont pas des doublons : le filtre porte sur les trois champs
+        import inspect
+
+        source = inspect.getsource(RECHERCHE_DOUBLON_MESURE)
+        for morceau in ("patient=self.patient", "type=self.type", "mesure_le=self.mesure_le", "exclude(pk=self.pk)"):
+            self.assertIn(morceau, source)
+
+    def test_type_hors_liste_refuse(self):
+        with self.assertRaises(ValidationError) as ctx:
+            une_mesure(type="humeur").clean_fields(exclude=["patient"])
+        self.assertIn("type", ctx.exception.message_dict)
+
+    def test_valeur_et_date_obligatoires(self):
+        with self.assertRaises(ValidationError) as ctx:
+            une_mesure(valeur=None, mesure_le=None).clean_fields(exclude=["patient"])
+        self.assertEqual(set(ctx.exception.message_dict), {"valeur", "mesure_le"})
+
+    def test_note_limitee_a_200_caracteres(self):
+        with self.assertRaises(ValidationError) as ctx:
+            une_mesure(note="x" * 201).clean_fields(exclude=["patient"])
+        self.assertIn("note", ctx.exception.message_dict)
+
+    def test_reperes_haut_et_bas(self):
+        cas = (("tension", 140, "haute"), ("tension", 139, ""), ("tension", 89, "basse"), ("tension", 90, ""),
+               ("glycemie", 1.3, "haute"), ("glycemie", 0.6, "basse"), ("glycemie", 0.9, ""),
+               ("temperature", 38, "haute"), ("temperature", 35, "basse"), ("temperature", 37, ""),
+               ("poids", 200, ""), ("poids", 3, ""))
+        for type_, valeur, attendu in cas:
+            with self.subTest(type=type_, valeur=valeur):
+                self.assertEqual(une_mesure(type=type_, valeur=valeur).alerte, attendu)
+
+
+class MesureFormulaireTests(SimpleTestCase):
+    def setUp(self):
+        p = mock.patch.object(Mesure, "_doublon_existe", return_value=False)
+        self.doublon = p.start()
+        self.addCleanup(p.stop)
+        self.patient = un_patient()
+        self.hier = (timezone.localtime() - datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        self.donnees = {"type": "poids", "valeur": "70,5".replace(",", "."), "mesure_le": self.hier, "note": "Le matin"}
+
+    def formulaire(self, **changements):
+        return MesureForm({**self.donnees, **changements}, patient=self.patient)
+
+    def test_formulaire_valide(self):
+        f = self.formulaire()
+        self.assertTrue(f.is_valid(), f.errors)
+        self.assertEqual(f.cleaned_data["valeur"], 70.5)
+
+    def test_le_patient_n_est_jamais_saisi(self):
+        self.assertEqual(list(MesureForm.base_fields), ["type", "valeur", "valeur2", "mesure_le", "note"])
+        f = self.formulaire(patient=str(ObjectId()))
+        self.assertTrue(f.is_valid())
+        self.assertIs(f.instance.patient, self.patient)
+
+    def test_champs_obligatoires(self):
+        f = MesureForm({}, patient=self.patient)
+        self.assertEqual(set(f.errors), {"type", "valeur", "mesure_le"})  # remarque et second chiffre : facultatifs ici
+
+    def test_valeur_non_numerique_refusee(self):
+        self.assertIn("valeur", self.formulaire(valeur="beaucoup").errors)
+
+    def test_les_regles_du_modele_s_appliquent(self):
+        self.assertIn("valeur", self.formulaire(type="temperature", valeur="60").errors)
+        demain = (timezone.localtime() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        self.assertIn("mesure_le", self.formulaire(mesure_le=demain).errors)
+        self.doublon.return_value = True
+        self.assertIn("mesure_le", self.formulaire().errors)
+
+    def test_champ_date_et_heure_et_valeur_decimale(self):
+        self.assertEqual(MesureForm.base_fields["mesure_le"].widget.input_type, "datetime-local")
+        self.assertEqual(MesureForm.base_fields["valeur"].widget.attrs.get("step"), "any")
+
+    def test_libelles_en_francais_simple(self):
+        f = MesureForm(patient=self.patient)
+        self.assertEqual(f.fields["type"].label, "Type de mesure")
+        self.assertEqual(f.fields["mesure_le"].label, "Date et heure de la mesure")
+
+
+class MesureUrlsEtDroitsTests(SimpleTestCase):
+    def test_adresses(self):
+        self.assertEqual(reverse("patients:mesures"), "/patients/mesures/")
+        self.assertEqual(reverse("patients:mesure_creer"), "/patients/mesures/nouvelle/")
+        self.assertEqual(reverse("patients:mesure_modifier", args=["x"]), "/patients/mesures/x/modifier/")
+        self.assertEqual(reverse("patients:mesure_supprimer", args=["x"]), "/patients/mesures/x/supprimer/")
+
+    def test_chaque_adresse_pointe_vers_sa_vue(self):
+        self.assertIs(resolve("/patients/mesures/").func, vues_patients.mesures)
+        self.assertIs(resolve("/patients/mesures/nouvelle/").func, vues_patients.mesure_creer)
+        self.assertIs(resolve("/patients/mesures/abc/modifier/").func, vues_patients.mesure_modifier)
+        self.assertIs(resolve("/patients/mesures/abc/supprimer/").func, vues_patients.mesure_supprimer)
+
+    def test_visiteur_anonyme_renvoye_vers_la_connexion(self):
+        for url in ("/patients/mesures/", "/patients/mesures/nouvelle/",
+                    "/patients/mesures/abc/modifier/", "/patients/mesures/abc/supprimer/"):
+            with self.subTest(url=url):
+                reponse = self.client.get(url)
+                self.assertEqual(reponse.status_code, 302)
+                self.assertTrue(reponse["Location"].startswith("/comptes/connexion/"))
+
+    def test_un_compte_sans_dossier_patient_est_refuse(self):
+        requete = RequestFactory().get("/patients/mesures/")
+        requete.user = get_user_model()(username="medecin", role="medecin", is_active=True)
+        for nom, args in (("mesures", ()), ("mesure_creer", ()), ("mesure_modifier", ("x",)), ("mesure_supprimer", ("x",))):
+            with self.subTest(vue=nom):
+                with self.assertRaises(PermissionDenied):
+                    getattr(vues_patients, nom)(requete, *args)
+
+    def test_les_vues_utilisent_la_recherche_securisee(self):
+        import inspect
+
+        for nom in ("mesure_modifier", "mesure_supprimer"):
+            with self.subTest(vue=nom):
+                self.assertIn("objet_ou_404(Mesure, pk=pk, patient=patient)", inspect.getsource(getattr(vues_patients, nom)))
+
+
+class MesurePagesTests(SimpleTestCase):
+    def requete(self, nom="mesures"):
+        requete = RequestFactory().get("/patients/mesures/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="Amine", username="a",
+                                       get_full_name=lambda: "Amine Demo")
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def rendre_liste(self, mesures, type_choisi="", **extra):
+        for m in mesures:
+            m.pk = ObjectId()
+        dernieres = []
+        for code, libelle in Mesure.Type.choices:
+            dernieres.append({"code": code, "libelle": libelle, "mesure": next((m for m in mesures if m.type == code), None)})
+        return render_to_string("patients/mesures.html", {
+            "dernieres": dernieres, "historique": mesures, "total": len(mesures),
+            "types": Mesure.Type.choices, "type_choisi": type_choisi,
+            "periodes": vues_patients.PERIODES, "periode": "tout", "unite": "", **extra,
+        }, self.requete())
+
+    def test_la_liste_affiche_valeur_unite_et_date(self):
+        html = self.rendre_liste([une_mesure(type="tension", valeur=152, valeur2=96, note="Au repos")])
+        self.assertIn("Tension artérielle : 152/96 mmHg", html)
+        self.assertIn("Au repos", html)
+        self.assertIn("Valeur élevée", html)  # repère écrit, pas seulement une couleur
+
+    def test_aucun_repere_pour_une_valeur_normale(self):
+        html = self.rendre_liste([une_mesure(type="tension", valeur=120)])
+        self.assertNotIn("Valeur élevée", html)
+        self.assertNotIn("Valeur basse", html)
+
+    def test_valeur_basse_signalee(self):
+        self.assertIn("Valeur basse", self.rendre_liste([une_mesure(type="glycemie", valeur=0.5)]))
+
+    def test_les_quatre_types_ont_leur_carte_meme_sans_mesure(self):
+        html = self.rendre_liste([])
+        for libelle in ("Poids", "Tension artérielle", "Glycémie", "Température", "Fréquence cardiaque", "Saturation en oxygène"):
+            self.assertIn(libelle, html)
+        self.assertEqual(html.count("Aucune mesure."), 6)
+
+    def test_etat_vide_avec_invitation_a_agir(self):
+        html = self.rendre_liste([])
+        self.assertIn("Aucune mesure enregistrée", html)
+        self.assertIn("Ajouter une mesure", html)
+
+    def test_filtre_par_type_marque_le_choix_courant(self):
+        html = self.rendre_liste([une_mesure()], type_choisi="poids")
+        self.assertIn('?type=poids&amp;periode=tout" class="abtn abtn-primary" aria-current="true"', html)
+        self.assertIn("pour ce choix", self.rendre_liste([], type_choisi="poids"))
+
+    def test_le_texte_rappelle_que_ce_n_est_pas_un_diagnostic(self):
+        self.assertIn("pas un diagnostic", self.rendre_liste([]))
+
+    def test_boutons_nommes_pour_les_lecteurs_d_ecran(self):
+        html = self.rendre_liste([une_mesure(type="poids")])
+        self.assertRegex(html, r'Modifier<span class="sr-only"> la mesure de poids du ')
+        self.assertRegex(html, r'Supprimer<span class="sr-only"> la mesure de poids du ')
+
+    def test_le_menu_contient_les_mesures_et_marque_la_page_courante(self):
+        html = self.rendre_liste([])
+        self.assertIn('href="/patients/mesures/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn("Mes mesures</span>", html)
+
+    def test_le_formulaire_affiche_l_unite_selon_le_type(self):
+        from .views import _regles
+
+        with mock.patch.object(Mesure, "_doublon_existe", return_value=False):
+            html = render_to_string("patients/mesure_form.html", {
+                "form": MesureForm(patient=un_patient()), "mesure": None, "regles": _regles()}, self.requete("mesure_creer"))
+        self.assertIn("Ajouter une mesure", html)
+        self.assertIn('id="regles-mesures"', html)
+        self.assertIn('"unite": "mmHg"', html)
+        self.assertIn('aria-live="polite"', html)
+        self.assertIn("csrfmiddlewaretoken", html)
+
+    def test_erreurs_du_formulaire_annoncees(self):
+        from .views import _regles
+
+        with mock.patch.object(Mesure, "_doublon_existe", return_value=False):
+            form = MesureForm({"type": "poids", "valeur": "9000", "mesure_le": "2020-01-01T10:00"}, patient=un_patient())
+            html = render_to_string("patients/mesure_form.html", {"form": form, "mesure": None, "regles": _regles()}, self.requete("mesure_creer"))
+        self.assertIn("Valeur improbable", html)
+        self.assertIn('role="alert"', html)
+
+    def test_confirmation_de_suppression(self):
+        m = une_mesure(type="poids", valeur=70)
+        m.pk = ObjectId()
+        html = render_to_string("patients/mesure_supprimer.html", {"mesure": m}, self.requete("mesure_supprimer"))
+        self.assertIn("Supprimer cette mesure ?", html)
+        self.assertIn("Poids : 70 kg", html)
+        self.assertIn("Oui, supprimer", html)
+        self.assertIn("Non, la garder", html)
+
+
+class MesureAdministrationEtDemoTests(SimpleTestCase):
+    def test_mesure_dans_l_administration(self):
+        ma = admin.site._registry[Mesure]
+        self.assertIn("type", ma.list_filter)
+        self.assertEqual(ma.autocomplete_fields, ("patient",))
+        self.assertIn(MesureInline, admin.site._registry[Patient].inlines)
+
+    def test_les_mesures_de_demonstration_sont_valides(self):
+        from .management.commands.charger_demo import MESURES, PATIENTS
+
+        identifiants = {p[0] for p in PATIENTS}
+        for ident, type_, valeur, valeur2, heures, note in MESURES:
+            with self.subTest(mesure=(ident, type_, valeur)):
+                self.assertIn(ident, identifiants)
+                self.assertIn(type_, Mesure.REGLES)
+                self.assertTrue(Mesure.REGLES[type_][1] <= valeur <= Mesure.REGLES[type_][2])
+                self.assertEqual(valeur2 is not None, type_ == "tension")  # second chiffre : tension uniquement
+                if valeur2 is not None:
+                    self.assertTrue(Mesure.DIASTOLE[0] <= valeur2 < valeur)
+                self.assertGreater(heures, 0)  # jamais dans le futur
+                self.assertLessEqual(len(note), 200)
+        self.assertTrue(any(Mesure(type=t, valeur=v, valeur2=v2).alerte for _, t, v, v2, _, _ in MESURES))  # un cas à signaler
+
+
+class MesureTensionEtNouveauxTypesTests(SimpleTestCase):
+    def setUp(self):
+        p = mock.patch.object(Mesure, "_doublon_existe", return_value=False)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def erreurs(self, **kw):
+        with self.assertRaises(ValidationError) as ctx:
+            une_mesure(type="tension", **kw).clean()
+        return ctx.exception.message_dict
+
+    def test_la_tension_exige_le_second_chiffre(self):
+        self.assertIn("second chiffre", self.erreurs(valeur=120, valeur2=None)["valeur2"][0])
+
+    def test_le_second_chiffre_doit_etre_plausible(self):
+        for v2 in (29, 151):
+            with self.subTest(v2=v2):
+                self.assertIn("improbable", self.erreurs(valeur=200, valeur2=v2)["valeur2"][0])
+        une_mesure(type="tension", valeur=200, valeur2=30).clean()
+        une_mesure(type="tension", valeur=200, valeur2=150).clean()
+
+    def test_le_second_chiffre_doit_etre_plus_petit_que_le_premier(self):
+        for v2 in (120, 130):
+            with self.subTest(v2=v2):
+                self.assertIn("plus petit", self.erreurs(valeur=120, valeur2=v2)["valeur2"][0])
+
+    def test_le_second_chiffre_est_efface_hors_tension(self):
+        m = une_mesure(type="poids", valeur=70, valeur2=55)
+        m.clean()
+        self.assertIsNone(m.valeur2)
+
+    def test_repere_sur_le_second_chiffre(self):
+        cas = ((120, 90, "haute"), (120, 89, ""), (120, 59, "basse"), (120, 60, ""), (139, 80, ""), (140, 80, "haute"))
+        for v, v2, attendu in cas:
+            with self.subTest(v=v, v2=v2):
+                self.assertEqual(une_mesure(type="tension", valeur=v, valeur2=v2).alerte, attendu)
+
+    def test_reperes_des_nouveaux_types(self):
+        cas = (("frequence", 100, ""), ("frequence", 101, "haute"), ("frequence", 49, "basse"), ("frequence", 50, ""),
+               ("saturation", 93, "basse"), ("saturation", 94, ""), ("saturation", 100, ""))
+        for type_, valeur, attendu in cas:
+            with self.subTest(type=type_, valeur=valeur):
+                self.assertEqual(une_mesure(type=type_, valeur=valeur).alerte, attendu)
+
+
+from . import mesures_stats  # noqa: E402
+
+
+def pts(*valeurs, v2=None):
+    debut = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    return [(debut + datetime.timedelta(days=i), v, (v2[i] if v2 else None)) for i, v in enumerate(valeurs)]
+
+
+class MesuresStatistiquesTests(SimpleTestCase):
+    def test_serie_vide(self):
+        self.assertIsNone(mesures_stats.resume([]))
+
+    def test_minimum_maximum_moyenne(self):
+        r = mesures_stats.resume([70, 72, 74])
+        self.assertEqual((r["min"], r["max"], r["moyenne"], r["nombre"]), (70, 74, 72, 3))
+
+    def test_une_seule_mesure_n_a_pas_de_tendance(self):
+        self.assertEqual(mesures_stats.resume([70])["tendance"], "")
+
+    def test_tendance_hausse_baisse_stable(self):
+        self.assertEqual(mesures_stats.resume([70, 70, 75])["tendance"], "hausse")
+        self.assertEqual(mesures_stats.resume([70, 70, 65])["tendance"], "baisse")
+        self.assertEqual(mesures_stats.resume([70, 70, 70.5])["tendance"], "stable")
+
+    def test_pas_de_graphique_avec_moins_de_deux_points(self):
+        self.assertIsNone(mesures_stats.graphique([]))
+        self.assertIsNone(mesures_stats.graphique(pts(70)))
+
+    def test_les_points_restent_dans_le_cadre(self):
+        g = mesures_stats.graphique(pts(60, 90, 75, 120))
+        for x, y in g["lignes"][0]["sommets"]:
+            self.assertTrue(mesures_stats.MARGE_G <= x <= mesures_stats.LARGEUR - mesures_stats.MARGE_D)
+            self.assertTrue(mesures_stats.MARGE_H <= y <= mesures_stats.HAUTEUR - mesures_stats.MARGE_B)
+
+    def test_une_valeur_haute_est_dessinee_plus_haut(self):
+        sommets = mesures_stats.graphique(pts(60, 90))["lignes"][0]["sommets"]
+        self.assertGreater(sommets[1][0], sommets[0][0])  # le temps avance vers la droite
+        self.assertLess(sommets[1][1], sommets[0][1])  # plus grand = plus haut (y plus petit)
+
+    def test_valeurs_identiques_ne_font_pas_planter_le_calcul(self):
+        self.assertIsNotNone(mesures_stats.graphique(pts(70, 70, 70)))
+
+    def test_deux_courbes_pour_la_tension(self):
+        g = mesures_stats.graphique(pts(120, 130, v2=[80, 85]))
+        self.assertEqual(len(g["lignes"]), 2)
+        self.assertEqual(len(mesures_stats.graphique(pts(120, 130))["lignes"]), 1)
+
+    def test_zone_de_repere(self):
+        self.assertIsNone(mesures_stats.graphique(pts(70, 72))["zone"])
+        zone = mesures_stats.graphique(pts(100, 150), bas=90, haut=140)["zone"]
+        self.assertGreater(zone["hauteur"], 0)
+        self.assertGreaterEqual(zone["y"], mesures_stats.MARGE_H)
+
+    def test_dates_aux_extremites(self):
+        g = mesures_stats.graphique(pts(1, 2, 3))
+        self.assertEqual((g["premiere_date"].day, g["derniere_date"].day), (1, 3))
+
+
+class MesuresFiltresEtExportTests(SimpleTestCase):
+    def mesures(self):
+        maintenant = timezone.now()
+        return [une_mesure(type="poids", valeur=70, mesure_le=maintenant - datetime.timedelta(days=1)),
+                une_mesure(type="poids", valeur=72, mesure_le=maintenant - datetime.timedelta(days=60)),
+                une_mesure(type="glycemie", valeur=0.9, mesure_le=maintenant - datetime.timedelta(days=2))]
+
+    def filtrer(self, **params):
+        requete = RequestFactory().get("/patients/mesures/", params)
+        with mock.patch.object(Mesure.objects, "filter", return_value=self.mesures()):
+            return vues_patients._mesures_filtrees(requete, un_patient())
+
+    def test_par_defaut_tout_est_garde(self):
+        _, liste, type_, periode = self.filtrer()
+        self.assertEqual((len(liste), type_, periode), (3, "", "tout"))
+
+    def test_filtre_par_type(self):
+        _, liste, type_, _ = self.filtrer(type="poids")
+        self.assertEqual((len(liste), type_), (2, "poids"))
+
+    def test_filtre_par_periode(self):
+        _, liste, _, periode = self.filtrer(type="poids", periode="30")
+        self.assertEqual((len(liste), periode), (1, "30"))
+        self.assertEqual(len(self.filtrer(periode="90")[1]), 3)
+
+    def test_valeurs_inconnues_ignorees(self):
+        _, liste, type_, periode = self.filtrer(type="zzz", periode="999")
+        self.assertEqual((len(liste), type_, periode), (3, "", "tout"))
+
+    def test_trie_du_plus_recent_au_plus_ancien(self):
+        dates = [m.mesure_le for m in self.filtrer()[1]]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+
+    def exporter(self, mesures):
+        requete = RequestFactory().get("/patients/mesures/export/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True)
+        with mock.patch.object(vues_patients, "_patient_connecte", return_value=un_patient()), \
+                mock.patch.object(vues_patients, "_mesures_filtrees", return_value=([], mesures, "", "tout")):
+            return vues_patients.mesures_exporter(requete)
+
+    def test_export_csv_en_telechargement(self):
+        r = self.exporter(self.mesures())
+        self.assertIn("attachment", r["Content-Disposition"])
+        self.assertTrue(r["Content-Type"].startswith("text/csv"))
+
+    def test_export_lisible_dans_excel(self):
+        texte = self.exporter(self.mesures()).content.decode("utf-8")
+        self.assertTrue(texte.startswith("\ufeffType;Valeur;Second chiffre (tension);Unité;Date et heure;Remarque"))
+        lignes = texte.strip().splitlines()
+        self.assertEqual(len(lignes), 4)
+        self.assertIn("Poids;70;;kg;", texte)
+
+    def test_export_de_la_tension_avec_ses_deux_chiffres(self):
+        texte = self.exporter([une_mesure(type="tension", valeur=120, valeur2=80)]).content.decode("utf-8")
+        self.assertIn("Tension artérielle;120;80;mmHg;", texte)
+
+    def test_export_protege_contre_les_formules(self):
+        for note in ("=1+1", "+cmd", "-2", "@x"):
+            with self.subTest(note=note):
+                self.assertTrue(vues_patients._protege_tableur(note).startswith("'"))
+        self.assertEqual(vues_patients._protege_tableur("à jeun"), "à jeun")
+        texte = self.exporter([une_mesure(note="=HYPERLINK(1)")]).content.decode("utf-8")
+        self.assertIn(";'=HYPERLINK(1)", texte)
+
+    def test_export_de_l_anonyme_refuse(self):
+        reponse = self.client.get("/patients/mesures/export/")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(reponse["Location"].startswith("/comptes/connexion/"))
+
+    def test_adresse_de_l_export(self):
+        self.assertEqual(reverse("patients:mesures_exporter"), "/patients/mesures/export/")
+        self.assertIs(resolve("/patients/mesures/export/").func, vues_patients.mesures_exporter)
+
+
+class MesuresGraphiquePageTests(SimpleTestCase):
+    def requete(self):
+        requete = RequestFactory().get("/patients/mesures/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a",
+                                       get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name="mesures")
+        return requete
+
+    def page(self, mesures, type_choisi, periode="tout"):
+        for m in mesures:
+            m.pk = ObjectId()
+        chrono = list(reversed(mesures))
+        bas, haut = Mesure.REGLES[type_choisi][3:]
+        resume2 = mesures_stats.resume([m.valeur2 for m in chrono if m.valeur2 is not None]) if type_choisi == "tension" else None
+        contexte = {
+            "dernieres": [{"code": c, "libelle": l, "mesure": None} for c, l in Mesure.Type.choices],
+            "historique": mesures, "total": len(mesures), "types": Mesure.Type.choices,
+            "type_choisi": type_choisi, "periodes": vues_patients.PERIODES, "periode": periode,
+            "resume": mesures_stats.resume([m.valeur for m in chrono]), "resume2": resume2,
+            "unite": Mesure.REGLES[type_choisi][0],
+            "graphique": mesures_stats.graphique([(m.mesure_le, m.valeur, m.valeur2) for m in chrono], bas, haut),
+        }
+        return render_to_string("patients/mesures.html", contexte, self.requete())
+
+    def serie(self, type_="poids", n=3, **kw):
+        maintenant = timezone.now()
+        return [une_mesure(type=type_, valeur=70 + i, mesure_le=maintenant - datetime.timedelta(days=i), **kw) for i in range(n)]
+
+    def test_statistiques_et_courbe_affichees(self):
+        html = self.page(self.serie(), "poids")
+        for texte in ("Évolution", "Plus basse", "Plus haute", "Moyenne (3 mesures)", "Tendance"):
+            self.assertIn(texte, html)
+        self.assertIn("<polyline", html)
+        self.assertEqual(html.count("<polyline"), 1)
+
+    def test_courbe_accessible(self):
+        html = self.page(self.serie(), "poids")
+        self.assertIn('role="img"', html)
+        self.assertIn("aria-label=\"Courbe d'évolution de vos mesures du", html)
+        self.assertIn("figcaption", html)
+
+    def test_la_tension_a_deux_courbes_et_une_legende(self):
+        html = self.page(self.serie("tension", valeur2=80), "tension")
+        self.assertEqual(html.count("<polyline"), 2)
+        self.assertIn("Second chiffre", html)
+        self.assertIn("Zone de repère", html)
+
+    def test_une_seule_mesure_invite_a_en_ajouter(self):
+        html = self.page(self.serie(n=1), "poids")
+        self.assertNotIn("<polyline", html)
+        self.assertIn("au moins deux mesures", html)
+
+    def test_sans_type_choisi_pas_de_graphique(self):
+        html = render_to_string("patients/mesures.html", {
+            "dernieres": [], "historique": self.serie(), "total": 3, "types": Mesure.Type.choices, "type_choisi": "",
+            "periodes": vues_patients.PERIODES, "periode": "tout", "unite": ""}, self.requete())
+        self.assertNotIn("<polyline", html)
+        self.assertIn("Choisissez un type de mesure", html)
+
+    def test_boutons_de_periode_et_export(self):
+        html = self.page(self.serie(), "poids", periode="30")
+        self.assertIn('aria-label="Choisir la période"', html)
+        self.assertIn('?type=poids&amp;periode=90"', html)
+        self.assertIn('?type=poids&amp;periode=30" class="abtn abtn-primary" aria-current="true"', html)
+        self.assertIn("/patients/mesures/export/?type=poids&amp;periode=30", html)
+
+    def test_le_formulaire_n_affiche_le_second_chiffre_que_pour_la_tension(self):
+        from .views import _regles
+
+        with mock.patch.object(Mesure, "_doublon_existe", return_value=False):
+            html = render_to_string("patients/mesure_form.html", {
+                "form": MesureForm(patient=un_patient()), "mesure": None, "regles": _regles()}, self.requete())
+        self.assertIn('id="bloc-valeur2"', html)
+        self.assertIn('bloc2.hidden = type.value !== "tension"', html)
+        self.assertIn("Second chiffre de la tension", html)
+
+    def test_les_coordonnees_du_graphique_gardent_le_point_decimal(self):
+        # en français Django écrit « 12,5 » : dans un attribut SVG, la virgule rendrait la valeur invalide
+        import re
+
+        from django.utils import translation
+
+        with translation.override("fr"):
+            html = self.page(self.serie("tension", n=4, valeur2=80), "tension")
+        svg = html[html.index("<svg"):html.index("</svg>")]
+        self.assertIsNone(re.search(r'(cx|cy|x|y|width|height)="[0-9]+,[0-9]', svg))
+        self.assertRegex(svg, r'<circle class="chart-dot-1" cx="[0-9]+(\.[0-9]+)?" cy="[0-9]+(\.[0-9]+)?"')
+        self.assertIn('class="chart-zone"', svg)

@@ -335,3 +335,23 @@
 .check-row { display: flex; align-items: center; gap: 0.7rem; min-height: 44px; font-size: 0.9rem; cursor: pointer; }
 .check-row input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--a-accent); flex: none; }
 .check-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+
+/* ---- Mesures de santé : statistiques et graphique ------------------------------------ */
+.stat-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.stat { padding: 0.85rem 1rem; border: 1px solid var(--a-line); border-radius: 0.75rem; background: var(--a-surface); }
+.stat dt { font-size: 0.75rem; color: var(--a-muted); }
+.stat dd { margin: 0.15rem 0 0; font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; }
+.chart { width: 100%; height: auto; display: block; }
+.chart-grid { stroke: var(--a-line); stroke-width: 1; }
+.chart-zone { fill: rgba(74, 222, 128, 0.12); }
+.chart-text { fill: var(--a-muted); font-size: 19px; font-family: var(--font-body, inherit); }
+.chart-line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart-line-1 { stroke: var(--a-accent); }
+.chart-line-2 { stroke: var(--u3); stroke-dasharray: 6 4; }
+.chart-dot-1 { fill: var(--a-accent); }
+.chart-dot-2 { fill: var(--u3); }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; font-size: 0.8rem; color: var(--a-muted); }
+.legend i { display: inline-block; width: 1.4rem; height: 0; border-top: 3px solid var(--a-accent); vertical-align: middle; margin-right: 0.4rem; }
+.legend i.l2 { border-top: 3px dashed var(--u3); }
+.legend i.z { height: 0.7rem; width: 1.4rem; border: 0; background: rgba(74, 222, 128, 0.3); border-radius: 2px; }

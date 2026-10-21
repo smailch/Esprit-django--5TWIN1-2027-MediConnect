@@ -135,6 +135,120 @@ class Allergie(models.Model):
             raise ValidationError(erreurs)
 
 
+class Mesure(models.Model):
+    """Une mesure de santé saisie par le patient (poids, tension, glycémie, température).
+
+    Un patient peut avoir plusieurs mesures (relation ForeignKey). La tension est la
+    pression systolique (le « grand chiffre » du tensiomètre).
+    """
+
+    class Type(models.TextChoices):
+        POIDS = "poids", "Poids"
+        TENSION = "tension", "Tension artérielle"
+        GLYCEMIE = "glycemie", "Glycémie"
+        TEMPERATURE = "temperature", "Température"
+        FREQUENCE = "frequence", "Fréquence cardiaque"
+        SATURATION = "saturation", "Saturation en oxygène"
+
+    # type -> (unité, minimum plausible, maximum plausible, seuil bas, seuil haut) ; seuils : simples repères
+    REGLES = {
+        "poids": ("kg", 2, 400, None, None),
+        "tension": ("mmHg", 50, 260, 90, 140),
+        "glycemie": ("g/L", 0.2, 6, 0.7, 1.26),
+        "temperature": ("°C", 30, 45, 35.5, 38),
+        "frequence": ("bpm", 20, 250, 50, 101),  # au repos : « haute » à partir de 101
+        "saturation": ("%", 50, 100, 94, None),
+    }
+    # Tension : le second chiffre (diastolique) a ses propres bornes (minimum, maximum, seuil bas, seuil haut).
+    DIASTOLE = (30, 150, 60, 90)
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="mesures")
+    type = models.CharField(max_length=15, choices=Type.choices)
+    valeur = models.FloatField(help_text="Pour la tension : le premier chiffre (systolique, le plus grand).")
+    valeur2 = models.FloatField(
+        null=True, blank=True, help_text="Uniquement pour la tension : le second chiffre (diastolique)."
+    )
+    mesure_le = models.DateTimeField(help_text="Quand la mesure a été prise.")
+    note = models.CharField(max_length=200, blank=True, help_text="Ex. à jeun, après le sport, le matin.")
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "mesure de santé"
+        verbose_name_plural = "mesures de santé"
+        ordering = ["-mesure_le"]
+
+    def __str__(self):
+        return f"{self.get_type_display()} : {self.valeur_affichee}"
+
+    @property
+    def unite(self):
+        return self.REGLES[self.type][0] if self.type in self.REGLES else ""
+
+    @property
+    def valeur_affichee(self):
+        texte = f"{self.valeur:g}" if self.valeur is not None else ""
+        if self.type == self.Type.TENSION and self.valeur2 is not None:
+            texte += f"/{self.valeur2:g}"
+        return f"{texte} {self.unite}".strip()
+
+    @property
+    def alerte(self):
+        """« haute », « basse » ou chaîne vide : simple repère, pas un diagnostic."""
+        if self.type not in self.REGLES or self.valeur is None:
+            return ""
+        bas, haut = self.REGLES[self.type][3:]
+        if haut is not None and self.valeur >= haut:
+            return "haute"
+        if bas is not None and self.valeur < bas:
+            return "basse"
+        if self.type == self.Type.TENSION and self.valeur2 is not None:
+            if self.valeur2 >= self.DIASTOLE[3]:
+                return "haute"
+            if self.valeur2 < self.DIASTOLE[2]:
+                return "basse"
+        return ""
+
+    def _doublon_existe(self):
+        autres = Mesure.objects.filter(patient=self.patient, type=self.type, mesure_le=self.mesure_le)
+        if self.pk:
+            autres = autres.exclude(pk=self.pk)
+        return autres.exists()
+
+    def clean(self):
+        super().clean()
+        erreurs = {}
+        if self.mesure_le:
+            from django.utils import timezone
+
+            self.mesure_le = self.mesure_le.replace(second=0, microsecond=0)  # précision : la minute
+            if self.mesure_le > timezone.now():
+                erreurs["mesure_le"] = "La date de la mesure ne peut pas être dans le futur."
+        if self.type in self.REGLES and self.valeur is not None:
+            unite, mini, maxi = self.REGLES[self.type][:3]
+            if not mini <= self.valeur <= maxi:
+                erreurs["valeur"] = f"Valeur improbable : entrez un nombre entre {mini:g} et {maxi:g} {unite}."
+        if self.type == self.Type.TENSION:
+            mini2, maxi2 = self.DIASTOLE[:2]
+            if self.valeur2 is None:
+                erreurs["valeur2"] = "Indiquez aussi le second chiffre de la tension (le plus petit)."
+            elif not mini2 <= self.valeur2 <= maxi2:
+                erreurs["valeur2"] = f"Valeur improbable : entrez un nombre entre {mini2:g} et {maxi2:g} mmHg."
+            elif self.valeur is not None and self.valeur2 >= self.valeur:
+                erreurs["valeur2"] = "Le second chiffre doit être plus petit que le premier."
+        else:
+            self.valeur2 = None  # le second chiffre n'existe que pour la tension
+        if (
+            "mesure_le" not in erreurs
+            and self.mesure_le
+            and self.type in self.REGLES
+            and self.patient_id is not None
+            and self._doublon_existe()
+        ):
+            erreurs["mesure_le"] = "Une mesure de ce type existe déjà pour cette minute."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+
 class Symptome(models.Model):
     """Catalogue des symptômes, géré par l'administrateur."""
 

@@ -46,6 +46,25 @@
       {% endif %}
     </section>
 
+    <section class="panel panel-pad" aria-labelledby="titre-mesures">
+      <h2 id="titre-mesures" class="section-title">Dernières mesures de santé</h2>
+      {% if mesures %}
+      <ul class="mt-4 space-y-3">
+        {% for m in mesures %}
+        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>
+            <strong class="font-medium">{{ m.get_type_display }} : {{ m.valeur_affichee }}</strong>
+            <span class="muted">· {{ m.mesure_le|date:"d/m/Y H:i" }}{% if m.note %} · {{ m.note }}{% endif %}</span>
+          </span>
+          {% if m.alerte == "haute" %}<span class="sev sev-moderee">Élevée</span>{% elif m.alerte == "basse" %}<span class="sev sev-moderee">Basse</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted mt-3 text-sm">Aucune mesure enregistrée.</p>
+      {% endif %}
+    </section>
+
     <section class="panel panel-pad" aria-labelledby="titre-dossier">
       <h2 id="titre-dossier" class="section-title">Dossier médical</h2>
       {% if dossier %}

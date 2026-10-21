@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Allergie, DossierMedical, Patient, Symptome, Triage
+from .models import Allergie, DossierMedical, Mesure, Patient, Symptome, Triage
 
 
 class DossierMedicalInline(admin.StackedInline):
@@ -22,6 +22,14 @@ class AllergieInline(admin.TabularInline):
     fields = ("substance", "type", "gravite", "reaction", "active")
 
 
+class MesureInline(admin.TabularInline):
+    """Mesures de santé éditées sur la même page que le patient."""
+
+    model = Mesure
+    extra = 0
+    fields = ("type", "valeur", "mesure_le", "note")
+
+
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
     list_display = ("__str__", "ville", "telephone", "sexe", "cree_le")
@@ -36,7 +44,7 @@ class PatientAdmin(admin.ModelAdmin):
         "ville",
     )
     autocomplete_fields = ("user",)
-    inlines = [DossierMedicalInline, AllergieInline]
+    inlines = [DossierMedicalInline, AllergieInline, MesureInline]
 
 
 @admin.register(DossierMedical)
@@ -154,3 +162,12 @@ class TriageAdmin(admin.ModelAdmin):
         if c.saturation_oxygene is not None:
             morceaux.append(f"saturation {c.saturation_oxygene} %")
         return ", ".join(morceaux) or "—"
+
+
+@admin.register(Mesure)
+class MesureAdmin(admin.ModelAdmin):
+    list_display = ("patient", "type", "valeur", "mesure_le")
+    list_select_related = ("patient__user",)
+    list_filter = ("type", "mesure_le")
+    search_fields = ("patient__user__last_name", "patient__user__first_name")
+    autocomplete_fields = ("patient",)

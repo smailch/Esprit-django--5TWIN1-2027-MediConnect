@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.shortcuts import redirect, render
 
 from core.utils import objet_ou_404
-from patients.models import Allergie, DossierMedical, Patient, Symptome, Triage
+from patients.models import Allergie, DossierMedical, Mesure, Patient, Symptome, Triage
 
 from .forms import FiltreRendezVousForm, MajRendezVousForm
 from .permissions import administrateur_requis
@@ -108,6 +108,7 @@ def patient_detail(request, pk):
         "patient": patient,
         "dossier": DossierMedical.objects.filter(patient=patient).first(),
         "allergies": Allergie.objects.filter(patient=patient).order_by("-active", "substance"),
+        "mesures": sorted(Mesure.objects.filter(patient=patient), key=lambda m: m.mesure_le, reverse=True)[:10],
         "demandes": Triage.objects.filter(patient=patient).order_by("-cree_le"),
     })
 

@@ -6,7 +6,7 @@ from django.db import transaction
 from core.forms import StyledFormMixin
 
 from .echelles import ECHELLES, NIVEAU_MAX, choix
-from .models import Allergie, DossierMedical, Patient, Symptome
+from .models import Allergie, DossierMedical, Mesure, Patient, Symptome
 
 User = get_user_model()
 
@@ -203,4 +203,31 @@ class AllergieForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Imposé ici pour que les règles du modèle (doublon, date de naissance) s'appliquent.
         self.instance.patient = patient
+        self._style_fields()
+
+
+class MesureForm(StyledFormMixin, forms.ModelForm):
+    """Ajout et modification d'une mesure de santé. Le patient est imposé par la vue (jamais saisi)."""
+
+    class Meta:
+        model = Mesure
+        fields = ("type", "valeur", "valeur2", "mesure_le", "note")
+        labels = {
+            "type": "Type de mesure",
+            "valeur": "Valeur (tension : le premier chiffre)",
+            "valeur2": "Second chiffre de la tension",
+            "mesure_le": "Date et heure de la mesure",
+            "note": "Remarque (facultatif)",
+        }
+        widgets = {
+            "valeur": forms.NumberInput(attrs={"step": "any", "inputmode": "decimal"}),
+            "valeur2": forms.NumberInput(attrs={"step": "any", "inputmode": "decimal"}),
+            "mesure_le": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        }
+
+    def __init__(self, *args, patient, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Imposé ici pour que les règles du modèle (doublon) s'appliquent.
+        self.instance.patient = patient
+        self.fields["mesure_le"].input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"]
         self._style_fields()
