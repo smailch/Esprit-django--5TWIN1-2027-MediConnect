@@ -1,34 +1,29 @@
-{% extends "core/layout.html" %}
+{% extends "core/auth_layout.html" %}
 
 {% block title %}Connexion — MediConnect{% endblock %}
-{% block largeur %}max-w-md{% endblock %}
 
-{% block header_actions %}
-<a href="{% url 'patients:inscription' %}" class="btn btn-glass btn-sm">Créer un compte</a>
+{% block auth_link %}
+<a href="{% url 'patients:inscription' %}" class="abtn abtn-outline">Créer un compte</a>
 {% endblock %}
 
 {% block page %}
-<div class="glass p-6 sm:p-8">
-  <h1 class="text-2xl font-light text-gray-800">Connexion</h1>
-  <p class="mt-2 text-sm text-gray-600">Accédez à votre espace patient.</p>
+<h1 class="auth-title">Connexion</h1>
+<p class="muted mt-2 text-sm">Accédez à votre espace patient.</p>
 
-  <form method="post" novalidate class="mt-6 space-y-4">
-    {% csrf_token %}
-    {% if form.non_field_errors %}
-    <div role="alert" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
-      {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
-    </div>
-    {% endif %}
-    {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
-    <input type="hidden" name="next" value="{{ next }}">
+<form method="post" novalidate class="mt-8 space-y-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+  {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+  <input type="hidden" name="next" value="{{ next }}">
 
-    <button type="submit" class="btn btn-primary w-full">
-      Se connecter
-    </button>
-  </form>
+  <button type="submit" class="abtn abtn-primary abtn-lg abtn-block">Se connecter</button>
+</form>
 
-  <p class="mt-5 text-center text-sm text-gray-600">
-    Pas encore de compte ? <a href="{% url 'patients:inscription' %}" class="text-primary underline underline-offset-2">Créer un compte</a>
-  </p>
-</div>
+<p class="muted mt-6 text-center text-sm">
+  Pas encore de compte ? <a href="{% url 'patients:inscription' %}" class="text-accent underline underline-offset-2">Créer un compte</a>
+</p>
 {% endblock %}

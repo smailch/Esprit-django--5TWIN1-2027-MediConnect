@@ -1,52 +1,45 @@
-{% extends "patients/layout.html" %}
+{% extends "core/auth_layout.html" %}
 
 {% block title %}Créer un compte patient — MediConnect{% endblock %}
-{% block largeur %}max-w-4xl{% endblock %}
 
-{% block header_actions %}
-<a href="{% url 'core:connexion' %}" class="btn btn-glass btn-sm">Se connecter</a>
+{% block auth_link %}
+<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>
 {% endblock %}
 
 {% block page %}
-<div class="glass p-6 sm:p-8">
-  <h1 class="text-2xl font-light text-gray-800">Créer votre compte patient</h1>
-  <p class="mt-2 text-sm text-gray-600">Quelques informations suffisent. Vous pourrez compléter votre dossier médical ensuite.</p>
+<h1 class="auth-title">Créer votre compte patient</h1>
+<p class="muted mt-2 text-sm">Quelques informations suffisent. Vous pourrez compléter votre dossier médical ensuite.</p>
 
-  <form method="post" novalidate class="mt-6">
-    {% csrf_token %}
-    {% if form.non_field_errors %}
-    <div role="alert" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
-      {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
-    </div>
-    {% endif %}
+<form method="post" novalidate class="mt-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
 
-    <div class="grid gap-8 md:grid-cols-2 md:items-start">
-    <fieldset class="space-y-4">
-      <legend class="mb-1 text-sm font-medium text-primary-dark">Votre compte</legend>
-      {% for field in form %}
-        {% if field.name in "username first_name last_name email password1 password2" %}
-          {% include "core/_champ.html" %}
-        {% endif %}
-      {% endfor %}
-    </fieldset>
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Votre compte</legend>
+    {% for field in form %}
+      {% if field.name in "username first_name last_name email password1 password2" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
 
-    <fieldset class="space-y-4">
-      <legend class="mb-1 text-sm font-medium text-primary-dark">Vos informations</legend>
-      {% for field in form %}
-        {% if field.name in "date_naissance sexe telephone ville" %}
-          {% include "core/_champ.html" %}
-        {% endif %}
-      {% endfor %}
-    </fieldset>
-    </div>
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Vos informations</legend>
+    {% for field in form %}
+      {% if field.name in "date_naissance sexe telephone ville" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
 
-    <button type="submit" class="btn btn-primary mt-6 w-full md:w-auto">
-      Créer mon compte
-    </button>
-  </form>
+  <button type="submit" class="abtn abtn-primary abtn-lg abtn-block mt-8">Créer mon compte</button>
+</form>
 
-  <p class="mt-5 text-center text-sm text-gray-600">
-    Déjà inscrit ? <a href="{% url 'core:connexion' %}" class="text-primary underline underline-offset-2">Se connecter</a>
-  </p>
-</div>
+<p class="muted mt-6 text-center text-sm">
+  Déjà inscrit ? <a href="{% url 'core:connexion' %}" class="text-accent underline underline-offset-2">Se connecter</a>
+</p>
 {% endblock %}

@@ -15,10 +15,12 @@ class ConnexionView(LoginView):
         """Destination après connexion, selon le rôle (sauf si ?next=… est fourni)."""
         user = self.request.user
         role = getattr(user, "role", None)
+        # Le personnel passe en premier : un super-utilisateur créé en ligne de commande
+        # a le rôle « patient » par défaut, mais il doit arriver dans l'espace administrateur.
+        if user.is_staff or user.is_superuser or role == user.Role.ADMIN:
+            return reverse("backoffice:tableau_de_bord")
         if role == user.Role.PATIENT:
             return reverse("patients:tableau_de_bord")
-        if user.is_staff:
-            return reverse("admin:index")
         return reverse("home")
 
 

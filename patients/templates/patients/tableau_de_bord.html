@@ -3,94 +3,96 @@
 {% block title %}Tableau de bord — MediConnect{% endblock %}
 
 {% block page %}
-<div class="glass flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
+<header class="page-head">
   <div>
-    <h1 class="text-2xl font-light text-gray-800">Bonjour {{ user.first_name|default:user.username }}</h1>
-    <p class="mt-1 text-sm text-gray-600">Suivez ici vos demandes de rendez-vous.</p>
+    <h1 class="page-title">Bonjour {{ user.first_name|default:user.username }}</h1>
+    <p class="muted mt-2 text-sm">Suivez ici vos demandes de rendez-vous.</p>
   </div>
-  <a href="{% url 'patients:medecins' %}" class="btn btn-primary">
-    Nouvelle demande
-    <i data-lucide="arrow-right" class="h-4 w-4"></i>
+  <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary">
+    <i data-lucide="calendar-plus" class="h-4 w-4"></i>Nouvelle demande
   </a>
-</div>
+</header>
 
-<div class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
-<section class="lg:col-span-8" aria-labelledby="titre-en-cours">
-  <h2 id="titre-en-cours" class="text-lg font-medium text-white">En cours ({{ en_cours|length }})</h2>
+<div class="mt-10 grid gap-10 lg:grid-cols-12 lg:items-start">
 
-  {% if en_cours %}
-  <ul class="mt-3 space-y-4">
-    {% for t in en_cours %}
-    {% with n=t.niveau_effectif %}
-    <li class="glass p-5">
-      <div class="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p class="text-sm font-medium text-gray-800">{{ t.medecin_nom }}</p>
-          <p class="text-xs text-gray-600">{{ t.medecin_specialite }} · demande du {{ t.cree_le|date:"d/m/Y à H:i" }}</p>
+  <section class="lg:col-span-8" aria-labelledby="titre-en-cours">
+    <h2 id="titre-en-cours" class="section-title">En cours <span class="count">{{ en_cours|length }}</span></h2>
+
+    {% if en_cours %}
+    <ul class="mt-4 space-y-4">
+      {% for t in en_cours %}
+      {% with n=t.niveau_effectif %}
+      <li class="panel req req-{{ n }}">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="req-doctor">{{ t.medecin_nom }}</p>
+            <p class="muted mt-1 text-sm">{{ t.medecin_specialite }} · demande du {{ t.cree_le|date:"d/m/Y à H:i" }}</p>
+          </div>
+          <span class="lv lv-{{ n }}">{{ t.get_niveau_display }}</span>
         </div>
-        <p class="rounded-full px-3 py-1 text-xs {% if n == 1 %}bg-red-100 text-red-900{% elif n == 2 %}bg-orange-100 text-orange-900{% elif n == 3 %}bg-yellow-100 text-yellow-900{% else %}bg-soft text-primary-dark{% endif %}">
-          {{ t.get_niveau_display }}
+
+        <p class="mt-4 text-sm">
+          {% if t.statut == "en_consultation" %}
+            Votre consultation est en cours.
+          {% elif t.place %}
+            Votre place dans la file : <strong class="queue-pos">{{ t.place.0 }}{% if t.place.0 == 1 %}re{% else %}e{% endif %} sur {{ t.place.1 }}</strong>
+          {% else %}
+            En attente de prise en charge.
+          {% endif %}
         </p>
-      </div>
 
-      <p class="mt-3 text-sm text-gray-800">
-        {% if t.statut == "en_consultation" %}
-          Votre consultation est en cours.
-        {% elif t.place %}
-          Votre place dans la file : <strong class="font-medium">{{ t.place.0 }}{% if t.place.0 == 1 %}re{% else %}e{% endif %} sur {{ t.place.1 }}</strong>.
-        {% else %}
-          En attente de prise en charge.
+        {% if n == 1 %}
+        <p class="alert alert-danger mt-3" role="alert">Situation potentiellement vitale : appelez immédiatement les urgences (190 / 15 / 112).</p>
         {% endif %}
-      </p>
-      {% if n == 1 %}
-      <p class="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">Situation potentiellement vitale : appelez immédiatement les urgences (190 / 15 / 112).</p>
+
+        <div class="mt-4">{% include "patients/_propositions.html" with triage=t propositions=t.propositions %}</div>
+
+        <div class="mt-5 flex flex-wrap gap-3">
+          <a href="{% url 'patients:resultat' t.pk %}" class="abtn abtn-outline">Voir le détail</a>
+          {% if t.statut == "en_attente" %}
+          <form method="post" action="{% url 'patients:annuler' t.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="abtn abtn-danger">Annuler</button>
+          </form>
+          {% endif %}
+        </div>
+      </li>
+      {% endwith %}
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="panel panel-pad mt-4 text-center">
+      <p class="muted text-sm">Vous n'avez aucune demande en cours.</p>
+      <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary mt-4">Prendre rendez-vous</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="space-y-10 lg:col-span-4">
+    <section aria-labelledby="titre-historique">
+      <h2 id="titre-historique" class="section-title">Historique <span class="count">{{ historique|length }}</span></h2>
+      {% if historique %}
+      <ul class="panel mt-4 divide-y divide-gray-300/60">
+        {% for t in historique %}
+        <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <div>
+            <p class="text-sm font-medium">{{ t.medecin_nom }}</p>
+            <p class="muted text-xs">{{ t.cree_le|date:"d/m/Y" }} · {{ t.get_niveau_display }} · {{ t.get_statut_display }}</p>
+          </div>
+          <a href="{% url 'patients:resultat' t.pk %}" class="abtn abtn-ghost">Détail</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="panel panel-pad muted mt-4 text-sm">Votre historique est vide.</p>
       {% endif %}
+    </section>
 
-      {% include "patients/_propositions.html" with triage=t propositions=t.propositions %}
+    <section class="panel panel-pad" aria-labelledby="titre-urgence">
+      <h2 id="titre-urgence" class="section-title">Urgence vitale ?</h2>
+      <p class="muted mt-2 text-sm">Appelez le 190, le 15 ou le 112. MediConnect ne remplace pas les secours.</p>
+    </section>
+  </aside>
 
-      <div class="mt-4 flex flex-col gap-3 sm:flex-row">
-        <a href="{% url 'patients:resultat' t.pk %}" class="btn btn-glass">Voir le détail</a>
-        {% if t.statut == "en_attente" %}
-        <form method="post" action="{% url 'patients:annuler' t.pk %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-glass btn-neutral w-full sm:w-auto">Annuler</button>
-        </form>
-        {% endif %}
-      </div>
-    </li>
-    {% endwith %}
-    {% endfor %}
-  </ul>
-  {% else %}
-  <div class="glass mt-3 p-6 text-center">
-    <p class="text-sm text-gray-700">Vous n'avez aucune demande en cours.</p>
-    <a href="{% url 'patients:medecins' %}" class="btn btn-primary mt-3">Prendre rendez-vous</a>
-  </div>
-  {% endif %}
-</section>
-
-<section class="lg:col-span-4" aria-labelledby="titre-historique">
-  <h2 id="titre-historique" class="text-lg font-medium text-white">Historique ({{ historique|length }})</h2>
-  {% if historique %}
-  <ul class="glass mt-3 divide-y divide-gray-300/50">
-    {% for t in historique %}
-    <li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
-      <div>
-        <p class="text-sm text-gray-800">{{ t.medecin_nom }}</p>
-        <p class="text-xs text-gray-600">{{ t.cree_le|date:"d/m/Y" }} · {{ t.get_niveau_display }}</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-800">{{ t.get_statut_display }}</span>
-        <a href="{% url 'patients:resultat' t.pk %}" class="btn btn-glass">Détail</a>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="glass mt-3 p-5 text-sm text-gray-700">Votre historique est vide.</p>
-  {% endif %}
-</section>
 </div>
 {% endblock %}
-
-{% block extra_js %}{% endblock %}

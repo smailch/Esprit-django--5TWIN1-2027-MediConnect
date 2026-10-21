@@ -1,0 +1,37 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Symptômes — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Symptômes</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Le catalogue proposé aux patients et les pondérations du triage. Un drapeau rouge impose un niveau d'urgence minimal, quel que soit le score.</p>
+  </div>
+  <a href="{% url 'admin:patients_symptome_changelist' %}" class="abtn abtn-outline">Gérer dans l'administration</a>
+</header>
+
+<section class="panel mt-8" aria-label="Catalogue des symptômes">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th scope="col">Symptôme</th><th scope="col" class="num">Poids</th><th scope="col">Drapeau rouge</th><th scope="col">Niveau imposé</th><th scope="col">Affiché aux patients</th></tr>
+      </thead>
+      <tbody>
+        {% for s in symptomes %}
+        <tr>
+          <td><a class="link" href="{% url 'admin:patients_symptome_change' s.pk %}">{{ s.nom }}</a></td>
+          <td class="num">{{ s.poids }}/10</td>
+          <td>{% if s.drapeau_rouge %}<span class="lv lv-1">Oui</span>{% else %}<span class="muted">Non</span>{% endif %}</td>
+          <td>{% if s.niveau_minimal %}<span class="lv lv-{{ s.niveau_minimal }}">{{ s.niveau_minimal }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{% if s.actif %}Oui{% else %}<span class="muted">Non (désactivé)</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="muted">Le catalogue est vide. Lancez <code>python manage.py charger_symptomes</code>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

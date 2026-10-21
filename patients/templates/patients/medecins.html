@@ -3,45 +3,50 @@
 {% block title %}Choisir un médecin — MediConnect{% endblock %}
 
 {% block page %}
-<div class="glass p-5 sm:p-6 lg:flex lg:items-end lg:justify-between lg:gap-10">
-<div>
-<h1 class="text-2xl font-light text-gray-800">Choisissez votre médecin</h1>
-<p class="mt-1 max-w-xl text-sm text-gray-600">Sélectionnez le médecin avec qui vous souhaitez prendre rendez-vous. Vous décrirez ensuite vos symptômes.</p>
-</div>
-
-<form method="get" class="mt-5 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end lg:mt-0 lg:w-[36rem] lg:shrink-0">
+<header class="page-head">
   <div>
-    <label for="f-specialite" class="mb-1 block text-xs text-gray-700">Spécialité</label>
+    <h1 class="page-title">Choisissez votre médecin</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Sélectionnez le médecin avec qui vous souhaitez prendre rendez-vous. Vous décrirez ensuite vos symptômes.</p>
+  </div>
+</header>
+
+{% include "patients/_etapes.html" with etape=1 %}
+
+<form method="get" class="toolbar">
+  <div>
+    <label for="f-specialite" class="f-label">Spécialité</label>
     <select id="f-specialite" name="specialite" class="field">
       <option value="">Toutes</option>
       {% for s in specialites %}<option value="{{ s }}" {% if s == specialite %}selected{% endif %}>{{ s }}</option>{% endfor %}
     </select>
   </div>
   <div>
-    <label for="f-ville" class="mb-1 block text-xs text-gray-700">Ville</label>
+    <label for="f-ville" class="f-label">Ville</label>
     <select id="f-ville" name="ville" class="field">
       <option value="">Toutes</option>
       {% for v in villes %}<option value="{{ v }}" {% if v == ville %}selected{% endif %}>{{ v }}</option>{% endfor %}
     </select>
   </div>
-  <button type="submit" class="btn btn-glass">Filtrer</button>
+  <button type="submit" class="abtn abtn-outline">Filtrer</button>
 </form>
-</div>
 
 <ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
   {% for m in medecins %}
-  <li class="glass flex flex-col p-5">
-    <h2 class="text-base font-medium text-gray-800">{{ m.nom }}</h2>
-    <p class="mt-1 text-sm text-gray-600">{{ m.specialite }} · {{ m.ville }}</p>
-    <p class="mt-2 text-xs {% if m.disponible %}text-green-800{% else %}text-gray-600{% endif %}">
-      {% if m.disponible %}Disponible{% else %}Indisponible actuellement{% endif %}
+  <li class="panel doctor">
+    <div class="flex items-center gap-3">
+      <span class="avatar avatar-lg" aria-hidden="true">{{ m.nom|cut:"Dr "|slice:":1" }}</span>
+      <div>
+        <h2 class="doctor-name">{{ m.nom }}</h2>
+        <p class="muted text-sm">{{ m.specialite }} · {{ m.ville }}</p>
+      </div>
+    </div>
+    <p class="avail {% if m.disponible %}avail-on{% endif %}">
+      <span class="dot" aria-hidden="true"></span>{% if m.disponible %}Disponible{% else %}Indisponible actuellement{% endif %}
     </p>
-    <a href="{% url 'patients:symptomes' m.id %}" class="btn btn-primary mt-4">
-      Choisir ce médecin
-    </a>
+    <a href="{% url 'patients:symptomes' m.id %}" class="abtn abtn-primary abtn-block mt-4">Choisir ce médecin</a>
   </li>
   {% empty %}
-  <li class="glass p-5 text-sm text-gray-600 sm:col-span-2 lg:col-span-3">Aucun médecin ne correspond à ces critères.</li>
+  <li class="panel panel-pad muted text-sm sm:col-span-2 lg:col-span-3">Aucun médecin ne correspond à ces critères.</li>
   {% endfor %}
 </ul>
 {% endblock %}

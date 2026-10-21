@@ -1,0 +1,23 @@
+{% extends "core/layout.html" %}
+
+{# Cadre de l'espace administrateur : le cadre commun + les onglets d'administration. #}
+
+{% block nav %}
+{% with page=request.resolver_match.url_name %}
+<a href="{% url 'backoffice:tableau_de_bord' %}" class="nav-item" {% if page == 'tableau_de_bord' %}aria-current="page"{% endif %}>
+  <i data-lucide="layout-dashboard" class="h-5 w-5"></i><span>Tableau de bord</span>
+</a>
+<a href="{% url 'backoffice:rendez_vous' %}" class="nav-item" {% if page == 'rendez_vous' or page == 'rendez_vous_detail' %}aria-current="page"{% endif %}>
+  <i data-lucide="calendar-check" class="h-5 w-5"></i><span>Rendez-vous</span>
+</a>
+<a href="{% url 'backoffice:patients' %}" class="nav-item" {% if page == 'patients' or page == 'patient_detail' %}aria-current="page"{% endif %}>
+  <i data-lucide="users" class="h-5 w-5"></i><span>Patients</span>
+</a>
+<a href="{% url 'backoffice:symptomes' %}" class="nav-item" {% if page == 'symptomes' %}aria-current="page"{% endif %}>
+  <i data-lucide="clipboard-list" class="h-5 w-5"></i><span>Symptômes</span>
+</a>
+<a href="{% url 'admin:index' %}" class="nav-item">
+  <i data-lucide="settings" class="h-5 w-5"></i><span>Administration</span>
+</a>
+{% endwith %}
+{% endblock %}

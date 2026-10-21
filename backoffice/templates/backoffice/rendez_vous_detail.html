@@ -1,0 +1,82 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Rendez-vous de {{ triage.patient }} — Administration MediConnect{% endblock %}
+
+{% block page %}
+{% with n=triage.niveau_effectif %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'backoffice:rendez_vous' %}" class="link text-sm">← Tous les rendez-vous</a>
+    <h1 class="page-title mt-2">Demande de {{ triage.patient }}</h1>
+    <p class="muted mt-2 text-sm">Reçue le {{ triage.cree_le|date:"d/m/Y à H:i" }} · {{ triage.medecin_nom }} ({{ triage.medecin_specialite }})</p>
+  </div>
+  <span class="st st-{{ triage.statut }}">{{ triage.get_statut_display }}</span>
+</header>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <div class="space-y-6 lg:col-span-7">
+    <section class="panel result req-{{ n }}" aria-labelledby="titre-niveau">
+      <div class="result-hero">
+        <span class="result-num" aria-hidden="true">{{ n }}</span>
+        <div>
+          <p id="titre-niveau" class="muted text-sm">Niveau d'urgence retenu</p>
+          <p class="result-label">{{ triage.get_niveau_display|slice:"4:" }}</p>
+        </div>
+      </div>
+      <p class="muted mt-4 text-sm">{{ triage.explication }}</p>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-declare">
+      <h2 id="titre-declare" class="section-title">Ce que le patient a déclaré</h2>
+      <dl class="dl mt-4">
+        <div>
+          <dt>Symptômes cochés</dt>
+          <dd>{% for s in triage.symptomes %}{{ s.nom }}{% if s.drapeau_rouge %} (alerte){% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</dd>
+        </div>
+        <div>
+          <dt>Auto-évaluation (0 à 5)</dt>
+          <dd>{% for e in triage.auto_evaluation_resume %}{{ e.nom|capfirst }} : {{ e.libelle|lower }} ({{ e.valeur }}/5){% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</dd>
+        </div>
+        {% if triage.constantes and triage.constantes.temperature %}
+        <div><dt>Température mesurée</dt><dd>{{ triage.constantes.temperature }} °C</dd></div>
+        {% endif %}
+        <div class="wide">
+          <dt>Description libre</dt>
+          <dd>{% if triage.texte_libre %}« {{ triage.texte_libre }} »{% else %}—{% endif %}</dd>
+        </div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="space-y-6 lg:col-span-5">
+    <section class="panel panel-pad" aria-labelledby="titre-infos">
+      <h2 id="titre-infos" class="section-title">Informations</h2>
+      <dl class="dl mt-4">
+        <div><dt>Patient</dt><dd><a class="link" href="{% url 'backoffice:patient_detail' triage.patient.pk %}">{{ triage.patient }}</a></dd></div>
+        <div><dt>Score du triage</dt><dd>{{ triage.score|default_if_none:"—" }}</dd></div>
+        <div><dt>Niveau calculé</dt><dd>{{ triage.niveau|default_if_none:"—" }}</dd></div>
+        <div><dt>Niveau du médecin</dt><dd>{{ triage.niveau_medecin|default_if_none:"non requalifié" }}</dd></div>
+        <div class="wide">
+          <dt>Place dans la file</dt>
+          <dd>{% if place %}{{ place.0 }} sur {{ place.1 }} chez {{ triage.medecin_nom }}{% else %}—{% endif %}</dd>
+        </div>
+        {% if triage.drapeaux_rouges %}
+        <div class="wide"><dt>Signes d'alerte</dt><dd>{{ triage.drapeaux_rouges|join:", " }}</dd></div>
+        {% endif %}
+      </dl>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-maj">
+      <h2 id="titre-maj" class="section-title">Mettre à jour</h2>
+      <form method="post" novalidate class="mt-4 space-y-5">
+        {% csrf_token %}
+        {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+        <button type="submit" class="abtn abtn-primary">Enregistrer</button>
+      </form>
+    </section>
+  </div>
+
+</div>
+{% endwith %}
+{% endblock %}

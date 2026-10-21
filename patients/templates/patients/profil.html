@@ -3,40 +3,49 @@
 {% block title %}Mon profil — MediConnect{% endblock %}
 
 {% block page %}
-<div class="glass p-5 sm:p-6 lg:flex lg:items-center lg:justify-between lg:gap-8">
-<div>
-<h1 class="text-2xl font-light text-gray-800">Bonjour {{ user.first_name|default:user.username }}</h1>
-<p class="mt-1 text-sm text-gray-600">Gardez vos informations à jour : elles aident le médecin à mieux vous soigner.</p>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mon profil</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Gardez vos informations à jour : elles aident le médecin à mieux vous soigner.</p>
+  </div>
+  <a href="{% url 'patients:medecins' %}" class="abtn abtn-outline">
+    <i data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous
+  </a>
+</header>
 
-</div>
-<a href="{% url 'patients:medecins' %}" class="btn btn-primary mt-5 lg:mt-0 lg:shrink-0">
-  Prendre rendez-vous avec un médecin
-</a>
-</div>
-
-<form method="post" novalidate class="mt-6 grid gap-6 lg:grid-cols-2 lg:items-start">
+<form method="post" novalidate class="mt-10">
   {% csrf_token %}
 
-  <section class="glass p-6" aria-labelledby="titre-identite">
-    <h2 id="titre-identite" class="text-base font-medium text-primary-dark">Mes informations</h2>
-    <div class="mt-4 grid gap-4 sm:grid-cols-2">
-      {% for field in profil_form %}
-      <div class="{% if field.name == 'adresse' %}sm:col-span-2{% endif %}">
-        {% include "core/_champ.html" %}
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-identite">
+    <div class="lg:col-span-4">
+      <h2 id="titre-identite" class="section-title">Mes informations</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Vos coordonnées, utilisées pour vous joindre et trouver un infirmier près de chez vous.</p>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <div class="grid gap-5 sm:grid-cols-2">
+        {% for field in profil_form %}
+        <div class="{% if field.name == 'adresse' %}sm:col-span-2{% endif %}">
+          {% include "core/_champ.html" %}
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
   </section>
 
-  <section class="glass p-6" aria-labelledby="titre-dossier">
-    <h2 id="titre-dossier" class="text-base font-medium text-primary-dark">Mon dossier médical</h2>
-    <div class="mt-4 space-y-4">
-      {% for field in dossier_form %}{% include "core/_champ.html" %}{% endfor %}
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-dossier">
+    <div class="lg:col-span-4">
+      <h2 id="titre-dossier" class="section-title">Mon dossier médical</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Allergies, antécédents et traitements : le médecin les consulte avant votre rendez-vous.</p>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <div class="space-y-5">
+        {% for field in dossier_form %}{% include "core/_champ.html" %}{% endfor %}
+      </div>
     </div>
   </section>
 
-  <button type="submit" class="btn btn-primary w-full sm:w-auto lg:col-span-2 lg:justify-self-end">
-    Enregistrer
-  </button>
+  <div class="flex justify-end border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg w-full sm:w-auto">Enregistrer</button>
+  </div>
 </form>
 {% endblock %}

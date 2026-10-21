@@ -1,0 +1,10 @@
+{# Pagination. Paramètres : page (objet Page), parametres (filtres actifs, déjà encodés pour l'URL). #}
+{% if page.paginator.num_pages > 1 %}
+<nav class="pager" aria-label="Pagination">
+  <span>Page {{ page.number }} sur {{ page.paginator.num_pages }} · {{ page.paginator.count }} résultat{{ page.paginator.count|pluralize }}</span>
+  <span class="flex gap-2">
+    {% if page.has_previous %}<a class="abtn abtn-outline" href="?{% if parametres %}{{ parametres }}&amp;{% endif %}page={{ page.previous_page_number }}">Précédent</a>{% endif %}
+    {% if page.has_next %}<a class="abtn abtn-outline" href="?{% if parametres %}{{ parametres }}&amp;{% endif %}page={{ page.next_page_number }}">Suivant</a>{% endif %}
+  </span>
+</nav>
+{% endif %}

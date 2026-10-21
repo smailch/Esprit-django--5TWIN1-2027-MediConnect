@@ -3,34 +3,34 @@
 {% block title %}File du médecin (test) — MediConnect{% endblock %}
 
 {% block page %}
-<div class="glass p-5 sm:p-6">
-<p class="chip">Page de test — l'interface finale sera celle du module médecin</p>
-<h1 class="mt-3 text-2xl font-light text-gray-800">File de {{ medecin.nom }}</h1>
-<p class="mt-1 text-sm text-gray-600">Patients en attente, triés par urgence puis par heure d'arrivée.</p>
-</div>
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Page de test : l'interface finale sera celle du module médecin.</p>
+    <h1 class="page-title mt-1">File de {{ medecin.nom }}</h1>
+    <p class="muted mt-2 text-sm">Patients en attente, triés par urgence puis par heure d'arrivée.</p>
+  </div>
+</header>
 
-<nav aria-label="Choisir un médecin de test" class="mt-4 flex flex-wrap gap-2">
+<nav aria-label="Choisir un médecin de test" class="mt-6 flex flex-wrap gap-2">
   {% for m in medecins %}
   <a href="{% url 'patients:file_medecin_test' m.id %}" {% if m.id == medecin.id %}aria-current="page"{% endif %}
-     class="btn btn-sm {% if m.id == medecin.id %}btn-light{% else %}btn-glass{% endif %}">{{ m.nom }}</a>
+     class="abtn {% if m.id == medecin.id %}abtn-primary{% else %}abtn-outline{% endif %}">{{ m.nom }}</a>
   {% endfor %}
 </nav>
 
-<ol class="mt-6 grid gap-3 lg:grid-cols-2">
+<ol class="mt-6 grid gap-4 lg:grid-cols-2">
   {% for d in demandes %}
-  <li class="glass p-4">
+  <li class="panel req req-{{ d.niveau_effectif }}">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <p class="text-sm font-medium text-gray-800">{{ d.patient }}</p>
-      <p class="rounded-full px-3 py-1 text-xs {% if d.niveau_effectif == 1 %}bg-red-100 text-red-900{% elif d.niveau_effectif == 2 %}bg-orange-100 text-orange-900{% elif d.niveau_effectif == 3 %}bg-yellow-100 text-yellow-900{% else %}bg-soft text-primary-dark{% endif %}">
-        Niveau {{ d.niveau_effectif }}
-      </p>
+      <p class="req-doctor">{{ d.patient }}</p>
+      <span class="lv lv-{{ d.niveau_effectif }}">Niveau {{ d.niveau_effectif }}</span>
     </div>
-    <p class="mt-1 text-xs text-gray-600">Reçue le {{ d.cree_le|date:"d/m/Y à H:i" }}</p>
-    <p class="mt-2 text-sm text-gray-700">{{ d.explication }}</p>
-    {% if d.texte_libre %}<p class="mt-2 text-sm text-gray-700">« {{ d.texte_libre }} »</p>{% endif %}
+    <p class="muted mt-1 text-xs">Reçue le {{ d.cree_le|date:"d/m/Y à H:i" }}</p>
+    <p class="mt-3 text-sm">{{ d.explication }}</p>
+    {% if d.texte_libre %}<p class="muted mt-2 text-sm">« {{ d.texte_libre }} »</p>{% endif %}
   </li>
   {% empty %}
-  <li class="glass p-5 text-sm text-gray-600 lg:col-span-2">Aucun patient en attente.</li>
+  <li class="panel panel-pad muted text-sm lg:col-span-2">Aucun patient en attente.</li>
   {% endfor %}
 </ol>
 {% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{# Connexion et inscription : écran partagé (présentation à gauche, formulaire à droite). #}
+
+{% block head %}{% include "core/_head_app.html" %}{% endblock %}
+
+{% block content %}
+<a href="#contenu" class="skip-link">Aller au contenu principal</a>
+
+<div class="auth">
+  <section class="auth-brand" aria-label="Présentation de MediConnect">
+    <a href="{% url 'home' %}" class="brand">
+      <span class="brand-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+      <span class="brand-name">MediConnect</span>
+    </a>
+
+    <div>
+      <h2 class="auth-headline">Les cas graves passent d'abord.</h2>
+      <p class="muted mt-4 max-w-md">Choisissez votre médecin et décrivez vos symptômes. MediConnect calcule votre niveau d'urgence et vous indique votre place dans la file.</p>
+      <ul class="scale-legend" aria-label="Niveaux d'urgence">
+        <li><span class="lv lv-1">1</span> Vital</li>
+        <li><span class="lv lv-2">2</span> Très urgent</li>
+        <li><span class="lv lv-3">3</span> Urgent</li>
+        <li><span class="lv lv-4">4</span> Standard</li>
+        <li><span class="lv lv-5">5</span> Non urgent</li>
+      </ul>
+    </div>
+
+    <p class="muted text-sm">Urgence vitale ? Appelez le 190, le 15 ou le 112.</p>
+  </section>
+
+  <main id="contenu" class="auth-pane">
+    <div class="auth-top">
+      <a href="{% url 'home' %}" class="brand auth-brand-mobile">
+        <span class="brand-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="brand-name">MediConnect</span>
+      </a>
+      {% block auth_link %}{% endblock %}
+    </div>
+
+    <div class="auth-box">
+      {% if messages %}
+      <div class="mb-6 space-y-2" role="status">
+        {% for message in messages %}
+        <p class="toast {% if message.tags == 'error' %}toast-error{% endif %}">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block page %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

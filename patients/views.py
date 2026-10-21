@@ -3,8 +3,10 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
+
+from core.utils import objet_ou_404
 
 from . import medecins_test
 from .forms import (
@@ -158,7 +160,7 @@ def _propositions(triage, en_attente=None):
 @login_required
 def resultat(request, pk):
     patient = _patient_connecte(request)
-    triage = get_object_or_404(Triage, pk=pk, patient=patient)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
     return render(request, "patients/resultat.html", {
         "triage": triage,
         "message": MESSAGES_NIVEAU.get(triage.niveau_effectif, ""),
@@ -170,7 +172,7 @@ def resultat(request, pk):
 @require_POST
 def annuler(request, pk):
     patient = _patient_connecte(request)
-    triage = get_object_or_404(Triage, pk=pk, patient=patient)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
     if triage.statut == Triage.Statut.EN_ATTENTE:
         triage.statut = Triage.Statut.ANNULE
         triage.save(update_fields=["statut"])
@@ -183,7 +185,7 @@ def annuler(request, pk):
 def transferer(request, pk, medecin_id):
     """Le patient accepte la proposition : sa demande passe chez ce médecin."""
     patient = _patient_connecte(request)
-    triage = get_object_or_404(Triage, pk=pk, patient=patient)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
     # Seuls les médecins réellement proposés sont acceptés.
     choisi = next((m for m in _propositions(triage) if m["id"] == medecin_id), None)
     if choisi is None:

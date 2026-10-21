@@ -1,0 +1,56 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Patients — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Patients</h1>
+    <p class="muted mt-2 text-sm">Les comptes patients, du plus récent au plus ancien.</p>
+  </div>
+</header>
+
+<form method="get" class="mt-8 flex max-w-xl gap-2" role="search" aria-label="Rechercher un patient">
+  <div class="grow">
+    <label for="q" class="f-label">Nom, e-mail, téléphone ou ville</label>
+    <input type="search" id="q" name="q" value="{{ q }}" class="field" placeholder="Rechercher un patient">
+  </div>
+  <div class="flex items-end gap-2">
+    <button type="submit" class="abtn abtn-primary">Rechercher</button>
+    {% if q %}<a href="{% url 'backoffice:patients' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  </div>
+</form>
+
+<section class="panel mt-6" aria-label="Liste des patients">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Patient</th><th scope="col">Ville</th><th scope="col">Téléphone</th>
+          <th scope="col" class="num">Demandes</th><th scope="col">Inscrit le</th><th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in page %}
+        <tr>
+          <td>
+            <a class="link" href="{% url 'backoffice:patient_detail' p.pk %}">{{ p }}</a>
+            <span class="muted block text-xs">{{ p.user.email }}</span>
+          </td>
+          <td>{{ p.ville }}</td>
+          <td>{{ p.telephone }}</td>
+          <td class="num">{{ p.nb_demandes }}</td>
+          <td>{{ p.cree_le|date:"d/m/Y" }}</td>
+          <td class="num"><a class="abtn abtn-outline" href="{% url 'backoffice:patient_detail' p.pk %}">Voir</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="muted">{% if q %}Aucun patient ne correspond à « {{ q }} ».{% else %}Aucun patient inscrit pour le moment.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% include "backoffice/_pager.html" %}
+{% endblock %}

@@ -1,12 +1,12 @@
-<div>
-  <label for="{{ field.id_for_label }}" class="mb-1 block text-xs text-gray-700">
+<div class="f">
+  <label for="{{ field.id_for_label }}" class="f-label">
     {{ field.label }}{% if field.field.required %}<span aria-hidden="true"> *</span>{% endif %}
   </label>
   {{ field }}
   {% if field.help_text %}
-  <div class="mt-1 text-xs text-gray-600 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-0.5">{{ field.help_text|safe }}</div>
+  <div class="f-help">{{ field.help_text|safe }}</div>
   {% endif %}
   {% for erreur in field.errors %}
-  <p class="mt-1 text-xs text-red-700" role="alert">{{ erreur }}</p>
+  <p class="f-error" role="alert">{{ erreur }}</p>
   {% endfor %}
 </div>

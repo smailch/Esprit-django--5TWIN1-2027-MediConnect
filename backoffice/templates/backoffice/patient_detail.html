@@ -1,0 +1,68 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}{{ patient }} — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'backoffice:patients' %}" class="link text-sm">← Tous les patients</a>
+    <h1 class="page-title mt-2">{{ patient }}</h1>
+    <p class="muted mt-2 text-sm">Inscrit le {{ patient.cree_le|date:"d/m/Y" }} · {{ patient.user.email }}</p>
+  </div>
+  <a href="{% url 'admin:patients_patient_change' patient.pk %}" class="abtn abtn-outline">Modifier dans l'administration</a>
+</header>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <div class="space-y-6 lg:col-span-5">
+    <section class="panel panel-pad" aria-labelledby="titre-coord">
+      <h2 id="titre-coord" class="section-title">Coordonnées</h2>
+      <dl class="dl mt-4">
+        <div><dt>Date de naissance</dt><dd>{{ patient.date_naissance|date:"d/m/Y" }}</dd></div>
+        <div><dt>Sexe</dt><dd>{{ patient.get_sexe_display }}</dd></div>
+        <div><dt>Téléphone</dt><dd>{{ patient.telephone }}</dd></div>
+        <div><dt>Ville</dt><dd>{{ patient.ville }}</dd></div>
+        <div class="wide"><dt>Adresse</dt><dd>{{ patient.adresse|default:"—" }}</dd></div>
+        <div class="wide"><dt>Contact d'urgence</dt><dd>{% if patient.contact_urgence_nom %}{{ patient.contact_urgence_nom }} · {{ patient.contact_urgence_tel }}{% else %}—{% endif %}</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-dossier">
+      <h2 id="titre-dossier" class="section-title">Dossier médical</h2>
+      {% if dossier %}
+      <dl class="dl mt-4">
+        <div><dt>Groupe sanguin</dt><dd>{{ dossier.groupe_sanguin|default:"—" }}</dd></div>
+        <div><dt>Allergies</dt><dd>{{ dossier.allergies|join:", "|default:"—" }}</dd></div>
+        <div class="wide"><dt>Antécédents</dt><dd>{{ dossier.antecedents|default:"—" }}</dd></div>
+        <div class="wide"><dt>Traitements en cours</dt><dd>{{ dossier.traitements_en_cours|default:"—" }}</dd></div>
+      </dl>
+      {% else %}
+      <p class="muted mt-3 text-sm">Aucun dossier médical enregistré.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="panel lg:col-span-7" aria-labelledby="titre-demandes">
+    <h2 id="titre-demandes" class="section-title px-5 pt-5">Demandes de rendez-vous <span class="count">{{ demandes|length }}</span></h2>
+    <div class="table-wrap mt-3">
+      <table class="tbl">
+        <thead><tr><th scope="col">Date</th><th scope="col">Médecin</th><th scope="col">Niveau</th><th scope="col">Statut</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+          {% for t in demandes %}
+          <tr>
+            <td>{{ t.cree_le|date:"d/m/Y H:i" }}</td>
+            <td>{{ t.medecin_nom }}</td>
+            <td><span class="lv lv-{{ t.niveau_effectif }}">{{ t.niveau_effectif }}</span></td>
+            <td><span class="st st-{{ t.statut }}">{{ t.get_statut_display }}</span></td>
+            <td class="num"><a class="abtn abtn-outline" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">Voir</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="muted">Ce patient n'a pas encore fait de demande.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+{% endblock %}

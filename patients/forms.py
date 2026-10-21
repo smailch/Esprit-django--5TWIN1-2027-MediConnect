@@ -144,7 +144,7 @@ class SymptomesForm(StyledFormMixin, AutoEvaluationForm):
         label="Symptômes",
         queryset=Symptome.objects.none(),
         required=False,
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "sr-only"}),
     )
     temperature = forms.DecimalField(
         label="Température mesurée (facultatif)",

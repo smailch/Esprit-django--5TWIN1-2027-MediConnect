@@ -1,28 +1,39 @@
 /* ==========================================================================
-   MediConnect : style « verre » commun à toutes les pages
-   Verre dépoli = fond translucide + flou + reflet + bordure lumineuse.
+   MediConnect : thème sombre « verre bleu nuit »
+   Aucun blanc décoratif : pas de voile, pas de reflet, pas de liseré clair.
+   Le verre vient de la transparence, du flou et d'une lueur colorée.
    ========================================================================== */
 
 :root {
-  --teal: #0E7C86;
-  --teal-dark: #0A5C64;
-  --ink: #1F2937;
+  color-scheme: dark;
+  --bg: #050E1C;
+  --bg-2: #081A33;
+  --text: #E3ECF7;
+  --muted: #A9BDD6;
+  --line: rgba(120, 160, 220, 0.18);       /* bordure bleutée, jamais blanche */
+  --line-strong: rgba(148, 180, 230, 0.32);
+  --cyan: #22D3EE;
+  --cyan-text: #67E8F9;
+  --teal: #0E7490;
+  --teal-dark: #0B5568;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* ---- Panneaux en verre -------------------------------------------------- */
+/* ---- Panneaux : verre bleu foncé ---------------------------------------- */
 .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.5));
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: var(--text);
+  background: linear-gradient(145deg, rgba(20, 44, 80, 0.74), rgba(9, 25, 48, 0.7));
+  border: 1px solid var(--line);
   border-radius: 1.25rem;
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
-  box-shadow:
-    0 18px 44px -20px rgba(10, 60, 70, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.35);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 26px 50px -28px rgba(0, 0, 0, 0.85);
 }
 .glass-pill { border-radius: 9999px; }
+.glass .glass {
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: none;
+}
 
 /* Petite pastille d'information */
 .chip {
@@ -32,21 +43,15 @@
   padding: 0.35rem 0.8rem;
   border-radius: 9999px;
   font-size: 0.75rem;
-  color: var(--teal-dark);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.45));
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
-  backdrop-filter: blur(14px) saturate(170%);
-  box-shadow: inset 0 1px 0 #fff;
+  color: #BFE9F4;
+  background: rgba(14, 116, 144, 0.16);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
-/* ---- Boutons : verre dépoli ----------------------------------------------
-   ::before = reflet brillant (moitié haute) ; ::after = liseré intérieur.
-   Les deux sont sous le texte (isolation + z-index négatif). */
+/* ---- Boutons : verre teinté, lueur colorée, aucun trait blanc ------------ */
 .btn {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -61,73 +66,56 @@
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  -webkit-backdrop-filter: blur(16px) saturate(190%);
-  backdrop-filter: blur(16px) saturate(190%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
   transition:
     transform 0.25s var(--ease),
     box-shadow 0.25s var(--ease),
-    filter 0.25s var(--ease);
+    background 0.25s var(--ease),
+    border-color 0.25s var(--ease);
 }
-.btn::before,
-.btn::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: inherit;
-}
-.btn::before {
-  inset: 1px 1px 50% 1px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.06));
-}
-.btn::after {
-  inset: 0;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
-    inset 0 -12px 18px -12px rgba(255, 255, 255, 0.5);
-}
-.btn:hover { transform: translateY(-2px); filter: brightness(1.04); }
+.btn:hover { transform: translateY(-2px); }
 .btn:active { transform: translateY(0) scale(0.98); }
 
-/* Verre teinté teal : action principale (assez foncé pour le texte blanc) */
+/* Action principale : verre cyan profond (texte blanc, contraste > 5:1) */
 .btn-primary {
   color: #fff;
-  text-shadow: 0 1px 1px rgba(0, 50, 60, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  background: linear-gradient(135deg, rgba(10, 104, 114, 0.94), rgba(6, 72, 82, 0.96));
-  box-shadow:
-    0 14px 30px -12px rgba(14, 124, 134, 0.75),
-    0 2px 6px rgba(6, 72, 82, 0.25);
-}
-.btn-primary::before {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: linear-gradient(135deg, rgba(14, 116, 144, 0.96), rgba(11, 85, 104, 0.96));
+  box-shadow: 0 12px 30px -12px rgba(34, 211, 238, 0.55);
 }
 .btn-primary:hover {
-  box-shadow:
-    0 20px 38px -14px rgba(14, 124, 134, 0.85),
-    0 2px 6px rgba(6, 72, 82, 0.3);
+  border-color: rgba(34, 211, 238, 0.75);
+  box-shadow: 0 18px 38px -14px rgba(34, 211, 238, 0.7);
 }
 
-/* Verre givré clair : action secondaire */
+/* Action secondaire : verre sombre translucide, bordure bleutée */
 .btn-glass {
-  color: var(--teal-dark);
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.3));
-  box-shadow:
-    0 12px 26px -14px rgba(10, 60, 70, 0.5),
-    0 1px 3px rgba(10, 60, 70, 0.12);
+  color: #D3E6F8;
+  border: 1px solid var(--line-strong);
+  background: rgba(148, 180, 230, 0.08);
+  box-shadow: 0 10px 24px -16px rgba(0, 0, 0, 0.8);
 }
 .btn-glass:hover {
-  box-shadow:
-    0 18px 32px -16px rgba(10, 60, 70, 0.55),
-    0 1px 3px rgba(10, 60, 70, 0.14);
+  color: #fff;
+  border-color: rgba(103, 232, 249, 0.55);
+  background: rgba(148, 180, 230, 0.16);
 }
 
-.btn-neutral { color: var(--ink); }
+.btn-neutral { color: #C4D3E6; }
 .btn-sm { min-height: 44px; padding: 0 1.1rem; }
 .btn-icon { width: 44px; padding: 0; }
 
-/* Marque : pastille du logo en verre teal */
+/* Onglet actif de la navigation : verre cyan lumineux */
+.btn-light {
+  color: #A5F3FC;
+  font-weight: 500;
+  border: 1px solid rgba(34, 211, 238, 0.65);
+  background: rgba(34, 211, 238, 0.14);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1), 0 12px 28px -14px rgba(34, 211, 238, 0.6);
+}
+
+/* Marque : pastille du logo */
 .logo-mark {
   display: inline-flex;
   align-items: center;
@@ -136,21 +124,17 @@
   height: 2.25rem;
   border-radius: 9999px;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 55%),
-    linear-gradient(135deg, #0E7C86, #0A5C64);
-  box-shadow: 0 8px 18px -8px rgba(14, 124, 134, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  background: linear-gradient(135deg, #0E7490, #0B3F63);
+  box-shadow: 0 8px 20px -8px rgba(34, 211, 238, 0.6);
 }
 
-/* ---- Pages intérieures : fond bleu foncé ----------------------------------
-   Dégradé bleu nuit -> bleu océan, deux halos de couleur et l'image du médecin
-   en gris très discret. ::before = image ; ::after = halos. */
+/* ---- Fond des pages intérieures : bleu nuit profond --------------------- */
 .page-bg {
   position: relative;
   isolation: isolate;
-  color: #fff; /* texte posé directement sur le fond */
-  background: linear-gradient(135deg, #0A2540 0%, #0B3B63 52%, #0E5C86 100%);
+  color: var(--text);
+  background: linear-gradient(135deg, #050E1C 0%, #071A32 55%, #0A2745 100%);
 }
 .page-bg::before,
 .page-bg::after {
@@ -162,113 +146,101 @@
 }
 .page-bg::before {
   background: var(--page-img) center / cover no-repeat;
-  opacity: 0.16;
+  opacity: 0.14;
   filter: grayscale(1) contrast(1.1);
 }
 .page-bg::after {
   background:
-    radial-gradient(58rem 34rem at 92% -8%, rgba(20, 150, 170, 0.42), transparent 62%),
-    radial-gradient(48rem 30rem at 0% 100%, rgba(52, 120, 246, 0.26), transparent 62%);
+    radial-gradient(56rem 34rem at 92% -8%, rgba(14, 165, 200, 0.28), transparent 62%),
+    radial-gradient(46rem 30rem at 0% 100%, rgba(37, 99, 235, 0.2), transparent 62%);
 }
 
-/* Cartes : bleu très pâle (et non blanc pur) ; le texte reste foncé. */
-.page-bg .glass {
-  color: var(--ink);
-  background: linear-gradient(135deg, rgba(238, 246, 255, 0.95), rgba(214, 230, 248, 0.92));
-  border-color: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 22px 50px -24px rgba(2, 14, 34, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+/* ---- Accueil : la vidéo reste visible, assombrie côté texte -------------- */
+.hero-video { filter: brightness(1.05) contrast(1.05); }
+/* Teinte cyan par fusion « couleur » : colorise la vidéo en gardant sa luminosité
+   (la vidéo est en noir et blanc) ; rien n'est éclairci. */
+.hero-tint {
+  background: rgba(14, 130, 190, 0.6);
+  mix-blend-mode: color;
 }
-.page-bg .glass .glass {
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 6px 16px -10px rgba(10, 37, 64, 0.35);
-}
-/* Boutons clairs sur fond foncé : assez opaques pour rester lisibles. */
-.page-bg .btn-glass {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(222, 236, 250, 0.88));
-}
-/* Onglet actif de la navigation : pastille claire. */
-.btn-light {
-  color: #0A2540;
-  font-weight: 500;
-  border: 1px solid #fff;
-  background: linear-gradient(180deg, #ffffff, #DCEBFA);
-  box-shadow: 0 10px 24px -10px rgba(2, 14, 34, 0.8), 0 0 0 3px rgba(255, 255, 255, 0.18);
-}
-.btn-light::before { background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0)); }
-.page-bg a:not(.btn):focus-visible { outline-color: #fff; }
-
-/* ---- Accueil : vidéo plus claire ------------------------------------------
-   brightness/contrast éclaircissent la vidéo ; .hero-lift (mode « écran »)
-   relève les zones sombres ; le voile blanc ne couvre plus que la gauche. */
-.hero-video { filter: brightness(1.45) contrast(0.88) saturate(1.2); }
-.hero-lift {
-  background: linear-gradient(180deg, rgba(140, 224, 232, 0.58), rgba(190, 238, 244, 0.3));
-  mix-blend-mode: screen;
-}
-.hero-veil { background: rgba(255, 255, 255, 0.7); }
+.hero-veil { background: rgba(4, 12, 26, 0.72); }
 @media (min-width: 768px) {
   .hero-veil {
     background:
-      radial-gradient(40rem 30rem at 0% 100%, rgba(14, 124, 134, 0.1), transparent 70%),
+      linear-gradient(0deg, rgba(4, 12, 26, 0.55) 0%, transparent 38%),
       linear-gradient(
         90deg,
-        rgba(255, 255, 255, 0.95) 0%,
-        rgba(255, 255, 255, 0.8) 33%,
-        rgba(255, 255, 255, 0.1) 64%,
-        rgba(255, 255, 255, 0) 100%
+        rgba(4, 12, 26, 0.94) 0%,
+        rgba(4, 12, 26, 0.78) 34%,
+        rgba(4, 12, 26, 0.2) 68%,
+        rgba(4, 12, 26, 0) 100%
       );
   }
 }
 .menu-panel {
-  background: rgba(255, 255, 255, 0.92);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  backdrop-filter: blur(22px) saturate(160%);
+  background: rgba(5, 14, 28, 0.97);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
 }
 
-/* ---- Champs de formulaire en verre -------------------------------------- */
+/* ---- Champs de formulaire ------------------------------------------------ */
 .field {
   display: block;
   width: 100%;
   padding: 0.625rem 1rem;
   border-radius: 0.875rem;
-  border: 1px solid rgba(75, 85, 99, 0.6);
-  background: rgba(255, 255, 255, 0.78);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  background: rgba(4, 12, 26, 0.55);
+  color: var(--text);
   font-family: inherit;
   font-size: 0.875rem;
-  box-shadow: inset 0 1px 2px rgba(10, 60, 70, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.85);
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
-.field::placeholder { color: #6B7280; }
+.field::placeholder { color: #7F96B5; }
+.field option { background: #0B1B33; color: var(--text); }
 .field:focus {
   outline: none;
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(14, 124, 134, 0.25), inset 0 1px 2px rgba(10, 60, 70, 0.06);
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.25);
 }
+
+/* ---- Choix (cases à cocher et échelles de 0 à 5) -------------------------- */
+.choice {
+  border: 1px solid var(--line-strong);
+  background: rgba(148, 180, 230, 0.05);
+  color: #D3E6F8;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.choice:hover { background: rgba(148, 180, 230, 0.12); }
+.choice:has(:checked) {
+  border-color: var(--cyan);
+  background: rgba(34, 211, 238, 0.12);
+  color: #fff;
+}
+.choice-scale:has(:checked) {
+  background: linear-gradient(135deg, #0E7490, #0B5568);
+  border-color: #67E8F9;
+  box-shadow: 0 10px 22px -12px rgba(34, 211, 238, 0.7);
+}
+.choice:has(:focus-visible) { outline: 2px solid var(--cyan-text); outline-offset: 2px; }
 
 /* ---- Repli et préférences utilisateur ----------------------------------- */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass, .chip, .btn-glass, .menu-panel, .field { background: rgba(255, 255, 255, 0.94); }
+  .glass { background: #0C2140; }
+  .menu-panel { background: #050E1C; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass, .chip, .btn-glass, .menu-panel, .field {
-    background: #fff;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .btn-primary { background: linear-gradient(135deg, #0A6872, #064852); }
-  .btn::before { display: none; }
+  .glass, .chip, .menu-panel { background: #0C2140; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .btn { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .page-bg::before { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
+  .btn, .choice, .field { transition: none; }
   .btn:hover { transform: none; }
 }
 
 @media (forced-colors: active) {
-  .btn, .glass, .chip, .field { border: 1px solid ButtonText; }
+  .btn, .glass, .chip, .field, .choice { border: 1px solid ButtonText; }
 }
