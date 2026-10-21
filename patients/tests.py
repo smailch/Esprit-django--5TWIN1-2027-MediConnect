@@ -1785,3 +1785,94 @@ class CreneauxPagesTests(SimpleTestCase):
         css = (Path(__file__).resolve().parent.parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
         for classe in (".slot-day", ".slot-grid", ".slot input:checked + span", ".slot input:focus-visible + span"):
             self.assertIn(classe, css)
+
+
+# --- Le créneau est une étape du parcours ------------------------------------------------------
+class ParcoursCreneauTests(SimpleTestCase):
+    def requete(self, nom="creneaux"):
+        requete = RequestFactory().get("/x/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a",
+                                       get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def etapes(self, etape):
+        return render_to_string("patients/_etapes.html", {"etape": etape})
+
+    def test_quatre_etapes_dans_l_ordre(self):
+        html = self.etapes(1)
+        import re
+
+        self.assertEqual(re.findall(r"<span>([^<]+)</span>\s*</li>", html), ["Médecin", "Symptômes", "Créneau", "Résultat"])
+
+    def test_etape_courante_et_etapes_terminees(self):
+        for etape in (1, 2, 3, 4):
+            with self.subTest(etape=etape):
+                html = self.etapes(etape)
+                self.assertEqual(html.count('aria-current="step"'), 1)
+                self.assertEqual(html.count("step-done"), etape - 1)
+                self.assertEqual(html.count("step-current"), 1)
+
+    def test_l_etape_creneau_est_la_troisieme(self):
+        html = self.etapes(3)
+        self.assertEqual(html.count("✓"), 2)
+        self.assertRegex(html, r'aria-current="step">\s*<span class="step-dot">3</span><span>Créneau</span>')
+
+    def test_chaque_page_du_parcours_declare_sa_place(self):
+        racine = Path(__file__).resolve().parent / "templates" / "patients"
+        attendu = {"medecins.html": 1, "symptomes.html": 2, "creneaux.html": 3, "resultat.html": 4}
+        for fichier, etape in attendu.items():
+            with self.subTest(fichier=fichier):
+                self.assertIn(f"with etape={etape}", (racine / fichier).read_text(encoding="utf-8"))
+
+    def test_la_page_des_creneaux_montre_la_barre_d_etapes(self):
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=4, statut="en_attente")
+        t.pk = ObjectId()
+        html = render_to_string("patients/creneaux.html", {"triage": t, "medecin": {}, "jours": [], "total": 0, "duree": 30}, self.requete())
+        self.assertIn('class="stepper"', html)
+        self.assertIn("Passer : rester dans la file", render_to_string("patients/creneaux.html", {
+            "triage": t, "medecin": {}, "jours": planning.grouper(planning.generer(SEMAINE, LUNDI_8H))[:1], "total": 5, "duree": 30}, self.requete()))
+
+    def soumettre_symptomes(self, niveau):
+        """Envoie le formulaire de symptômes avec un résultat de triage simulé, sans base de données."""
+        requete = RequestFactory().post("/patients/medecins/m1/symptomes/", {})
+        requete.user = SimpleNamespace(is_authenticated=True, patient=un_patient())
+        formulaire = mock.Mock()
+        formulaire.is_valid.return_value = True
+        formulaire.cleaned_data = {"symptomes": [], "texte_libre": ""}
+        formulaire.constantes.return_value = {}
+        formulaire.auto_evaluation.return_value = {"douleur": 0, "fievre": 0, "respiration": 0, "etat_general": 0}
+        resultat = SimpleNamespace(score=3, niveau=niveau, explication="e", drapeaux_rouges=[])
+        cree = Triage(niveau=niveau, statut="en_attente")
+        cree.pk = ObjectId()
+        with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
+                mock.patch.object(vues_patients, "evaluer", return_value=resultat), \
+                mock.patch.object(Triage.objects, "create", return_value=cree):
+            reponse = vues_patients.declarer_symptomes(requete, "m1")
+        return reponse, cree
+
+    def test_apres_les_symptomes_un_cas_non_urgent_va_au_choix_du_creneau(self):
+        for niveau in (3, 4, 5):
+            with self.subTest(niveau=niveau):
+                reponse, cree = self.soumettre_symptomes(niveau)
+                self.assertEqual(reponse.status_code, 302)
+                self.assertEqual(reponse["Location"], f"/patients/triage/{cree.pk}/creneaux/")
+
+    def test_un_cas_prioritaire_va_directement_au_resultat(self):
+        for niveau in (1, 2):
+            with self.subTest(niveau=niveau):
+                reponse, cree = self.soumettre_symptomes(niveau)
+                self.assertEqual(reponse["Location"], f"/patients/triage/{cree.pk}/")
+
+    def test_le_tableau_de_bord_propose_le_creneau_aux_demandes_sans_rendez_vous(self):
+        racine = Path(__file__).resolve().parent / "templates" / "patients"
+        source = (racine / "tableau_de_bord.html").read_text(encoding="utf-8")
+        self.assertIn("t.peut_reserver", source)
+        self.assertIn("Choisir le jour et l'heure", source)
+        self.assertIn("peut_reserver = planning.reservable", inspect_source(vues_patients.tableau_de_bord))
+
+
+def inspect_source(objet):
+    import inspect
+
+    return inspect.getsource(objet)

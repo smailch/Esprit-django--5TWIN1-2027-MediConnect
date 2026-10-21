@@ -137,7 +137,9 @@ def declarer_symptomes(request, medecin_id):
             explication=resultat.explication,
             drapeaux_rouges=resultat.drapeaux_rouges,
         )
-        return redirect("patients:resultat", pk=triage.pk)
+        if planning.reservable(triage.statut, triage.niveau_effectif):
+            return redirect("patients:creneaux", pk=triage.pk)  # étape 3 : choisir le jour et l'heure
+        return redirect("patients:resultat", pk=triage.pk)  # cas prioritaire : pas de créneau à choisir
 
     return render(request, "patients/symptomes.html", {"form": form, "medecin": medecin})
 
@@ -298,6 +300,7 @@ def tableau_de_bord(request):
             else:
                 t.place = None
             t.propositions = []
+            t.peut_reserver = planning.reservable(t.statut, t.niveau_effectif) and not t.creneau
             if t.statut == Triage.Statut.EN_ATTENTE and est_eligible(t.niveau_effectif):
                 if en_attente is None:
                     en_attente = list(Triage.objects.filter(statut=Triage.Statut.EN_ATTENTE))

@@ -1,4 +1,4 @@
-{# Barre d'étapes de la demande de rendez-vous. Paramètre : etape = 1 (médecin), 2 (symptômes), 3 (résultat). #}
+{# Barre d'étapes de la demande de rendez-vous. Paramètre : etape = 1 (médecin), 2 (symptômes), 3 (créneau), 4 (résultat). #}
 <ol class="stepper" aria-label="Étapes de votre demande">
   <li class="step {% if etape > 1 %}step-done{% elif etape == 1 %}step-current{% endif %}" {% if etape == 1 %}aria-current="step"{% endif %}>
     <span class="step-dot">{% if etape > 1 %}✓{% else %}1{% endif %}</span><span>Médecin</span>
@@ -6,7 +6,10 @@
   <li class="step {% if etape > 2 %}step-done{% elif etape == 2 %}step-current{% endif %}" {% if etape == 2 %}aria-current="step"{% endif %}>
     <span class="step-dot">{% if etape > 2 %}✓{% else %}2{% endif %}</span><span>Symptômes</span>
   </li>
-  <li class="step {% if etape == 3 %}step-current{% endif %}" {% if etape == 3 %}aria-current="step"{% endif %}>
-    <span class="step-dot">3</span><span>Résultat</span>
+  <li class="step {% if etape > 3 %}step-done{% elif etape == 3 %}step-current{% endif %}" {% if etape == 3 %}aria-current="step"{% endif %}>
+    <span class="step-dot">{% if etape > 3 %}✓{% else %}3{% endif %}</span><span>Créneau</span>
+  </li>
+  <li class="step {% if etape == 4 %}step-current{% endif %}" {% if etape == 4 %}aria-current="step"{% endif %}>
+    <span class="step-dot">4</span><span>Résultat</span>
   </li>
 </ol>

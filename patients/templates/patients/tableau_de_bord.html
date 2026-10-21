@@ -33,6 +33,8 @@
 
         {% if t.creneau %}
         <p class="mt-4 text-sm"><i data-lucide="calendar-check" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Rendez-vous le <strong class="font-medium">{{ t.creneau|date:"l j F" }} à {{ t.creneau|date:"H:i" }}</strong></p>
+        {% elif t.peut_reserver %}
+        <p class="mt-4"><a href="{% url 'patients:creneaux' t.pk %}" class="abtn abtn-primary"><i data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir le jour et l'heure</a></p>
         {% endif %}
         <p class="mt-4 text-sm">
           {% if t.statut == "en_consultation" %}

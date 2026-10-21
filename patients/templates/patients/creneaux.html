@@ -11,6 +11,8 @@
   </div>
 </header>
 
+{% include "patients/_etapes.html" with etape=3 %}
+
 {% if triage.creneau %}
 <p class="alert mt-6" role="note">Votre créneau actuel : <strong class="font-medium">{{ triage.creneau|date:"l j F" }} à {{ triage.creneau|date:"H:i" }}</strong>. Choisir un autre créneau le remplace.</p>
 {% endif %}
@@ -46,7 +48,7 @@
 
   <div class="flex flex-wrap gap-3 pt-2">
     <button type="submit" class="abtn abtn-primary abtn-lg">Réserver ce créneau</button>
-    <a href="{% url 'patients:resultat' triage.pk %}" class="abtn abtn-ghost abtn-lg">Rester dans la file</a>
+    <a href="{% url 'patients:resultat' triage.pk %}" class="abtn abtn-ghost abtn-lg">Passer : rester dans la file</a>
   </div>
 </form>
 {% else %}
