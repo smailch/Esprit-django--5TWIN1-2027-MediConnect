@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import medecins_test, mesures_stats
+from . import dossier as synthese, medecins_test, mesures_stats
 from .forms import (
     AllergieForm,
     MesureForm,
@@ -426,3 +426,26 @@ def mesure_supprimer(request, pk):
 def _regles():
     """Unité et bornes de chaque type, pour afficher l'unité dès le choix du type."""
     return {code: {"unite": r[0], "min": r[1], "max": r[2]} for code, r in Mesure.REGLES.items()}
+
+
+# --- Dossier médical : la synthèse lue par le médecin avant la consultation ----------------
+
+@login_required
+def dossier(request):
+    patient = _patient_connecte(request)
+    fiche = DossierMedical.objects.filter(patient=patient).first()
+    toutes = list(Allergie.objects.filter(patient=patient))
+    actives = sorted((a for a in toutes if a.active), key=lambda a: (_ORDRE_GRAVITE[a.gravite], a.substance.lower()))
+    demandes = sorted(Triage.objects.filter(patient=patient), key=lambda t: t.cree_le, reverse=True)
+    mesures_recentes = synthese.derniere_mesure_par_type(Mesure.objects.filter(patient=patient))
+    ordre_types = [code for code, _ in Mesure.Type.choices]
+    mesures_recentes.sort(key=lambda m: ordre_types.index(m.type))
+    return render(request, "patients/dossier.html", {
+        "patient": patient,
+        "dossier": fiche,
+        "allergies": actives,
+        "severes": [a for a in actives if a.est_severe],
+        "mesures": mesures_recentes,
+        "derniere_demande": demandes[0] if demandes else None,
+        "manquants": synthese.elements_manquants(patient, fiche),
+    })

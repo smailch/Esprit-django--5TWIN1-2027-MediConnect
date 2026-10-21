@@ -8,6 +8,7 @@ urlpatterns = [
     path("inscription/", views.inscription, name="inscription"),
     path("tableau-de-bord/", views.tableau_de_bord, name="tableau_de_bord"),
     path("profil/", views.profil, name="profil"),
+    path("dossier/", views.dossier, name="dossier"),
     path("allergies/", views.allergies, name="allergies"),
     path("allergies/nouvelle/", views.allergie_creer, name="allergie_creer"),
     path("allergies/<str:pk>/modifier/", views.allergie_modifier, name="allergie_modifier"),

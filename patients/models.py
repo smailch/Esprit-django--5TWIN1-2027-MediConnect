@@ -37,6 +37,14 @@ class Patient(models.Model):
     def __str__(self):
         return self.user.get_full_name() or self.user.get_username()
 
+    @property
+    def age(self):
+        from django.utils import timezone
+
+        aujourdhui = timezone.localdate()
+        n = self.date_naissance
+        return aujourdhui.year - n.year - ((aujourdhui.month, aujourdhui.day) < (n.month, n.day))
+
 
 class DossierMedical(models.Model):
     class GroupeSanguin(models.TextChoices):

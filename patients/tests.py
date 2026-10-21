@@ -665,11 +665,11 @@ class AllergiePagesTests(SimpleTestCase):
         self.assertIn("Modifier<span class=\"sr-only\"> l'allergie Arachide</span>", html)
         self.assertIn("Supprimer<span class=\"sr-only\"> l'allergie Arachide</span>", html)
 
-    def test_le_menu_contient_les_allergies_et_marque_la_page_courante(self):
+    def test_le_menu_marque_mon_dossier_sur_les_pages_d_allergies(self):
         html = self.rendre_liste()
-        self.assertIn('href="/patients/allergies/"', html)
+        self.assertIn('href="/patients/dossier/"', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
-        self.assertIn("Allergies</span>", html)
+        self.assertIn("Mon dossier</span>", html)
 
     def test_le_formulaire_s_affiche_en_creation_et_en_modification(self):
         patient = un_patient()
@@ -1036,11 +1036,11 @@ class MesurePagesTests(SimpleTestCase):
         self.assertRegex(html, r'Modifier<span class="sr-only"> la mesure de poids du ')
         self.assertRegex(html, r'Supprimer<span class="sr-only"> la mesure de poids du ')
 
-    def test_le_menu_contient_les_mesures_et_marque_la_page_courante(self):
+    def test_le_menu_marque_mon_dossier_sur_les_pages_de_mesures(self):
         html = self.rendre_liste([])
-        self.assertIn('href="/patients/mesures/"', html)
+        self.assertIn('href="/patients/dossier/"', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
-        self.assertIn("Mes mesures</span>", html)
+        self.assertIn("Mon dossier</span>", html)
 
     def test_le_formulaire_affiche_l_unite_selon_le_type(self):
         from .views import _regles
@@ -1362,3 +1362,165 @@ class MesuresGraphiquePageTests(SimpleTestCase):
         self.assertIsNone(re.search(r'(cx|cy|x|y|width|height)="[0-9]+,[0-9]', svg))
         self.assertRegex(svg, r'<circle class="chart-dot-1" cx="[0-9]+(\.[0-9]+)?" cy="[0-9]+(\.[0-9]+)?"')
         self.assertIn('class="chart-zone"', svg)
+
+
+# --- Dossier médical : synthèse pour le médecin -----------------------------------------
+from . import dossier as synthese_dossier  # noqa: E402
+
+
+def un_dossier(**kw):
+    valeurs = {"groupe_sanguin": "A+", "antecedents": "Asthme chronique", "traitements_en_cours": "Ventoline"}
+    valeurs.update(kw)
+    return DossierMedical(**valeurs)
+
+
+def un_patient_complet(**kw):
+    p = un_patient()
+    p.sexe = "F"
+    p.contact_urgence_nom, p.contact_urgence_tel = "Sami Trabelsi", "20111222"
+    for cle, valeur in kw.items():
+        setattr(p, cle, valeur)
+    return p
+
+
+class DossierLogiqueTests(SimpleTestCase):
+    def test_dossier_complet_rien_a_completer(self):
+        self.assertEqual(synthese_dossier.elements_manquants(un_patient_complet(), un_dossier()), [])
+
+    def test_chaque_information_manquante_est_signalee(self):
+        patient, dossier = un_patient_complet(), un_dossier()
+        cas = (
+            (patient, un_dossier(groupe_sanguin=""), "Groupe sanguin"),
+            (patient, un_dossier(antecedents=""), "Antécédents médicaux"),
+            (patient, un_dossier(traitements_en_cours="  "), "Traitements en cours"),
+            (un_patient_complet(contact_urgence_nom=""), dossier, "Contact en cas d'urgence"),
+            (un_patient_complet(contact_urgence_tel=""), dossier, "Contact en cas d'urgence"),
+        )
+        for p, d, attendu in cas:
+            with self.subTest(attendu=attendu):
+                self.assertEqual(synthese_dossier.elements_manquants(p, d), [attendu])
+
+    def test_sans_dossier_tout_est_a_completer_sauf_le_contact(self):
+        self.assertEqual(synthese_dossier.elements_manquants(un_patient_complet(), None),
+                         ["Groupe sanguin", "Antécédents médicaux", "Traitements en cours"])
+
+    def test_derniere_mesure_par_type(self):
+        maintenant = timezone.now()
+        vieille = une_mesure(type="poids", valeur=80, mesure_le=maintenant - datetime.timedelta(days=9))
+        recente = une_mesure(type="poids", valeur=78, mesure_le=maintenant - datetime.timedelta(days=1))
+        glycemie = une_mesure(type="glycemie", valeur=0.9, mesure_le=maintenant - datetime.timedelta(days=5))
+        res = synthese_dossier.derniere_mesure_par_type([vieille, glycemie, recente])
+        self.assertEqual(len(res), 2)
+        self.assertIn(recente, res)
+        self.assertNotIn(vieille, res)
+        self.assertEqual(synthese_dossier.derniere_mesure_par_type([]), [])
+
+    def test_age_calcule_a_partir_de_la_date_de_naissance(self):
+        aujourdhui = timezone.localdate()
+        cas = ((aujourdhui.replace(year=aujourdhui.year - 30), 30),
+               (aujourdhui.replace(year=aujourdhui.year - 30) + datetime.timedelta(days=1), 29))
+        for naissance, attendu in cas:
+            with self.subTest(naissance=naissance):
+                self.assertEqual(Patient(date_naissance=naissance).age, attendu)
+
+
+class DossierPageTests(SimpleTestCase):
+    def requete(self, nom="dossier"):
+        requete = RequestFactory().get("/patients/dossier/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a",
+                                       get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def page(self, patient=None, dossier="defaut", allergies=(), mesures=(), demande=None, manquants=()):
+        patient = patient or un_patient_complet()
+        allergies = list(allergies)
+        for a in allergies:
+            a.pk = ObjectId()
+        for m in mesures:
+            m.pk = ObjectId()
+        return render_to_string("patients/dossier.html", {
+            "patient": patient, "dossier": un_dossier() if dossier == "defaut" else dossier,
+            "allergies": allergies, "severes": [a for a in allergies if a.est_severe], "mesures": list(mesures),
+            "derniere_demande": demande, "manquants": list(manquants)}, self.requete())
+
+    def test_adresse_et_vue(self):
+        self.assertEqual(reverse("patients:dossier"), "/patients/dossier/")
+        self.assertIs(resolve("/patients/dossier/").func, vues_patients.dossier)
+
+    def test_acces_reserve_aux_patients_connectes(self):
+        reponse = self.client.get("/patients/dossier/")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(reponse["Location"].startswith("/comptes/connexion/"))
+        requete = RequestFactory().get("/patients/dossier/")
+        requete.user = get_user_model()(username="medecin", role="medecin", is_active=True)
+        with self.assertRaises(PermissionDenied):
+            vues_patients.dossier(requete)
+
+    def test_resume_des_informations_essentielles(self):
+        html = self.page()
+        for texte in ("Mon dossier médical", "ans", "Femme", "A+", "Sami Trabelsi", "20111222",
+                      "Asthme chronique", "Ventoline", "Antécédents médicaux", "Traitements en cours"):
+            self.assertIn(texte, html)
+
+    def test_allergies_avec_gravite_ecrite_et_alerte_si_severe(self):
+        html = self.page(allergies=[une_allergie(substance="Arachide", gravite="severe", reaction="Urticaire")])
+        self.assertIn("Arachide", html)
+        self.assertIn(">Sévère<", html)
+        self.assertIn("Allergie sévère :", html)
+        self.assertIn('role="note"', html)
+        self.assertNotIn("Allergie sévère :", self.page(allergies=[une_allergie(gravite="legere")]))
+
+    def test_sections_vides_expliquees(self):
+        html = self.page(dossier=un_dossier(antecedents="", traitements_en_cours="", groupe_sanguin=""))
+        self.assertIn("Aucune allergie enregistrée.", html)
+        self.assertIn("Aucune mesure enregistrée.", html)
+        self.assertEqual(html.count("Non renseigné."), 2)
+        self.assertIn("Vous n'avez pas encore demandé de consultation.", html)
+
+    def test_page_sans_dossier_ne_plante_pas(self):
+        html = self.page(dossier=None)
+        self.assertIn("Non renseigné.", html)
+
+    def test_mesures_recentes_avec_repere(self):
+        html = self.page(mesures=[une_mesure(type="tension", valeur=152, valeur2=96), une_mesure(type="poids", valeur=70)])
+        self.assertIn("Tension artérielle : 152/96 mmHg", html)
+        self.assertIn("Poids : 70 kg", html)
+        self.assertEqual(html.count("Élevée"), 1)
+
+    def test_derniere_demande_affichee(self):
+        demande = SimpleNamespace(medecin_nom="Dr Ben Salah", cree_le=timezone.now(), get_statut_display=lambda: "En attente",
+                                  symptomes=[SimpleNamespace(nom="Toux"), SimpleNamespace(nom="Fatigue")], niveau_effectif=3)
+        html = self.page(demande=demande)
+        for texte in ("Dr Ben Salah", "Toux, Fatigue", "urgence 3 sur 5", "en attente"):
+            self.assertIn(texte, html)
+
+    def test_bloc_a_completer_seulement_si_necessaire(self):
+        self.assertNotIn("À compléter", self.page())
+        html = self.page(manquants=["Groupe sanguin", "Traitements en cours"])
+        self.assertIn("À compléter", html)
+        self.assertIn("<li>Groupe sanguin</li>", html)
+        self.assertIn("Compléter mon dossier", html)
+
+    def test_liens_vers_les_details_et_la_modification(self):
+        html = self.page()
+        for lien in ('href="/patients/allergies/"', 'href="/patients/mesures/"', 'href="/patients/profil/"'):
+            self.assertIn(lien, html)
+
+    def test_page_pas_trop_chargee_quatre_blocs_et_deux_sections(self):
+        html = self.page(manquants=["Groupe sanguin"], demande=None)
+        self.assertEqual(html.count('class="panel panel-pad'), 4 + 2)  # 4 blocs, dernière demande, à compléter
+        self.assertEqual(html.count("<h1"), 1)
+
+    def test_le_menu_a_quatre_entrees_dont_mon_dossier(self):
+        html = self.page()
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        for lien in ('href="/patients/dossier/"', 'href="/patients/profil/"'):
+            self.assertIn(lien, html)
+        self.assertNotIn("Allergies</span>", html)  # regroupées sous « Mon dossier »
+        self.assertNotIn("Mes mesures</span>", html)
+
+    def test_liens_d_aide_nommes_pour_les_lecteurs_d_ecran(self):
+        html = self.page()
+        self.assertIn('Gérer<span class="sr-only"> mes allergies</span>', html)
+        self.assertIn('Voir tout<span class="sr-only"> l\'historique des mesures</span>', html)
