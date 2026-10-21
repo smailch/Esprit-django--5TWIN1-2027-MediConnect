@@ -22,6 +22,8 @@ urlpatterns = [
     path("medecins/<str:medecin_id>/symptomes/", views.declarer_symptomes, name="symptomes"),
     path("triage/<str:pk>/", views.resultat, name="resultat"),
     path("triage/<str:pk>/annuler/", views.annuler, name="annuler"),
+    path("triage/<str:pk>/creneaux/", views.creneaux, name="creneaux"),
+    path("triage/<str:pk>/creneau/retirer/", views.creneau_retirer, name="creneau_retirer"),
     path("triage/<str:pk>/transferer/<str:medecin_id>/", views.transferer, name="transferer"),
     path("test/file-medecin/<str:medecin_id>/", views.file_medecin_test, name="file_medecin_test"),
 ]

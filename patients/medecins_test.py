@@ -4,13 +4,19 @@
 il suffira de garder les mêmes clés (id, nom, specialite, ville, disponible).
 """
 
+SEMAINE = {j: [(9, 12), (14, 17)] for j in range(5)}  # lundi à vendredi
+
 MEDECINS = [
-    {"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True},
-    {"id": "m2", "nom": "Dr Karim Trabelsi", "specialite": "Cardiologie", "ville": "Tunis", "disponible": True},
-    {"id": "m3", "nom": "Dr Leïla Mansouri", "specialite": "Pédiatrie", "ville": "Sfax", "disponible": False},
-    {"id": "m4", "nom": "Dr Youssef Haddad", "specialite": "Médecine générale", "ville": "Sousse", "disponible": True},
-    {"id": "m5", "nom": "Dr Amina Gharbi", "specialite": "Pneumologie", "ville": "Sfax", "disponible": True},
-    {"id": "m6", "nom": "Dr Walid Jelassi", "specialite": "Urgences", "ville": "Tunis", "disponible": True},
+    {"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True, "horaires": SEMAINE},
+    {"id": "m2", "nom": "Dr Karim Trabelsi", "specialite": "Cardiologie", "ville": "Tunis", "disponible": True,
+     "horaires": {1: [(9, 13)], 3: [(9, 13)], 2: [(14, 18)]}},
+    {"id": "m3", "nom": "Dr Leïla Mansouri", "specialite": "Pédiatrie", "ville": "Sfax", "disponible": False, "horaires": {}},
+    {"id": "m4", "nom": "Dr Youssef Haddad", "specialite": "Médecine générale", "ville": "Sousse", "disponible": True,
+     "horaires": {j: [(8, 12)] for j in range(6)}},
+    {"id": "m5", "nom": "Dr Amina Gharbi", "specialite": "Pneumologie", "ville": "Sfax", "disponible": True,
+     "horaires": {0: [(10, 12), (14, 16)], 2: [(10, 12), (14, 16)], 4: [(10, 12), (14, 16)]}},
+    {"id": "m6", "nom": "Dr Walid Jelassi", "specialite": "Urgences", "ville": "Tunis", "disponible": True,
+     "horaires": {j: [(8, 20)] for j in range(7)}},
 ]
 
 

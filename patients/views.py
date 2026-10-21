@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import dossier as synthese, medecins_test, mesures_stats
+from . import dossier as synthese, medecins_test, mesures_stats, planning
 from .forms import (
     AllergieForm,
     MesureForm,
@@ -173,6 +173,7 @@ def resultat(request, pk):
         "triage": triage,
         "message": MESSAGES_NIVEAU.get(triage.niveau_effectif, ""),
         "propositions": _propositions(triage),
+        "can_book": planning.reservable(triage.statut, triage.niveau_effectif),
     })
 
 
@@ -204,6 +205,60 @@ def transferer(request, pk, medecin_id):
     triage.medecin_specialite = choisi["specialite"]
     triage.save(update_fields=["medecin_id", "medecin_nom", "medecin_specialite"])
     messages.success(request, f"Votre demande a été transmise à {choisi['nom']}.")
+    return redirect("patients:resultat", pk=triage.pk)
+
+
+@login_required
+def creneaux(request, pk):
+    """Choix (ou changement) du créneau de rendez-vous d'une demande de niveau 3 à 5."""
+    patient = _patient_connecte(request)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
+    if not planning.reservable(triage.statut, triage.niveau_effectif):
+        messages.error(request, "Un créneau ne peut pas être choisi pour cette demande.")
+        return redirect("patients:resultat", pk=triage.pk)
+
+    medecin = medecins_test.trouver(triage.medecin_id)
+    horaires = medecin.get("horaires", {}) if medecin and medecin.get("disponible") else {}
+    maintenant = timezone.localtime()
+    libres = planning.generer(horaires, maintenant, Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk))
+
+    if request.method == "POST":
+        choix = planning.lire_choix(request.POST.get("debut", ""), maintenant.tzinfo)
+        if choix is None or choix not in libres:
+            messages.error(request, "Ce créneau n'est plus disponible. Choisissez-en un autre.")
+        elif any(t.creneau == choix for t in _demandes_actives(patient) if t.pk != triage.pk):
+            messages.error(request, "Vous avez déjà un rendez-vous à cette heure-là.")
+        else:
+            triage.creneau = choix
+            triage.save(update_fields=["creneau"])
+            messages.success(request, "Votre créneau est réservé.")
+            return redirect("patients:resultat", pk=triage.pk)
+        # le créneau a pu être pris entre-temps : on réaffiche la liste à jour
+        libres = planning.generer(horaires, maintenant, Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk))
+
+    return render(request, "patients/creneaux.html", {
+        "triage": triage,
+        "medecin": medecin,
+        "jours": planning.grouper(libres),
+        "total": len(libres),
+        "duree": planning.DUREE_MINUTES,
+    })
+
+
+def _demandes_actives(patient):
+    actives = [Triage.Statut.EN_ATTENTE, Triage.Statut.EN_CONSULTATION]
+    return list(Triage.objects.filter(patient=patient, statut__in=actives))
+
+
+@login_required
+@require_POST
+def creneau_retirer(request, pk):
+    patient = _patient_connecte(request)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
+    if triage.creneau and triage.statut == Triage.Statut.EN_ATTENTE:
+        triage.creneau = None
+        triage.save(update_fields=["creneau"])
+        messages.success(request, "Votre créneau a été libéré. Vous restez dans la file du médecin.")
     return redirect("patients:resultat", pk=triage.pk)
 
 

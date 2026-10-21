@@ -31,6 +31,9 @@
           <span class="lv lv-{{ n }}">{{ t.get_niveau_display }}</span>
         </div>
 
+        {% if t.creneau %}
+        <p class="mt-4 text-sm"><i data-lucide="calendar-check" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Rendez-vous le <strong class="font-medium">{{ t.creneau|date:"l j F" }} à {{ t.creneau|date:"H:i" }}</strong></p>
+        {% endif %}
         <p class="mt-4 text-sm">
           {% if t.statut == "en_consultation" %}
             Votre consultation est en cours.

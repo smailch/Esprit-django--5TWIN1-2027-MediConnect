@@ -355,3 +355,18 @@
 .legend i { display: inline-block; width: 1.4rem; height: 0; border-top: 3px solid var(--a-accent); vertical-align: middle; margin-right: 0.4rem; }
 .legend i.l2 { border-top: 3px dashed var(--u3); }
 .legend i.z { height: 0.7rem; width: 1.4rem; border: 0; background: rgba(74, 222, 128, 0.3); border-radius: 2px; }
+
+/* ---- Créneaux de rendez-vous ----------------------------------------------------------- */
+.slot-day { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.25rem; cursor: pointer; list-style: none; min-height: 44px; }
+.slot-day::-webkit-details-marker { display: none; }
+.slot-day:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; border-radius: 0.75rem; }
+.slot-body { padding: 0 1.25rem 1.25rem; border-top: 1px solid var(--a-line); }
+.slot-group { border: 0; padding: 0; margin: 1rem 0 0; }
+.slot-group legend { padding: 0; margin-bottom: 0.5rem; }
+.slot-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr)); }
+.slot { position: relative; display: block; }
+.slot input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.slot span { display: flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--a-line2); border-radius: 0.6rem; background: var(--a-surface); font-weight: 500; font-size: 0.9rem; }
+.slot input:hover + span { border-color: var(--a-accent); }
+.slot input:checked + span { background: var(--a-accent); color: var(--a-accent-ink); border-color: var(--a-accent); }
+.slot input:focus-visible + span { outline: 2px solid var(--a-accent-hover); outline-offset: 2px; }

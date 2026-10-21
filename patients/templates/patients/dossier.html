@@ -86,6 +86,7 @@
     <strong class="font-medium">{{ derniere_demande.medecin_nom }}</strong>
     <span class="muted"> · {{ derniere_demande.cree_le|date:"d/m/Y" }} · {{ derniere_demande.get_statut_display|lower }}</span>
   </p>
+  {% if derniere_demande.creneau %}<p class="mt-1 text-sm">Rendez-vous le <strong class="font-medium">{{ derniere_demande.creneau|date:"l j F" }} à {{ derniere_demande.creneau|date:"H:i" }}</strong></p>{% endif %}
   <p class="muted mt-1 text-sm">
     {% for s in derniere_demande.symptomes %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% empty %}Aucun symptôme coché{% endfor %}
     {% if derniere_demande.niveau_effectif %}· urgence {{ derniere_demande.niveau_effectif }} sur 5{% endif %}

@@ -1524,3 +1524,264 @@ class DossierPageTests(SimpleTestCase):
         html = self.page()
         self.assertIn('Gérer<span class="sr-only"> mes allergies</span>', html)
         self.assertIn('Voir tout<span class="sr-only"> l\'historique des mesures</span>', html)
+
+
+# --- Créneaux de rendez-vous ----------------------------------------------------------------
+import zoneinfo  # noqa: E402
+
+from . import planning  # noqa: E402
+
+TUNIS = zoneinfo.ZoneInfo("Africa/Tunis")
+LUNDI_8H = datetime.datetime(2026, 10, 19, 8, 0, tzinfo=TUNIS)  # un lundi
+SEMAINE = {j: [(9, 12), (14, 17)] for j in range(5)}
+
+
+class PlanningGenerationTests(SimpleTestCase):
+    def test_creneaux_de_30_minutes_dans_les_plages(self):
+        libres = planning.generer({0: [(9, 11)]}, LUNDI_8H - datetime.timedelta(days=1))
+        heures = [c.strftime("%H:%M") for c in libres if c.date() == LUNDI_8H.date()]
+        self.assertEqual(heures, ["09:00", "09:30", "10:00", "10:30"])
+
+    def test_le_dernier_creneau_finit_avant_la_fin_de_la_plage(self):
+        libres = planning.generer({0: [(9, 10)]}, LUNDI_8H - datetime.timedelta(days=1))
+        self.assertEqual([c.strftime("%H:%M") for c in libres][:2], ["09:00", "09:30"])
+
+    def test_delai_minimum_de_deux_heures(self):
+        libres = planning.generer({0: [(9, 12)]}, LUNDI_8H)  # il est 8 h : premier créneau possible à 10 h
+        self.assertEqual(libres[0].strftime("%H:%M"), "10:00")
+        self.assertTrue(all(c >= LUNDI_8H + datetime.timedelta(hours=2) for c in libres))
+
+    def test_rien_dans_le_passe(self):
+        tard = LUNDI_8H.replace(hour=16)
+        libres = planning.generer(SEMAINE, tard)
+        self.assertTrue(all(c > tard for c in libres))
+
+    def test_horizon_de_quatorze_jours(self):
+        libres = planning.generer(SEMAINE, LUNDI_8H)
+        self.assertEqual(planning.HORIZON_JOURS, 14)
+        self.assertLessEqual(max(libres), LUNDI_8H + datetime.timedelta(days=15))  # jamais au-delà de deux semaines
+        self.assertGreater(len(libres), 40)
+
+    def test_jours_sans_horaire_ignores(self):
+        libres = planning.generer(SEMAINE, LUNDI_8H)
+        self.assertTrue(all(c.weekday() < 5 for c in libres))  # ni samedi ni dimanche
+
+    def test_creneaux_pris_exclus(self):
+        pris = [LUNDI_8H.replace(hour=10)]
+        libres = planning.generer({0: [(9, 12)]}, LUNDI_8H, pris)
+        self.assertNotIn(LUNDI_8H.replace(hour=10), libres)
+        self.assertIn(LUNDI_8H.replace(hour=10, minute=30), libres)
+
+    def test_un_creneau_pris_en_heure_utc_est_reconnu(self):
+        pris = [LUNDI_8H.replace(hour=10).astimezone(datetime.timezone.utc)]  # la base renvoie de l'UTC
+        self.assertNotIn(LUNDI_8H.replace(hour=10), planning.generer({0: [(9, 12)]}, LUNDI_8H, pris))
+
+    def test_ordre_chronologique(self):
+        libres = planning.generer(SEMAINE, LUNDI_8H)
+        self.assertEqual(libres, sorted(libres))
+
+    def test_medecin_sans_horaire_aucun_creneau(self):
+        self.assertEqual(planning.generer({}, LUNDI_8H), [])
+
+
+class PlanningReglesTests(SimpleTestCase):
+    def test_reservable_seulement_en_attente_niveaux_3_a_5(self):
+        for niveau, attendu in ((1, False), (2, False), (3, True), (4, True), (5, True), (None, False)):
+            with self.subTest(niveau=niveau):
+                self.assertEqual(planning.reservable("en_attente", niveau), attendu)
+        for statut in ("en_consultation", "termine", "annule"):
+            with self.subTest(statut=statut):
+                self.assertFalse(planning.reservable(statut, 4))
+
+    def test_lecture_du_choix(self):
+        c = planning.lire_choix("2026-10-20T09:30:00+01:00", TUNIS)
+        self.assertEqual((c.hour, c.minute), (9, 30))
+        self.assertEqual(planning.lire_choix("2026-10-20T09:30", TUNIS).tzinfo, TUNIS)
+        for mauvais in ("", "n'importe quoi", "2026-13-45T99:99", None):
+            with self.subTest(mauvais=mauvais):
+                self.assertIsNone(planning.lire_choix(mauvais, TUNIS))
+
+    def test_moment_de_la_journee(self):
+        h = lambda n: LUNDI_8H.replace(hour=n)
+        self.assertEqual([planning.periode(h(n)) for n in (8, 11, 12, 17, 18, 20)],
+                         ["Matin", "Matin", "Après-midi", "Après-midi", "Soir", "Soir"])
+
+    def test_regroupement_par_jour_et_moment(self):
+        libres = planning.generer(SEMAINE, LUNDI_8H - datetime.timedelta(days=1))
+        jours = planning.grouper(libres)
+        premier = jours[0]
+        self.assertEqual(premier["jour"], LUNDI_8H.date())
+        self.assertEqual([g["nom"] for g in premier["groupes"]], ["Matin", "Après-midi"])
+        self.assertEqual(premier["total"], sum(len(g["creneaux"]) for g in premier["groupes"]))
+        self.assertEqual([j["jour"] for j in jours], sorted({c.date() for c in libres}))
+
+    def test_regroupement_vide(self):
+        self.assertEqual(planning.grouper([]), [])
+
+    def test_les_horaires_des_medecins_sont_valides(self):
+        for m in medecins_test.tous():
+            with self.subTest(medecin=m["id"]):
+                self.assertIn("horaires", m)
+                if not m["disponible"]:
+                    self.assertEqual(m["horaires"], {})
+                for jour, plages in m["horaires"].items():
+                    self.assertIn(jour, range(7))
+                    for debut, fin in plages:
+                        self.assertTrue(0 <= debut < fin <= 24)
+
+    def test_un_medecin_disponible_a_des_creneaux(self):
+        for m in medecins_test.tous():
+            if m["disponible"]:
+                with self.subTest(medecin=m["id"]):
+                    self.assertTrue(planning.generer(m["horaires"], LUNDI_8H))
+
+
+class TriageCreneauModeleTests(SimpleTestCase):
+    def test_champ_facultatif(self):
+        champ = Triage._meta.get_field("creneau")
+        self.assertTrue(champ.null and champ.blank)
+
+    def test_creneaux_pris_ignorent_les_demandes_inactives_et_la_demande_courante(self):
+        a, b = Triage(medecin_id="m1", creneau=LUNDI_8H), Triage(medecin_id="m1", creneau=LUNDI_8H.replace(hour=9))
+        sans = Triage(medecin_id="m1", creneau=None)
+        a.pk, b.pk, sans.pk = ObjectId(), ObjectId(), ObjectId()
+        with mock.patch.object(Triage.objects, "filter", return_value=[a, b, sans]) as f:
+            self.assertEqual(Triage.creneaux_pris("m1"), [LUNDI_8H, LUNDI_8H.replace(hour=9)])
+            self.assertEqual(Triage.creneaux_pris("m1", exclure_pk=a.pk), [LUNDI_8H.replace(hour=9)])
+        statuts = f.call_args.kwargs["statut__in"]
+        self.assertEqual(set(statuts), {"en_attente", "en_consultation"})  # annulé et terminé libèrent le créneau
+
+
+class CreneauxPagesTests(SimpleTestCase):
+    def requete(self):
+        requete = RequestFactory().get("/patients/triage/x/creneaux/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a",
+                                       get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name="creneaux")
+        return requete
+
+    def triage(self, **kw):
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr Sara Benali", medecin_specialite="Médecine générale",
+                   niveau=4, statut="en_attente", explication="x", **kw)
+        t.pk = ObjectId()
+        return t
+
+    def test_adresses_et_vues(self):
+        self.assertEqual(reverse("patients:creneaux", args=["x"]), "/patients/triage/x/creneaux/")
+        self.assertEqual(reverse("patients:creneau_retirer", args=["x"]), "/patients/triage/x/creneau/retirer/")
+        self.assertIs(resolve("/patients/triage/abc/creneaux/").func, vues_patients.creneaux)
+        self.assertIs(resolve("/patients/triage/abc/creneau/retirer/").func, vues_patients.creneau_retirer)
+
+    def test_acces_reserve_aux_patients_connectes(self):
+        for url in ("/patients/triage/abc/creneaux/", "/patients/triage/abc/creneau/retirer/"):
+            with self.subTest(url=url):
+                r = self.client.get(url)
+                self.assertEqual(r.status_code, 302)
+                self.assertTrue(r["Location"].startswith("/comptes/connexion/"))
+        requete = RequestFactory().get("/x/")
+        requete.user = get_user_model()(username="medecin", role="medecin", is_active=True)
+        with self.assertRaises(PermissionDenied):
+            vues_patients.creneaux(requete, "x")
+
+    def test_les_vues_utilisent_la_recherche_securisee(self):
+        import inspect
+
+        for nom in ("creneaux", "creneau_retirer"):
+            self.assertIn("objet_ou_404(Triage, pk=pk, patient=patient)", inspect.getsource(getattr(vues_patients, nom)))
+
+    def test_le_retrait_n_accepte_que_post(self):
+        import inspect
+
+        requete = RequestFactory().get("/patients/triage/x/creneau/retirer/")
+        requete.user = SimpleNamespace(is_authenticated=True)
+        reponse = vues_patients.creneau_retirer(requete, "x")  # un simple GET ne doit rien modifier
+        self.assertEqual(reponse.status_code, 405)
+
+    def test_la_validation_se_fait_cote_serveur(self):
+        import inspect
+
+        source = inspect.getsource(vues_patients.creneaux)
+        for morceau in ("choix not in libres", "planning.reservable", "Triage.creneaux_pris", "_demandes_actives(patient)"):
+            self.assertIn(morceau, source)
+
+    def rendre(self, triage, jours):
+        total = sum(j["total"] for j in jours)
+        return render_to_string("patients/creneaux.html", {"triage": triage, "medecin": {}, "jours": jours,
+                                                           "total": total, "duree": 30}, self.requete())
+
+    def test_page_avec_creneaux_groupes_par_jour(self):
+        jours = planning.grouper(planning.generer(SEMAINE, LUNDI_8H))[:3]
+        html = self.rendre(self.triage(), jours)
+        self.assertIn("Choisir un créneau", html)
+        self.assertEqual(html.count('type="radio" name="debut"'), sum(j["total"] for j in jours))
+        self.assertEqual(html.count("<details"), 3)
+        self.assertIn("<details class=\"panel\" open>", html)  # seul le premier jour est ouvert
+        self.assertIn("Matin", html)
+        self.assertIn("Réserver ce créneau", html)
+        self.assertIn("csrfmiddlewaretoken", html)
+        self.assertIn("consultations de 30 minutes", html)
+        self.assertIn("required", html)
+
+    def test_valeur_envoyee_lisible_par_le_serveur(self):
+        jours = planning.grouper(planning.generer(SEMAINE, LUNDI_8H))[:1]
+        html = self.rendre(self.triage(), jours)
+        import re
+
+        valeur = re.search(r'name="debut" value="([^"]+)"', html).group(1)
+        self.assertIsNotNone(planning.lire_choix(valeur, TUNIS))
+        self.assertEqual(planning.lire_choix(valeur, TUNIS), planning.generer(SEMAINE, LUNDI_8H)[0])
+
+    def test_aucun_creneau_message_clair(self):
+        html = self.rendre(self.triage(), [])
+        self.assertIn("Aucun créneau disponible", html)
+        self.assertNotIn('type="radio"', html)
+        self.assertIn("dans l'ordre d'arrivée", html)
+
+    def test_creneau_actuel_rappele(self):
+        html = self.rendre(self.triage(creneau=LUNDI_8H.replace(hour=10)), [])
+        self.assertIn("Votre créneau actuel", html)
+        self.assertIn("10:00", html)
+
+    def rendre_resultat(self, triage, can_book):
+        return render_to_string("patients/resultat.html", {"triage": triage, "message": "m", "propositions": [],
+                                                           "can_book": can_book}, self.requete())
+
+    def test_resultat_propose_de_choisir_un_creneau(self):
+        t = self.triage()
+        self.assertIn("Choisir un créneau", self.rendre_resultat(t, True))
+        self.assertIn(f"/patients/triage/{t.pk}/creneaux/", self.rendre_resultat(t, True))
+
+    def test_resultat_cas_prioritaire_sans_creneau(self):
+        t = self.triage()
+        t.niveau = 2
+        html = self.rendre_resultat(t, False)
+        self.assertIn("pris en charge en priorité", html)
+        self.assertNotIn("Choisir un créneau", html)
+
+    def test_resultat_avec_creneau_reserve(self):
+        t = self.triage(creneau=LUNDI_8H.replace(hour=10))
+        html = self.rendre_resultat(t, True)
+        self.assertIn("Changer de créneau", html)
+        self.assertIn("Retirer le créneau", html)
+        self.assertIn("à 10:00", html)
+        self.assertIn("/creneau/retirer/", html)
+        self.assertNotIn("Choisir un créneau", html)
+
+    def test_resultat_demande_terminee_pas_de_boutons(self):
+        t = self.triage(creneau=LUNDI_8H.replace(hour=10))
+        t.statut = "termine"
+        html = self.rendre_resultat(t, False)
+        self.assertIn("à 10:00", html)
+        self.assertNotIn("Changer de créneau", html)
+
+    def test_dossier_et_back_office_montrent_le_creneau(self):
+        racine = Path(__file__).resolve().parent.parent
+        for fichier in ("patients/templates/patients/dossier.html", "patients/templates/patients/tableau_de_bord.html",
+                        "backoffice/templates/backoffice/rendez_vous_detail.html"):
+            with self.subTest(fichier=fichier):
+                self.assertIn("creneau", (racine / fichier).read_text(encoding="utf-8"))
+
+    def test_styles_des_creneaux_presents(self):
+        css = (Path(__file__).resolve().parent.parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        for classe in (".slot-day", ".slot-grid", ".slot input:checked + span", ".slot input:focus-visible + span"):
+            self.assertIn(classe, css)

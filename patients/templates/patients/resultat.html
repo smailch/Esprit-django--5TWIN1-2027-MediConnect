@@ -60,6 +60,32 @@
   <div class="space-y-6 lg:col-span-5">
     {% include "patients/_propositions.html" %}
 
+    <section class="panel panel-pad" aria-labelledby="titre-rdv">
+      <h2 id="titre-rdv" class="section-title">Votre rendez-vous</h2>
+      {% if triage.creneau %}
+      <p class="item-name mt-3">{{ triage.creneau|date:"l j F" }} à {{ triage.creneau|date:"H:i" }}</p>
+      <p class="muted mt-1 text-sm">Avec {{ triage.medecin_nom }}. Présentez-vous quelques minutes avant.</p>
+      {% if triage.statut == "en_attente" %}
+      <div class="mt-4 flex flex-wrap gap-3">
+        <a href="{% url 'patients:creneaux' triage.pk %}" class="abtn abtn-outline">Changer de créneau</a>
+        <form method="post" action="{% url 'patients:creneau_retirer' triage.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="abtn abtn-ghost">Retirer le créneau</button>
+        </form>
+      </div>
+      {% endif %}
+      {% elif can_book %}
+      <p class="muted mt-2 text-sm">Vous pouvez choisir le jour et l'heure de votre consultation, ou rester dans la file : le médecin vous recevra dans l'ordre d'arrivée.</p>
+      <a href="{% url 'patients:creneaux' triage.pk %}" class="abtn abtn-primary mt-4">
+        <i data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir un créneau
+      </a>
+      {% elif triage.statut == "en_attente" %}
+      <p class="muted mt-2 text-sm">Votre cas est pris en charge en priorité : aucun créneau à choisir, le médecin vous reçoit dès que possible.</p>
+      {% else %}
+      <p class="muted mt-2 text-sm">Aucun créneau n'est réservé pour cette demande.</p>
+      {% endif %}
+    </section>
+
     <section class="panel panel-pad">
       <p class="muted text-sm">
         Cette évaluation est indicative et ne remplace pas un avis médical. Le médecin garde la décision finale et peut modifier le niveau.

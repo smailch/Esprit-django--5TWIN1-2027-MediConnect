@@ -389,6 +389,9 @@ class Triage(models.Model):
         help_text="Niveau requalifié par le médecin.",
     )
 
+    # Créneau choisi par le patient (niveaux 3 à 5), pris dans les horaires du médecin.
+    creneau = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["niveau", "cree_le"]
         indexes = [models.Index(fields=["medecin_id", "statut"])]
@@ -415,6 +418,13 @@ class Triage(models.Model):
     @property
     def est_actif(self):
         return self.statut in (self.Statut.EN_ATTENTE, self.Statut.EN_CONSULTATION)
+
+    @staticmethod
+    def creneaux_pris(medecin_id, exclure_pk=None):
+        """Créneaux déjà réservés chez ce médecin par des demandes encore actives."""
+        actives = [Triage.Statut.EN_ATTENTE, Triage.Statut.EN_CONSULTATION]
+        demandes = Triage.objects.filter(medecin_id=medecin_id, statut__in=actives)
+        return [t.creneau for t in demandes if t.creneau and t.pk != exclure_pk]
 
     @staticmethod
     def file_du_medecin(medecin_id):
