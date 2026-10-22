@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import dossier as synthese, medecins_test, mesures_stats, planning
+from . import dossier as synthese, medecins_test, mesures_stats, planning, suivi
 from .forms import (
     AllergieForm,
     MesureForm,
@@ -89,8 +89,19 @@ def liste_medecins(request):
     _patient_connecte(request)
     specialite = request.GET.get("specialite", "")
     ville = request.GET.get("ville", "")
+    en_attente = suivi.toutes_les_demandes_en_attente()
+    maintenant = timezone.localtime()
+    medecins = []
+    for m in medecins_test.filtrer(specialite, ville):
+        pris = [t.creneau for t in en_attente if t.medecin_id == m["id"] and t.creneau]
+        libres = planning.generer(m.get("horaires", {}) if m["disponible"] else {}, maintenant, pris)
+        medecins.append(dict(
+            m,
+            prochain_creneau=libres[0] if libres else None,
+            en_attente=sum(1 for t in en_attente if t.medecin_id == m["id"] and not t.creneau),
+        ))
     return render(request, "patients/medecins.html", {
-        "medecins": medecins_test.filtrer(specialite, ville),
+        "medecins": medecins,
         "specialites": medecins_test.specialites(),
         "villes": medecins_test.villes(),
         "specialite": specialite,
@@ -162,7 +173,7 @@ def _propositions(triage, en_attente=None):
         en_attente = Triage.objects.filter(statut=Triage.Statut.EN_ATTENTE)
     files = {}
     for t in en_attente:
-        if t.pk != triage.pk:  # la demande ne passe pas devant elle-même
+        if t.pk != triage.pk and not t.creneau:  # ni devant elle-même, ni les rendez-vous fixés
             files.setdefault(t.medecin_id, []).append(t.niveau_effectif)
     return choisir_alternatives(triage.niveau_effectif, courant, medecins_test.tous(), files)
 
@@ -171,6 +182,10 @@ def _propositions(triage, en_attente=None):
 def resultat(request, pk):
     patient = _patient_connecte(request)
     triage = objet_ou_404(Triage, pk=pk, patient=patient)
+    if triage.statut == Triage.Statut.EN_ATTENTE:
+        du_medecin = list(Triage.objects.filter(medecin_id=triage.medecin_id, statut=Triage.Statut.EN_ATTENTE))
+        suivi.annoter(du_medecin)
+        triage = next((t for t in du_medecin if t.pk == triage.pk), triage)
     return render(request, "patients/resultat.html", {
         "triage": triage,
         "message": MESSAGES_NIVEAU.get(triage.niveau_effectif, ""),
@@ -222,27 +237,37 @@ def creneaux(request, pk):
     medecin = medecins_test.trouver(triage.medecin_id)
     horaires = medecin.get("horaires", {}) if medecin and medecin.get("disponible") else {}
     maintenant = timezone.localtime()
-    libres = planning.generer(horaires, maintenant, Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk))
 
+    def libres():
+        pris = Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk)
+        return planning.generer(horaires, maintenant, pris), pris
+
+    disponibles, pris = libres()
     if request.method == "POST":
         choix = planning.lire_choix(request.POST.get("debut", ""), maintenant.tzinfo)
-        if choix is None or choix not in libres:
+        if choix is None or choix not in disponibles:
             messages.error(request, "Ce créneau n'est plus disponible. Choisissez-en un autre.")
         elif any(t.creneau == choix for t in _demandes_actives(patient) if t.pk != triage.pk):
             messages.error(request, "Vous avez déjà un rendez-vous à cette heure-là.")
         else:
+            ancien = triage.creneau
             triage.creneau = choix
             triage.save(update_fields=["creneau"])
-            messages.success(request, "Votre créneau est réservé.")
-            return redirect("patients:resultat", pk=triage.pk)
-        # le créneau a pu être pris entre-temps : on réaffiche la liste à jour
-        libres = planning.generer(horaires, maintenant, Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk))
+            # Second verrou : si un autre patient a réservé le même créneau à la même seconde, on annule.
+            if choix in Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk):
+                triage.creneau = ancien
+                triage.save(update_fields=["creneau"])
+                messages.error(request, "Ce créneau vient d'être pris par un autre patient. Choisissez-en un autre.")
+            else:
+                messages.success(request, "Votre créneau est réservé.")
+                return redirect("patients:resultat", pk=triage.pk)
+        disponibles, pris = libres()  # le créneau a pu être pris entre-temps : liste à jour
 
     return render(request, "patients/creneaux.html", {
         "triage": triage,
         "medecin": medecin,
-        "jours": planning.grouper(libres),
-        "total": len(libres),
+        "jours": planning.grouper_grille(planning.grille(horaires, maintenant, pris)),
+        "total": len(disponibles),
         "duree": planning.DUREE_MINUTES,
     })
 
@@ -273,10 +298,12 @@ def file_medecin_test(request, medecin_id):
     medecin = medecins_test.trouver(medecin_id)
     if medecin is None:
         raise Http404("Médecin introuvable.")
-    demandes = Triage.file_du_medecin(medecin_id)
+    du_medecin = list(Triage.objects.filter(medecin_id=medecin_id, statut=Triage.Statut.EN_ATTENTE))
+    groupes = suivi.annoter(du_medecin).get(medecin_id, {"file": [], "planning": []})
     return render(request, "patients/file_medecin.html", {
         "medecin": medecin,
-        "demandes": demandes,
+        "demandes": groupes["file"],
+        "planning": groupes["planning"],
         "medecins": medecins_test.tous(),
     })
 
@@ -288,22 +315,20 @@ def tableau_de_bord(request):
         Triage.objects.filter(patient=patient), key=lambda t: t.cree_le, reverse=True
     )
 
-    files = {}  # une seule lecture de la file par médecin
-    en_attente = None  # chargé seulement si un cas très urgent le nécessite
+    # Une seule lecture de toutes les demandes en attente : la place d'un patient dépend des autres.
+    en_attente = suivi.toutes_les_demandes_en_attente()
+    suivi.annoter(en_attente)
+    annotees = {t.pk: t for t in en_attente}
+
     en_cours, historique = [], []
     for t in triages:
+        t = annotees.get(t.pk, t)
         if t.est_actif:
-            if t.statut == Triage.Statut.EN_ATTENTE:
-                if t.medecin_id not in files:
-                    files[t.medecin_id] = Triage.file_du_medecin(t.medecin_id)
-                t.place = t.place_dans_la_file(files[t.medecin_id])
-            else:
-                t.place = None
+            if t.statut != Triage.Statut.EN_ATTENTE:
+                t.place, t.delai, t.prise_en_charge_estimee, t.protegee = None, None, None, False
             t.propositions = []
             t.peut_reserver = planning.reservable(t.statut, t.niveau_effectif) and not t.creneau
             if t.statut == Triage.Statut.EN_ATTENTE and est_eligible(t.niveau_effectif):
-                if en_attente is None:
-                    en_attente = list(Triage.objects.filter(statut=Triage.Statut.EN_ATTENTE))
                 t.propositions = _propositions(t, en_attente)
             en_cours.append(t)
         else:

@@ -20,6 +20,34 @@
   <div class="panel kpi"><p class="kpi-num">{{ kpis.patients }}</p><p class="kpi-label">Patients inscrits</p></div>
 </section>
 
+<section class="kpi-grid mt-4" aria-label="File d'attente">
+  <div class="panel kpi {% if file.en_retard %}kpi-alert{% endif %}"><p class="kpi-num">{{ file.en_retard }}</p><p class="kpi-label">Demandes en retard</p></div>
+  <div class="panel kpi {% if file.a_risque %}kpi-warn{% endif %}"><p class="kpi-num">{{ file.a_risque }}</p><p class="kpi-label">Demandes à risque</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ file.planifies }}</p><p class="kpi-label">Rendez-vous fixés</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ file.protegees }}</p><p class="kpi-label">Demandes protégées</p></div>
+</section>
+
+{% if a_surveiller %}
+<section class="panel mt-6" aria-labelledby="titre-surveiller">
+  <div class="flex items-center justify-between gap-3 px-5 pt-5">
+    <h2 id="titre-surveiller" class="section-title">À surveiller <span class="count">{{ a_surveiller|length }}</span></h2>
+    <a href="{% url 'backoffice:file_attente' %}" class="link text-sm">Voir la file d'attente</a>
+  </div>
+  <ul class="mt-2">
+    {% for t in a_surveiller %}
+    <li class="item-row">
+      <span>
+        <a class="link font-medium" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a>
+        <span class="muted"> · {{ t.medecin_nom }} · niveau {{ t.niveau_effectif }} · attend depuis {{ t.cree_le|timesince }}</span>
+      </span>
+      <span class="sev {% if t.delai.etat == 'en_retard' %}sev-severe{% else %}sev-moderee{% endif %}">{{ t.delai.libelle }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="pb-3"></div>
+</section>
+{% endif %}
+
 <div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
   <section class="panel panel-pad lg:col-span-5" aria-labelledby="titre-repartition">
     <h2 id="titre-repartition" class="section-title">Demandes en cours par niveau</h2>

@@ -1,4 +1,5 @@
 {% extends "backoffice/layout.html" %}
+{% load suivi_filtres %}
 
 {% block title %}Rendez-vous — Administration MediConnect{% endblock %}
 
@@ -40,7 +41,7 @@
       <thead>
         <tr>
           <th scope="col">Date</th><th scope="col">Patient</th><th scope="col">Médecin</th>
-          <th scope="col">Niveau</th><th scope="col" class="num">Score</th><th scope="col">Statut</th><th scope="col"><span class="sr-only">Actions</span></th>
+          <th scope="col">Niveau</th><th scope="col" class="num">Score</th><th scope="col">Statut</th><th scope="col">Délai</th><th scope="col"><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
       <tbody>
@@ -52,10 +53,11 @@
           <td><span class="lv lv-{{ t.niveau_effectif }}">{{ t.niveau_effectif }}</span></td>
           <td class="num">{{ t.score|default_if_none:"—" }}</td>
           <td><span class="st st-{{ t.statut }}">{{ t.get_statut_display }}</span></td>
+          <td>{% if t.delai %}<span class="sev {{ t.delai.etat|classe_etat }}">{{ t.delai.libelle }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td class="num"><a class="abtn abtn-outline" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">Voir</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="muted">{% if filtres_actifs %}Aucun rendez-vous ne correspond à ces critères.{% else %}Aucune demande pour le moment.{% endif %}</td></tr>
+        <tr><td colspan="8" class="muted">{% if filtres_actifs %}Aucun rendez-vous ne correspond à ces critères.{% else %}Aucune demande pour le moment.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

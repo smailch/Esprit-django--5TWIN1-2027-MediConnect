@@ -1,7 +1,7 @@
 from django import forms
 
 from patients import medecins_test
-from patients.models import Triage
+from patients.models import ReglageTriage, Triage
 
 from .stats import LIBELLES_NIVEAU
 
@@ -48,5 +48,26 @@ class MajRendezVousForm(forms.ModelForm):
         self.fields["niveau_medecin"].help_text = (
             "Laissez vide pour garder le niveau calculé par le triage."
         )
+        for champ in self.fields.values():
+            champ.widget.attrs["class"] = "field"
+
+    def save(self, commit=True):
+        ancien = self.initial.get("statut")
+        triage = super().save(commit=commit)
+        # Une demande prise en charge devant des demandes plus anciennes : chacune compte un dépassement.
+        if commit and ancien != Triage.Statut.EN_CONSULTATION and triage.statut == Triage.Statut.EN_CONSULTATION:
+            triage.enregistrer_depassements()
+        return triage
+
+
+class ReglageTriageForm(forms.ModelForm):
+    """Délais cibles, plafond de dépassements et durée de consultation de la file d'attente."""
+
+    class Meta:
+        model = ReglageTriage
+        exclude = ("modifie_le",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         for champ in self.fields.values():
             champ.widget.attrs["class"] = "field"

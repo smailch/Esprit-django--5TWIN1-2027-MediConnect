@@ -31,20 +31,14 @@
           <span class="lv lv-{{ n }}">{{ t.get_niveau_display }}</span>
         </div>
 
-        {% if t.creneau %}
-        <p class="mt-4 text-sm"><i data-lucide="calendar-check" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Rendez-vous le <strong class="font-medium">{{ t.creneau|date:"l j F" }} à {{ t.creneau|date:"H:i" }}</strong></p>
-        {% elif t.peut_reserver %}
+        {% if t.peut_reserver %}
         <p class="mt-4"><a href="{% url 'patients:creneaux' t.pk %}" class="abtn abtn-primary"><i data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir le jour et l'heure</a></p>
         {% endif %}
-        <p class="mt-4 text-sm">
-          {% if t.statut == "en_consultation" %}
-            Votre consultation est en cours.
-          {% elif t.place %}
-            Votre place dans la file : <strong class="queue-pos">{{ t.place.0 }}{% if t.place.0 == 1 %}re{% else %}e{% endif %} sur {{ t.place.1 }}</strong>
-          {% else %}
-            En attente de prise en charge.
-          {% endif %}
-        </p>
+        {% if t.statut == "en_consultation" %}
+        <p class="mt-4 text-sm">Votre consultation est en cours.</p>
+        {% else %}
+        <div class="mt-4">{% include "patients/_suivi_attente.html" %}</div>
+        {% endif %}
 
         {% if n == 1 %}
         <p class="alert alert-danger mt-3" role="alert">Situation potentiellement vitale : appelez immédiatement les urgences (190 / 15 / 112).</p>

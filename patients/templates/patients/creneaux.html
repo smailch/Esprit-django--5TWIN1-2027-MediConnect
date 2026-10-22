@@ -17,16 +17,16 @@
 <p class="alert mt-6" role="note">Votre créneau actuel : <strong class="font-medium">{{ triage.creneau|date:"l j F" }} à {{ triage.creneau|date:"H:i" }}</strong>. Choisir un autre créneau le remplace.</p>
 {% endif %}
 
-{% if jours %}
+{% if total %}
 <form method="post" class="mt-8 max-w-3xl space-y-4">
   {% csrf_token %}
-  <p class="muted text-sm">{{ total }} créneau{{ total|pluralize:"x" }} disponible{{ total|pluralize }} dans les 15 prochains jours.</p>
+  <p class="muted text-sm">{{ total }} créneau{{ total|pluralize:"x" }} disponible{{ total|pluralize }} dans les 15 prochains jours. Les créneaux barrés sont déjà réservés par d'autres patients.</p>
 
   {% for j in jours %}
   <details class="panel" {% if forloop.first %}open{% endif %}>
     <summary class="slot-day">
       <span class="item-name">{{ j.jour|date:"l j F" }}</span>
-      <span class="muted text-sm">{{ j.total }} créneau{{ j.total|pluralize:"x" }}</span>
+      <span class="muted text-sm">{% if j.total %}{{ j.total }} créneau{{ j.total|pluralize:"x" }} libre{{ j.total|pluralize }}{% else %}complet{% endif %}</span>
     </summary>
     <div class="slot-body">
       {% for g in j.groupes %}
@@ -34,10 +34,16 @@
         <legend class="muted text-sm">{{ g.nom }}</legend>
         <div class="slot-grid">
           {% for c in g.creneaux %}
+          {% if c.libre %}
           <label class="slot">
-            <input type="radio" name="debut" value="{{ c|date:'c' }}" required>
-            <span>{{ c|date:"H:i" }}</span>
+            <input type="radio" name="debut" value="{{ c.debut|date:'c' }}" required>
+            <span>{{ c.debut|date:"H:i" }}</span>
           </label>
+          {% else %}
+          <span class="slot slot-pris" title="Déjà réservé par un autre patient">
+            <span><s>{{ c.debut|date:"H:i" }}</s><small class="sr-only"> déjà pris</small></span>
+          </span>
+          {% endif %}
           {% endfor %}
         </div>
       </fieldset>

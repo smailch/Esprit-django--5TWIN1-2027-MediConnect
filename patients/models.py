@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 from django_mongodb_backend.fields import (
     ArrayField,
     EmbeddedModelArrayField,
@@ -9,6 +10,7 @@ from django_mongodb_backend.fields import (
 )
 from django_mongodb_backend.models import EmbeddedModel
 
+from . import file_attente
 from .echelles import ECHELLES, NIVEAU_MAX, NIVEAU_MIN
 
 
@@ -392,6 +394,10 @@ class Triage(models.Model):
     # Créneau choisi par le patient (niveaux 3 à 5), pris dans les horaires du médecin.
     creneau = models.DateTimeField(null=True, blank=True)
 
+    # Nombre de fois où une demande arrivée après celle-ci a été prise en charge avant elle.
+    # Au-delà du plafond (voir ReglageTriage), la demande ne peut plus être dépassée.
+    nb_depassements = models.PositiveSmallIntegerField(default=0)
+
     class Meta:
         ordering = ["niveau", "cree_le"]
         indexes = [models.Index(fields=["medecin_id", "statut"])]
@@ -427,19 +433,67 @@ class Triage(models.Model):
         return [t.creneau for t in demandes if t.creneau and t.pk != exclure_pk]
 
     @staticmethod
-    def file_du_medecin(medecin_id):
-        """Demandes en attente d'un médecin, dans l'ordre où il les verra :
-        niveau le plus urgent d'abord, puis heure d'arrivée."""
-        return sorted(
-            Triage.objects.filter(medecin_id=medecin_id, statut=Triage.Statut.EN_ATTENTE),
-            key=lambda t: (t.niveau_effectif or 5, t.cree_le),
+    def trier_file(demandes, reglage=None, horaires=None, maintenant=None):
+        """File d'attente (demandes SANS créneau) dans l'ordre de passage (voir file_attente.cle_de_passage) :
+        cas vital, demandes protégées en grand retard, niveaux 2 et 3, demandes protégées, puis le reste,
+        chaque groupe étant trié par échéance croissante."""
+        reglage = reglage or file_attente.DEFAUT
+        horaires = horaires or {}
+        maintenant = maintenant or timezone.now()
+        fuseau = timezone.get_current_timezone()
+
+        def cle(t):
+            niveau = t.niveau_effectif or 5
+            delai = file_attente.evaluer_delai(t.cree_le, niveau, maintenant, reglage, horaires, fuseau)
+            return file_attente.cle_de_passage(niveau, t.nb_depassements, delai, t.cree_le, reglage)
+
+        return sorted((t for t in demandes if not t.creneau), key=cle)
+
+    @staticmethod
+    def file_du_medecin(medecin_id, reglage=None, horaires=None, maintenant=None):
+        """Demandes en attente d'un médecin, dans l'ordre où il les verra. Les demandes qui ont un
+        créneau n'y figurent pas : elles ont leur propre voie (voir planning_du_medecin)."""
+        en_attente = Triage.objects.filter(medecin_id=medecin_id, statut=Triage.Statut.EN_ATTENTE)
+        return Triage.trier_file(en_attente, reglage, horaires, maintenant)
+
+    @staticmethod
+    def planning_du_medecin(medecin_id):
+        """Rendez-vous fixés d'un médecin (demandes en attente avec créneau), du plus proche au plus lointain."""
+        en_attente = Triage.objects.filter(medecin_id=medecin_id, statut=Triage.Statut.EN_ATTENTE)
+        return sorted((t for t in en_attente if t.creneau), key=lambda t: t.creneau)
+
+    def delai_calcule(self, reglage=None, horaires=None, maintenant=None):
+        """Échéance et état (dans les temps, à risque, en retard, rendez-vous fixé…)."""
+        maintenant = maintenant or timezone.now()
+        if self.creneau:
+            return file_attente.delai_planifie(self.creneau, maintenant)
+        return file_attente.evaluer_delai(
+            self.cree_le, self.niveau_effectif, maintenant, reglage or file_attente.DEFAUT,
+            horaires or {}, timezone.get_current_timezone(),
         )
+
+    def est_protegee(self, reglage=None):
+        return file_attente.est_protege(self.nb_depassements, reglage or file_attente.DEFAUT)
+
+    def enregistrer_depassements(self):
+        """À appeler quand cette demande vient d'être prise en charge : chaque demande plus ancienne,
+        encore en attente chez le même médecin, compte un dépassement de plus."""
+        autres = [
+            t for t in Triage.objects.filter(medecin_id=self.medecin_id, statut=Triage.Statut.EN_ATTENTE)
+            if t.pk != self.pk
+        ]
+        ids = file_attente.depassees_par((self.cree_le, self.creneau), [(t.pk, t.cree_le, t.creneau) for t in autres])
+        for t in autres:
+            if t.pk in ids:
+                t.nb_depassements = (t.nb_depassements or 0) + 1
+                t.save(update_fields=["nb_depassements"])
+        return len(ids)
 
     def place_dans_la_file(self, file=None):
         """(position, total) dans la file du médecin, ou None si la demande
         n'est plus en attente. `file` permet de réutiliser une file déjà chargée."""
-        if self.statut != self.Statut.EN_ATTENTE:
-            return None
+        if self.statut != self.Statut.EN_ATTENTE or self.creneau:
+            return None  # un rendez-vous fixé ne fait pas la queue
         file = file if file is not None else self.file_du_medecin(self.medecin_id)
         for position, t in enumerate(file, start=1):
             if t.pk == self.pk:
@@ -448,3 +502,71 @@ class Triage(models.Model):
 
     def __str__(self):
         return f"Triage {self.patient} – niveau {self.niveau_effectif or '?'}"
+
+
+class ReglageTriage(models.Model):
+    """Paramètres de la file d'attente, modifiables par l'administrateur (une seule ligne).
+
+    Les délais sont en minutes de PRÉSENCE du médecin. Valeurs de démonstration : à faire valider
+    par un professionnel de santé."""
+
+    delai_niveau_2 = models.PositiveIntegerField(
+        "Délai cible, niveau 2 (très urgent)", default=30, validators=[MinValueValidator(5)],
+        help_text="Minutes de présence du médecin.",
+    )
+    delai_niveau_3 = models.PositiveIntegerField(
+        "Délai cible, niveau 3 (urgent)", default=120, validators=[MinValueValidator(5)],
+        help_text="Minutes de présence du médecin.",
+    )
+    delai_niveau_4 = models.PositiveIntegerField(
+        "Délai cible, niveau 4 (standard)", default=480, validators=[MinValueValidator(5)],
+        help_text="Minutes de présence du médecin (480 = 8 h, soit un jour de présence).",
+    )
+    delai_niveau_5 = models.PositiveIntegerField(
+        "Délai cible, niveau 5 (non urgent)", default=1440, validators=[MinValueValidator(5)],
+        help_text="Minutes de présence du médecin (1440 = 24 h, soit environ trois jours de présence).",
+    )
+    plafond_depassements = models.PositiveSmallIntegerField(
+        "Dépassements maximum", default=5, validators=[MinValueValidator(1), MaxValueValidator(20)],
+        help_text="Nombre de fois qu'une demande peut être dépassée par une demande plus récente.",
+    )
+    seuil_risque = models.PositiveSmallIntegerField(
+        "Seuil « à risque » (%)", default=75, validators=[MinValueValidator(50), MaxValueValidator(95)],
+        help_text="Part du délai écoulée à partir de laquelle une demande est signalée « à risque ».",
+    )
+    duree_consultation = models.PositiveSmallIntegerField(
+        "Durée moyenne d'une consultation (min)", default=20, validators=[MinValueValidator(5), MaxValueValidator(120)],
+        help_text="Sert à estimer l'heure de prise en charge.",
+    )
+    facteur_garantie = models.PositiveSmallIntegerField(
+        "Garantie : passage prioritaire après (× le délai)", default=3, validators=[MinValueValidator(2), MaxValueValidator(10)],
+        help_text="Une demande protégée qui a attendu ce nombre de fois son délai cible passe devant tous les cas, sauf le vital.",
+    )
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "réglage du triage"
+        verbose_name_plural = "réglages du triage"
+
+    def __str__(self):
+        return "Réglages de la file d'attente"
+
+    def clean(self):
+        super().clean()
+        delais = [self.delai_niveau_2, self.delai_niveau_3, self.delai_niveau_4, self.delai_niveau_5]
+        if None not in delais and any(a >= b for a, b in zip(delais, delais[1:])):
+            raise ValidationError("Les délais doivent augmenter avec le niveau : le niveau 2 est le plus court, le niveau 5 le plus long.")
+
+    @classmethod
+    def actuel(cls):
+        """Le réglage enregistré, ou les valeurs par défaut s'il n'y en a pas encore."""
+        return cls.objects.first() or cls()
+
+    def vers_reglage(self):
+        return file_attente.Reglage(
+            delais={2: self.delai_niveau_2, 3: self.delai_niveau_3, 4: self.delai_niveau_4, 5: self.delai_niveau_5},
+            plafond=self.plafond_depassements,
+            seuil_risque=self.seuil_risque / 100,
+            duree_consultation=self.duree_consultation,
+            facteur_garantie=float(self.facteur_garantie),
+        )

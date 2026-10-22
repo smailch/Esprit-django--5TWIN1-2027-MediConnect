@@ -1701,7 +1701,8 @@ class CreneauxPagesTests(SimpleTestCase):
         import inspect
 
         source = inspect.getsource(vues_patients.creneaux)
-        for morceau in ("choix not in libres", "planning.reservable", "Triage.creneaux_pris", "_demandes_actives(patient)"):
+        for morceau in ("choix not in disponibles", "planning.reservable", "Triage.creneaux_pris", "_demandes_actives(patient)",
+                        "Second verrou"):
             self.assertIn(morceau, source)
 
     def rendre(self, triage, jours):
@@ -1710,7 +1711,7 @@ class CreneauxPagesTests(SimpleTestCase):
                                                            "total": total, "duree": 30}, self.requete())
 
     def test_page_avec_creneaux_groupes_par_jour(self):
-        jours = planning.grouper(planning.generer(SEMAINE, LUNDI_8H))[:3]
+        jours = planning.grouper_grille(planning.grille(SEMAINE, LUNDI_8H))[:3]
         html = self.rendre(self.triage(), jours)
         self.assertIn("Choisir un créneau", html)
         self.assertEqual(html.count('type="radio" name="debut"'), sum(j["total"] for j in jours))
@@ -1723,7 +1724,7 @@ class CreneauxPagesTests(SimpleTestCase):
         self.assertIn("required", html)
 
     def test_valeur_envoyee_lisible_par_le_serveur(self):
-        jours = planning.grouper(planning.generer(SEMAINE, LUNDI_8H))[:1]
+        jours = planning.grouper_grille(planning.grille(SEMAINE, LUNDI_8H))[:1]
         html = self.rendre(self.triage(), jours)
         import re
 
@@ -1831,7 +1832,7 @@ class ParcoursCreneauTests(SimpleTestCase):
         html = render_to_string("patients/creneaux.html", {"triage": t, "medecin": {}, "jours": [], "total": 0, "duree": 30}, self.requete())
         self.assertIn('class="stepper"', html)
         self.assertIn("Passer : rester dans la file", render_to_string("patients/creneaux.html", {
-            "triage": t, "medecin": {}, "jours": planning.grouper(planning.generer(SEMAINE, LUNDI_8H))[:1], "total": 5, "duree": 30}, self.requete()))
+            "triage": t, "medecin": {}, "jours": planning.grouper_grille(planning.grille(SEMAINE, LUNDI_8H))[:1], "total": 5, "duree": 30}, self.requete()))
 
     def soumettre_symptomes(self, niveau):
         """Envoie le formulaire de symptômes avec un résultat de triage simulé, sans base de données."""
@@ -1876,3 +1877,580 @@ def inspect_source(objet):
     import inspect
 
     return inspect.getsource(objet)
+
+
+# --- File d'attente équitable (échéances, plafond de dépassements) --------------------------------
+from . import file_attente as fa  # noqa: E402
+from . import suivi as suivi_mod  # noqa: E402
+from .models import ReglageTriage  # noqa: E402
+
+JOURS_OUVRES = {j: [(9, 12), (14, 17)] for j in range(5)}  # lundi à vendredi, 6 h de présence par jour
+MARDI_9H = datetime.datetime(2026, 10, 20, 9, 0, tzinfo=TUNIS)
+
+
+class MinutesOuvreesTests(SimpleTestCase):
+    def test_sans_horaires_temps_reel(self):
+        a = LUNDI_8H
+        self.assertEqual(fa.minutes_ouvrees_entre(a, a + datetime.timedelta(hours=5), {}, TUNIS), 300)
+        self.assertEqual(fa.ajouter_minutes_ouvrees(a, 90, {}, TUNIS), a + datetime.timedelta(minutes=90))
+
+    def test_seule_la_presence_du_medecin_compte(self):
+        # lundi 8 h -> lundi 13 h : présence 9-12 = 180 min (la pause de 12 h à 14 h ne compte pas)
+        fin = LUNDI_8H.replace(hour=13)
+        self.assertEqual(fa.minutes_ouvrees_entre(LUNDI_8H, fin, JOURS_OUVRES, TUNIS), 180)
+
+    def test_la_nuit_et_le_week_end_ne_comptent_pas(self):
+        vendredi_16h = datetime.datetime(2026, 10, 23, 16, 0, tzinfo=TUNIS)
+        lundi_10h = datetime.datetime(2026, 10, 26, 10, 0, tzinfo=TUNIS)
+        # vendredi 16-17 (60 min) + lundi 9-10 (60 min)
+        self.assertEqual(fa.minutes_ouvrees_entre(vendredi_16h, lundi_10h, JOURS_OUVRES, TUNIS), 120)
+
+    def test_fin_avant_debut_zero(self):
+        self.assertEqual(fa.minutes_ouvrees_entre(LUNDI_8H, LUNDI_8H - datetime.timedelta(hours=1), JOURS_OUVRES, TUNIS), 0)
+
+    def test_ajouter_des_minutes_saute_les_pauses_et_les_nuits(self):
+        # 30 min après lundi 11 h 45 : 15 min avant la pause, puis 15 min de l'après-midi -> 14 h 15
+        debut = LUNDI_8H.replace(hour=11, minute=45)
+        self.assertEqual(fa.ajouter_minutes_ouvrees(debut, 30, JOURS_OUVRES, TUNIS), LUNDI_8H.replace(hour=14, minute=15))
+        # 7 h de présence depuis lundi 9 h : 6 h le lundi, puis 1 h le mardi -> mardi 10 h
+        self.assertEqual(fa.ajouter_minutes_ouvrees(LUNDI_8H.replace(hour=9), 420, JOURS_OUVRES, TUNIS), MARDI_9H.replace(hour=10))
+
+    def test_demande_hors_horaires_commence_a_l_ouverture(self):
+        nuit = LUNDI_8H.replace(hour=2)
+        self.assertEqual(fa.ajouter_minutes_ouvrees(nuit, 30, JOURS_OUVRES, TUNIS), LUNDI_8H.replace(hour=9, minute=30))
+
+    def test_aller_et_retour_coherents(self):
+        for minutes in (10, 95, 400, 1440):
+            with self.subTest(minutes=minutes):
+                fin = fa.ajouter_minutes_ouvrees(LUNDI_8H, minutes, JOURS_OUVRES, TUNIS)
+                self.assertAlmostEqual(fa.minutes_ouvrees_entre(LUNDI_8H, fin, JOURS_OUVRES, TUNIS), minutes, places=3)
+
+    def test_plage_jusqu_a_minuit(self):
+        h = {0: [(20, 24)]}
+        self.assertEqual(fa.minutes_ouvrees_entre(LUNDI_8H, LUNDI_8H + datetime.timedelta(days=1), h, TUNIS), 240)
+
+
+class EtatDuDelaiTests(SimpleTestCase):
+    def etat(self, niveau, ecoule_min, **kw):
+        return fa.evaluer_delai(LUNDI_8H, niveau, LUNDI_8H + datetime.timedelta(minutes=ecoule_min), fa.DEFAUT, {}, TUNIS, **kw)
+
+    def test_delais_par_defaut(self):
+        self.assertEqual(fa.DEFAUT.delais, {2: 30, 3: 120, 4: 480, 5: 1440})
+        self.assertEqual((fa.DEFAUT.plafond, fa.DEFAUT.seuil_risque, fa.DEFAUT.duree_consultation), (5, 0.75, 20))
+
+    def test_seuils_dans_les_temps_a_risque_en_retard(self):
+        for ecoule, attendu in ((0, "dans_les_temps"), (89, "dans_les_temps"), (90, "a_risque"), (119, "a_risque"),
+                                (120, "en_retard"), (500, "en_retard")):
+            with self.subTest(ecoule=ecoule):
+                self.assertEqual(self.etat(3, ecoule).etat, attendu)
+
+    def test_echeance_reste_et_pourcentage(self):
+        d = self.etat(3, 60)
+        self.assertEqual(d.echeance, LUNDI_8H + datetime.timedelta(minutes=120))
+        self.assertEqual((d.cible_min, d.ecoule_min, d.reste_min, d.pourcentage), (120, 60, 60, 50))
+        self.assertEqual(self.etat(3, 500).pourcentage, 100)  # la jauge ne dépasse jamais 100 %
+        self.assertEqual(self.etat(3, 500).reste_min, -380)
+
+    def test_chaque_niveau_a_son_delai(self):
+        self.assertEqual([self.etat(n, 0).cible_min for n in (2, 3, 4, 5)], [30, 120, 480, 1440])
+
+    def test_niveau_vital_et_niveau_inconnu(self):
+        self.assertEqual(self.etat(1, 9999).etat, "immediat")
+        self.assertEqual(self.etat(None, 0).etat, "inconnu")
+
+    def test_un_rendez_vous_fixe_n_est_en_retard_qu_apres_son_heure(self):
+        creneau = LUNDI_8H + datetime.timedelta(days=2)
+        self.assertEqual(fa.delai_planifie(creneau, LUNDI_8H).etat, "planifie")
+        self.assertEqual(fa.delai_planifie(creneau, creneau + datetime.timedelta(minutes=1)).etat, "en_retard")
+
+    def test_le_retard_se_compte_en_presence_du_medecin(self):
+        # niveau 4 (480 min) arrivé vendredi 16 h : lundi 9 h il n'a que 60 min de présence écoulée
+        vendredi = datetime.datetime(2026, 10, 23, 16, 0, tzinfo=TUNIS)
+        lundi = datetime.datetime(2026, 10, 26, 9, 0, tzinfo=TUNIS)
+        d = fa.evaluer_delai(vendredi, 4, lundi, fa.DEFAUT, JOURS_OUVRES, TUNIS)
+        self.assertEqual((d.etat, d.ecoule_min), ("dans_les_temps", 60))
+
+    def test_libelles_lisibles(self):
+        self.assertEqual([fa.Delai(etat=e).libelle for e in ("dans_les_temps", "a_risque", "en_retard", "planifie")],
+                         ["Dans les temps", "À risque", "En retard", "Rendez-vous fixé"])
+
+    def test_formatage_des_durees(self):
+        for minutes, attendu in ((0, "0 min"), (45, "45 min"), (60, "1 h"), (130, "2 h 10"), (1440, "24 h"), (-90, "1 h 30")):
+            with self.subTest(minutes=minutes):
+                self.assertEqual(fa.formater_duree(minutes), attendu)
+
+
+class OrdreDePassageTests(SimpleTestCase):
+    """Le cas décrit : un patient peu urgent qui attend ne doit pas être dépassé indéfiniment."""
+
+    def demande(self, niveau, arrivee, depassements=0, creneau=None):
+        t = Triage(medecin_id="m1", niveau=niveau, statut="en_attente", cree_le=arrivee, nb_depassements=depassements, creneau=creneau)
+        t.pk = ObjectId()
+        return t
+
+    def ordre(self, demandes, maintenant, reglage=fa.DEFAUT, horaires=None):
+        return Triage.trier_file(demandes, reglage, horaires or {}, maintenant)
+
+    def test_la_regle_actuelle_aurait_laisse_le_niveau_5_en_dernier(self):
+        # contrôle de la situation de départ : tri par (niveau, arrivée) -> le niveau 5 est toujours dernier
+        ancien5 = self.demande(5, LUNDI_8H)
+        nouveau2 = self.demande(2, LUNDI_8H + datetime.timedelta(days=4))
+        ancienne = sorted([ancien5, nouveau2], key=lambda t: (t.niveau_effectif or 5, t.cree_le))
+        self.assertEqual(ancienne, [nouveau2, ancien5])
+
+    def test_un_patient_ancien_non_protege_reste_derriere_les_urgents(self):
+        # les niveaux 2 et 3 restent prioritaires : c'est la sécurité des cas urgents
+        ancien5 = self.demande(5, LUNDI_8H)
+        for jours in (0.5, 1.5):
+            with self.subTest(jours=jours):
+                arrivee = LUNDI_8H + datetime.timedelta(days=jours)
+                nouveau2 = self.demande(2, arrivee)
+                self.assertIs(self.ordre([nouveau2, ancien5], arrivee)[0], nouveau2)
+
+    def test_un_patient_ancien_passe_devant_les_demandes_non_urgentes_plus_recentes(self):
+        ancien5 = self.demande(5, LUNDI_8H)
+        nouveau4 = self.demande(4, LUNDI_8H + datetime.timedelta(days=1.5))
+        self.assertEqual(self.ordre([nouveau4, ancien5], LUNDI_8H + datetime.timedelta(days=1.5)), [ancien5, nouveau4])
+
+    def test_garantie_apres_trois_fois_le_delai_le_patient_protege_passe_devant_les_urgents(self):
+        protegee = self.demande(5, LUNDI_8H, depassements=5)  # délai cible 24 h : garantie à partir de 72 h
+        for jours, premier in ((2.9, "urgent"), (3.1, "protegee")):
+            with self.subTest(jours=jours):
+                maintenant = LUNDI_8H + datetime.timedelta(days=jours)
+                urgent = self.demande(2, maintenant)
+                file = self.ordre([urgent, protegee], maintenant)
+                self.assertIs(file[0], urgent if premier == "urgent" else protegee)
+
+    def test_la_garantie_exige_d_etre_protege(self):
+        # attendu 4 jours mais seulement dépassé 2 fois : pas encore protégé, donc derrière l'urgent
+        pas_protegee = self.demande(5, LUNDI_8H, depassements=2)
+        maintenant = LUNDI_8H + datetime.timedelta(days=4)
+        urgent = self.demande(2, maintenant)
+        self.assertIs(self.ordre([pas_protegee, urgent], maintenant)[0], urgent)
+
+    def test_la_garantie_est_reglable(self):
+        protegee = self.demande(5, LUNDI_8H, depassements=5)
+        maintenant = LUNDI_8H + datetime.timedelta(days=1.2)  # 1,2 fois le délai
+        urgent = self.demande(2, maintenant)
+        souple = fa.Reglage(delais=fa.DEFAUT.delais, facteur_garantie=1.0)
+        self.assertIs(self.ordre([urgent, protegee], maintenant, reglage=souple)[0], protegee)
+        self.assertIs(self.ordre([urgent, protegee], maintenant)[0], urgent)  # réglage par défaut : 3 fois
+
+    def test_groupes_de_passage_dans_l_ordre(self):
+        maintenant = LUNDI_8H + datetime.timedelta(days=5)
+        vital = self.demande(1, maintenant)
+        garantie = self.demande(5, LUNDI_8H, depassements=9)            # protégée, 5 jours = 5 fois son délai
+        urgent2 = self.demande(2, maintenant - datetime.timedelta(minutes=5))
+        urgent3 = self.demande(3, maintenant - datetime.timedelta(minutes=50))
+        protegee4 = self.demande(4, LUNDI_8H + datetime.timedelta(days=4.5), depassements=5)  # protégée, 1,5 fois son délai
+        autre5 = self.demande(5, LUNDI_8H + datetime.timedelta(days=4.5, hours=1))
+        melange = [autre5, urgent3, protegee4, garantie, urgent2, vital]
+        self.assertEqual(self.ordre(melange, maintenant), [vital, garantie, urgent2, urgent3, protegee4, autre5])
+
+    def test_cas_urgent_passe_devant_tant_que_l_ancien_n_est_pas_en_retard(self):
+        ancien5 = self.demande(5, LUNDI_8H)
+        nouveau3 = self.demande(3, LUNDI_8H + datetime.timedelta(hours=2))
+        self.assertEqual(self.ordre([ancien5, nouveau3], LUNDI_8H + datetime.timedelta(hours=2)), [nouveau3, ancien5])
+
+    def test_a_niveau_egal_premier_arrive_premier_servi(self):
+        a, b = self.demande(4, LUNDI_8H), self.demande(4, LUNDI_8H + datetime.timedelta(minutes=5))
+        self.assertEqual(self.ordre([b, a], LUNDI_8H + datetime.timedelta(hours=1)), [a, b])
+
+    def test_le_cas_vital_est_toujours_premier(self):
+        vital = self.demande(1, LUNDI_8H + datetime.timedelta(days=3))
+        tres_ancien = self.demande(5, LUNDI_8H, depassements=99)
+        self.assertEqual(self.ordre([tres_ancien, vital], LUNDI_8H + datetime.timedelta(days=9))[0], vital)
+
+    def test_une_demande_protegee_passe_devant_les_demandes_non_urgentes(self):
+        protegee = self.demande(5, LUNDI_8H, depassements=5)
+        standard = self.demande(4, LUNDI_8H + datetime.timedelta(minutes=10))  # échéance bien plus proche, mais non protégée
+        urgent = self.demande(2, LUNDI_8H + datetime.timedelta(minutes=10))
+        self.assertEqual(self.ordre([standard, protegee, urgent], LUNDI_8H + datetime.timedelta(minutes=10)), [urgent, protegee, standard])
+
+    def test_avant_le_plafond_la_demande_n_est_pas_protegee(self):
+        t = self.demande(5, LUNDI_8H, depassements=4)
+        self.assertFalse(t.est_protegee())
+        self.assertTrue(self.demande(5, LUNDI_8H, depassements=5).est_protegee())
+
+    def test_le_plafond_est_reglable(self):
+        souple = fa.Reglage(delais=fa.DEFAUT.delais, plafond=2)
+        self.assertTrue(self.demande(5, LUNDI_8H, depassements=2).est_protegee(souple))
+
+    def test_les_rendez_vous_fixes_ne_sont_pas_dans_la_file(self):
+        libre = self.demande(4, LUNDI_8H)
+        fixe = self.demande(4, LUNDI_8H, creneau=LUNDI_8H + datetime.timedelta(days=1))
+        self.assertEqual(self.ordre([libre, fixe], LUNDI_8H), [libre])
+        self.assertIsNone(fixe.place_dans_la_file(file=[libre]))
+        self.assertEqual(libre.place_dans_la_file(file=[libre]), (1, 1))
+
+    def test_demande_sans_niveau_traitee_comme_non_urgente(self):
+        sans = self.demande(None, LUNDI_8H)
+        urgent = self.demande(3, LUNDI_8H + datetime.timedelta(minutes=1))
+        self.assertEqual(self.ordre([sans, urgent], LUNDI_8H + datetime.timedelta(minutes=1)), [urgent, sans])
+
+    def test_le_niveau_requalifie_par_le_medecin_change_l_echeance(self):
+        t = self.demande(5, LUNDI_8H)
+        t.niveau_medecin = 2  # le médecin juge la demande très urgente : l'attente déjà subie compte
+        d = t.delai_calcule(fa.DEFAUT, {}, LUNDI_8H + datetime.timedelta(hours=1))
+        self.assertEqual(d.etat, "en_retard")
+
+    def test_nb_depassements_absent_en_base_vaut_zero(self):
+        t = self.demande(5, LUNDI_8H, depassements=None)
+        self.assertFalse(t.est_protegee())
+        self.assertEqual(self.ordre([t], LUNDI_8H), [t])
+
+    def test_depassements_comptes_pour_les_plus_anciennes_seulement(self):
+        ancienne = (1, LUNDI_8H, None)
+        recente = (2, LUNDI_8H + datetime.timedelta(hours=3), None)
+        fixe = (3, LUNDI_8H, LUNDI_8H + datetime.timedelta(days=1))
+        prise = (LUNDI_8H + datetime.timedelta(hours=1), None)
+        self.assertEqual(fa.depassees_par(prise, [ancienne, recente, fixe]), [1])  # ni la plus récente, ni le rendez-vous fixé
+        self.assertEqual(fa.depassees_par((LUNDI_8H, None), [ancienne, recente]), [])  # la plus ancienne ne double personne
+        self.assertEqual(fa.depassees_par((LUNDI_8H + datetime.timedelta(hours=1), LUNDI_8H), [ancienne]), [])  # un rendez-vous ne double personne
+
+    def test_enregistrer_depassements_incremente_les_demandes_plus_anciennes(self):
+        ancienne = self.demande(5, LUNDI_8H, depassements=1)
+        recente = self.demande(2, LUNDI_8H + datetime.timedelta(hours=5))
+        prise = self.demande(3, LUNDI_8H + datetime.timedelta(hours=1))
+        with mock.patch.object(Triage.objects, "filter", return_value=[ancienne, recente, prise]), \
+                mock.patch.object(Triage, "save") as sauvegarde:
+            nombre = prise.enregistrer_depassements()
+        self.assertEqual((nombre, ancienne.nb_depassements, recente.nb_depassements), (1, 2, 0))
+        sauvegarde.assert_called_once_with(update_fields=["nb_depassements"])
+
+    def flux_continu_de_cas_urgents(self, reglage, etapes=1700):
+        """Le cas décrit : un patient de niveau 5 arrive, puis un nouveau cas de niveau 2 toutes les 10 minutes,
+        autant que le médecin peut en voir. Renvoie l'instant où le patient de niveau 5 est vu, ou None."""
+        horaires = {j: [(8, 20)] for j in range(7)}
+        ancien5 = self.demande(5, LUNDI_8H)
+        file = [ancien5]
+        for etape in range(1, etapes):
+            maintenant = LUNDI_8H + datetime.timedelta(minutes=10 * etape)
+            file.append(self.demande(2, maintenant))
+            file = Triage.trier_file(file, reglage, horaires, maintenant)
+            vu = file.pop(0)
+            for i in fa.depassees_par((vu.cree_le, vu.creneau), [(t.pk, t.cree_le, t.creneau) for t in file]):
+                for t in file:
+                    if t.pk == i:
+                        t.nb_depassements += 1  # comme le back-office quand le médecin prend la demande
+            if vu is ancien5:
+                return maintenant
+        return None
+
+    def test_simulation_un_flux_continu_de_cas_urgents_ne_bloque_pas_un_patient_pour_toujours(self):
+        horaires = {j: [(8, 20)] for j in range(7)}
+        vu_a = self.flux_continu_de_cas_urgents(fa.DEFAUT)
+        self.assertIsNotNone(vu_a, "le patient de niveau 5 n'a jamais été vu")
+        garantie = fa.ajouter_minutes_ouvrees(LUNDI_8H, fa.DEFAUT.facteur_garantie * fa.DEFAUT.delais[5], horaires, TUNIS)
+        self.assertLessEqual(vu_a, garantie + datetime.timedelta(minutes=30))  # au plus tard à 3 fois son délai cible
+        self.assertGreater(vu_a, LUNDI_8H + datetime.timedelta(hours=48))  # les urgents ont bien été servis avant lui
+
+    def test_simulation_sans_la_garantie_le_patient_serait_oublie(self):
+        # contrôle négatif : sans filet de sécurité, le flux urgent saturé bloque indéfiniment le niveau 5
+        sans_garantie = fa.Reglage(delais=fa.DEFAUT.delais, facteur_garantie=1e9)
+        self.assertIsNone(self.flux_continu_de_cas_urgents(sans_garantie))
+
+
+class ReglageTriageTests(SimpleTestCase):
+    def test_valeurs_par_defaut_identiques_au_module(self):
+        r = ReglageTriage().vers_reglage()
+        self.assertEqual(r, fa.DEFAUT)
+
+    def test_conversion(self):
+        r = ReglageTriage(delai_niveau_2=10, delai_niveau_3=60, delai_niveau_4=300, delai_niveau_5=900,
+                          plafond_depassements=3, seuil_risque=60, duree_consultation=15, facteur_garantie=4).vers_reglage()
+        self.assertEqual(r.delais, {2: 10, 3: 60, 4: 300, 5: 900})
+        self.assertEqual((r.plafond, r.seuil_risque, r.duree_consultation, r.facteur_garantie), (3, 0.6, 15, 4.0))
+
+    def test_les_delais_doivent_augmenter_avec_le_niveau(self):
+        with self.assertRaises(ValidationError):
+            ReglageTriage(delai_niveau_3=20).clean()  # 20 < 30 (niveau 2)
+        with self.assertRaises(ValidationError):
+            ReglageTriage(delai_niveau_4=120).clean()  # égal au niveau 3
+        ReglageTriage().clean()
+
+    def test_bornes_des_champs(self):
+        for champ, valeur in (("delai_niveau_2", 1), ("plafond_depassements", 0), ("plafond_depassements", 21),
+                              ("seuil_risque", 49), ("seuil_risque", 96), ("duree_consultation", 4), ("duree_consultation", 121),
+                              ("facteur_garantie", 1), ("facteur_garantie", 11)):
+            with self.subTest(champ=champ, valeur=valeur):
+                with self.assertRaises(ValidationError) as ctx:
+                    ReglageTriage(**{champ: valeur}).clean_fields(exclude=["modifie_le"])
+                self.assertIn(champ, ctx.exception.message_dict)
+
+    def test_actuel_sans_ligne_en_base_donne_les_valeurs_par_defaut(self):
+        with mock.patch.object(ReglageTriage.objects, "first", return_value=None):
+            self.assertEqual(ReglageTriage.actuel().vers_reglage(), fa.DEFAUT)
+
+
+class SuiviTests(SimpleTestCase):
+    def demande(self, niveau, arrivee, medecin="m1", creneau=None):
+        t = Triage(medecin_id=medecin, niveau=niveau, statut="en_attente", cree_le=arrivee, creneau=creneau, nb_depassements=0)
+        t.pk = ObjectId()
+        return t
+
+    def test_annotation_de_la_file_et_du_planning(self):
+        maintenant = datetime.datetime(2026, 10, 21, 10, 0, tzinfo=TUNIS)  # un mercredi, 10 h
+        a = self.demande(4, maintenant - datetime.timedelta(hours=2))
+        b = self.demande(2, maintenant - datetime.timedelta(minutes=5))
+        c = self.demande(3, maintenant - datetime.timedelta(hours=1), creneau=maintenant + datetime.timedelta(days=1))
+        autre = self.demande(5, maintenant, medecin="m2")
+        groupes = suivi_mod.annoter([a, b, c, autre], fa.DEFAUT, maintenant)
+        self.assertEqual(set(groupes), {"m1", "m2"})
+        self.assertEqual(groupes["m1"]["file"], [b, a])  # le très urgent d'abord
+        self.assertEqual(groupes["m1"]["planning"], [c])
+        self.assertEqual((b.place, a.place, c.place), ((1, 2), (2, 2), None))
+        self.assertEqual(c.delai.etat, "planifie")
+        self.assertEqual(c.prise_en_charge_estimee, c.creneau)
+        self.assertEqual((autre.place, autre.protegee), ((1, 1), False))
+
+    def test_prise_en_charge_estimee_selon_la_position(self):
+        maintenant = datetime.datetime(2026, 10, 21, 10, 0, tzinfo=TUNIS)
+        demandes = [self.demande(4, maintenant - datetime.timedelta(minutes=10 - i)) for i in range(3)]
+        suivi_mod.annoter(demandes, fa.DEFAUT, maintenant)
+        premiere, deuxieme, troisieme = demandes
+        self.assertEqual(premiere.prise_en_charge_estimee, maintenant)  # elle est la prochaine
+        self.assertEqual(deuxieme.prise_en_charge_estimee, maintenant + datetime.timedelta(minutes=20))
+        self.assertEqual(troisieme.prise_en_charge_estimee, maintenant + datetime.timedelta(minutes=40))
+
+    def test_file_vide(self):
+        self.assertEqual(suivi_mod.annoter([], fa.DEFAUT), {})
+
+    def test_horaires_des_medecins(self):
+        self.assertTrue(suivi_mod.horaires_du_medecin("m1"))
+        self.assertEqual(suivi_mod.horaires_du_medecin("zzz"), {})
+        self.assertEqual(suivi_mod.horaires_du_medecin("m3"), {})  # médecin indisponible
+
+
+# --- Pages : suivi de la file, liste des médecins, grille des créneaux ------------------------------
+def FauxPatient(nom="Amel Trabelsi"):
+    """Patient de test (non enregistré) dont on peut afficher le nom."""
+    prenom, _, famille = nom.partition(" ")
+    patient = Patient(user=get_user_model()(username="x", first_name=prenom, last_name=famille), date_naissance=datetime.date(1990, 5, 4))
+    patient.pk = ObjectId()
+    return patient
+
+
+class SuiviPagesTests(SimpleTestCase):
+    def requete(self, nom="tableau_de_bord"):
+        requete = RequestFactory().get("/x/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a",
+                                       get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def suivi(self, etat="dans_les_temps", ratio=0.3, place=(2, 5), depassements=0, protegee=False, creneau=None, reste=84):
+        delai = fa.Delai(etat=etat, echeance=LUNDI_8H + datetime.timedelta(hours=3), cible_min=120, ecoule_min=36, reste_min=reste, ratio=ratio)
+        if creneau:
+            delai = fa.Delai(etat=etat, echeance=creneau)
+        return SimpleNamespace(creneau=creneau, place=None if creneau else place, delai=delai, protegee=protegee,
+                               nb_depassements=depassements, prise_en_charge_estimee=LUNDI_8H + datetime.timedelta(hours=1), pk="x")
+
+    def rendre(self, **kw):
+        return render_to_string("patients/_suivi_attente.html", {"t": self.suivi(**kw)}, self.requete())
+
+    def test_dans_les_temps(self):
+        html = self.rendre()
+        self.assertIn("sev sev-legere", html)
+        self.assertIn(">Dans les temps<", html)
+        self.assertIn("2e sur 5", html)
+        self.assertIn("Prise en charge visée avant", html)
+        self.assertIn("il reste 1 h 24 de présence du médecin", html)
+        self.assertIn("Prise en charge estimée", html)
+        self.assertRegex(html, r"lundi 19 octobre, vers 09:00")  # « vers » n'est pas lu comme des codes de format de date
+        self.assertNotIn("CET", html)
+        self.assertNotIn("alert", html)
+
+    def test_jauge_accessible(self):
+        html = self.rendre(ratio=0.3)
+        self.assertIn('role="progressbar"', html)
+        self.assertIn('aria-valuenow="30"', html)
+        self.assertIn('aria-label="Part du délai cible écoulée"', html)
+        self.assertIn('style="width: 30%"', html)
+        self.assertIn("meter-dans_les_temps", html)
+
+    def test_premiere_place(self):
+        self.assertIn("1re sur 3", self.rendre(place=(1, 3)))
+
+    def test_a_risque_avertit_sans_alarmer(self):
+        html = self.rendre(etat="a_risque", ratio=0.8)
+        self.assertIn("sev-moderee", html)
+        self.assertIn("alert-warn", html)
+        self.assertIn("approche du délai visé", html)
+        self.assertNotIn("alert-danger", html)
+        self.assertIn("meter-a_risque", html)
+
+    def test_en_retard_informe_et_propose_une_issue(self):
+        html = self.rendre(etat="en_retard", ratio=1.4, reste=-48)
+        self.assertIn("sev-severe", html)
+        self.assertIn('role="alert"', html)
+        self.assertIn("délai dépassé de 48 min", html)
+        self.assertIn("voir d'autres médecins", html)
+        self.assertIn('style="width: 100%"', html)  # la jauge reste à 100 %
+
+    def test_l_etat_n_est_pas_indique_par_la_couleur_seule(self):
+        for etat, texte in (("dans_les_temps", "Dans les temps"), ("a_risque", "À risque"), ("en_retard", "En retard")):
+            with self.subTest(etat=etat):
+                self.assertIn(f">{texte}<", self.rendre(etat=etat))
+
+    def test_depassements_expliques_avec_accord_grammatical(self):
+        self.assertIn("1 personne plus urgente est passée devant vous", self.rendre(depassements=1))
+        self.assertIn("3 personnes plus urgentes sont passées devant vous", self.rendre(depassements=3))
+        self.assertNotIn("passée", self.rendre(depassements=0))
+
+    def test_cas_vital_affiche_l_heure_estimee_et_explique_l_absence_de_rendez_vous(self):
+        t = self.suivi(etat="immediat", place=(1, 5))
+        t.delai = fa.Delai(etat="immediat")  # un cas vital n'a ni échéance ni créneau
+        html = render_to_string("patients/_suivi_attente.html", {"t": t}, self.requete())
+        self.assertIn(">Immédiat<", html)
+        self.assertIn("1re sur 5", html)
+        self.assertIn("Pas de rendez-vous à fixer", html)
+        self.assertRegex(html, r"Prise en charge estimée : <strong[^>]*>lundi 19 octobre, vers 09:00</strong>")
+        self.assertNotIn("progressbar", html)  # pas de jauge : il n'y a pas de délai à respecter
+
+    def test_cas_vital_sans_estimation_n_affiche_que_l_explication(self):
+        t = self.suivi(etat="immediat", place=(1, 1))
+        t.delai, t.prise_en_charge_estimee = fa.Delai(etat="immediat"), None
+        html = render_to_string("patients/_suivi_attente.html", {"t": t}, self.requete())
+        self.assertIn("Pas de rendez-vous à fixer", html)
+        self.assertNotIn("Prise en charge estimée", html)
+
+    def test_cas_prioritaire_sur_le_resultat_renvoie_au_suivi(self):
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=1, statut="en_attente", explication="e")
+        t.pk = ObjectId()
+        t.__dict__.update(self.suivi(etat="immediat", place=(1, 2)).__dict__ | {"creneau": None})
+        t.delai = fa.Delai(etat="immediat")
+        html = render_to_string("patients/resultat.html", {"triage": t, "message": "m", "propositions": [], "can_book": False}, self.requete("resultat"))
+        self.assertIn("il n'y a pas de créneau à choisir", html)
+        self.assertIn("indiquée dans le suivi ci-dessus", html)
+        self.assertIn("Prise en charge estimée", html)  # l'heure est bien affichée dans le bloc de suivi
+        self.assertNotIn("Choisir un créneau", html)
+
+    def test_demande_protegee(self):
+        html = self.rendre(protegee=True, depassements=5)
+        self.assertIn("Votre demande est protégée", html)
+        self.assertIn("seuls les cas urgents peuvent encore passer devant vous", html)
+        self.assertNotIn("sont passées devant vous", html)
+
+    def test_rendez_vous_fixe(self):
+        html = self.rendre(etat="planifie", creneau=LUNDI_8H + datetime.timedelta(days=1, hours=2))
+        self.assertIn("sev-info", html)
+        self.assertIn(">Rendez-vous fixé<", html)
+        self.assertIn("à 10:00", html)
+        self.assertNotIn("progressbar", html)
+        self.assertNotIn("Votre place", html)
+
+    def test_rendez_vous_manque(self):
+        html = self.rendre(etat="en_retard", creneau=LUNDI_8H)
+        self.assertIn("L'heure de votre rendez-vous est passée", html)
+
+    def test_sans_delai_rien_n_est_affiche(self):
+        html = render_to_string("patients/_suivi_attente.html", {"t": SimpleNamespace(delai=None)}, self.requete())
+        self.assertNotIn("suivi", html)
+
+    def test_le_tableau_de_bord_inclut_le_suivi_et_le_bouton(self):
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr Sara Benali", medecin_specialite="MG", niveau=4,
+                   statut="en_attente", cree_le=LUNDI_8H)
+        t.pk = ObjectId()
+        t.__dict__.update(self.suivi().__dict__ | {"creneau": None})
+        t.peut_reserver, t.propositions = True, []
+        html = render_to_string("patients/tableau_de_bord.html", {"en_cours": [t], "historique": []}, self.requete())
+        self.assertIn("Suivi de la demande", html)
+        self.assertIn("2e sur 5", html)
+        self.assertIn("Choisir le jour et l'heure", html)
+        self.assertEqual(html.count("2e sur 5"), 1)  # une seule fois : l'ancienne ligne a disparu
+
+    def test_le_resultat_affiche_le_suivi_des_demandes_en_attente(self):
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=4, statut="en_attente", explication="e")
+        t.pk = ObjectId()
+        t.__dict__.update(self.suivi().__dict__ | {"creneau": None})
+        html = render_to_string("patients/resultat.html", {"triage": t, "message": "m", "propositions": [], "can_book": True}, self.requete("resultat"))
+        self.assertIn("Suivi de votre demande", html)
+        t.statut = "termine"
+        self.assertNotIn("Suivi de votre demande", render_to_string("patients/resultat.html", {"triage": t, "message": "m", "propositions": [], "can_book": False}, self.requete("resultat")))
+
+    def test_liste_des_medecins_avec_prochain_creneau_et_attente(self):
+        medecins = [
+            dict(medecins_test.trouver("m1"), prochain_creneau=LUNDI_8H.replace(hour=10), en_attente=3),
+            dict(medecins_test.trouver("m2"), prochain_creneau=None, en_attente=1),
+            dict(medecins_test.trouver("m3"), prochain_creneau=None, en_attente=0),
+        ]
+        html = render_to_string("patients/medecins.html", {"medecins": medecins, "specialites": [], "villes": [], "specialite": "", "ville": ""}, self.requete("medecins"))
+        self.assertIn("Prochain créneau", html)
+        self.assertRegex(html, r"(?i)19 oct[^<]*10:00")
+        self.assertIn("3 patients", html)
+        self.assertIn("1 patient<", html.replace("patient\n", "patient<"))
+        self.assertIn("aucun pour le moment", html)
+        self.assertEqual(html.count("Prochain créneau"), 2)  # le médecin indisponible n'affiche pas ces lignes
+
+    def test_grille_les_creneaux_pris_sont_visibles_mais_non_selectionnables(self):
+        grille = planning.grille({0: [(9, 11)]}, LUNDI_8H - datetime.timedelta(days=1), pris=[LUNDI_8H.replace(hour=10)])
+        jours = planning.grouper_grille(grille)[:1]
+        self.assertEqual(jours[0]["total"], 3)  # 4 créneaux, 1 pris
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=4, statut="en_attente")
+        t.pk = ObjectId()
+        html = render_to_string("patients/creneaux.html", {"triage": t, "medecin": {}, "jours": jours, "total": 3, "duree": 30}, self.requete("creneaux"))
+        self.assertEqual(html.count('type="radio" name="debut"'), 3)
+        self.assertEqual(html.count("slot-pris"), 1)
+        self.assertIn("<s>10:00</s>", html)
+        self.assertIn("déjà pris", html)
+        self.assertIn("3 créneaux libres", html)
+        self.assertIn("Les créneaux barrés sont déjà réservés", html)
+
+    def test_un_jour_complet_est_indique(self):
+        grille = planning.grille({0: [(9, 10)]}, LUNDI_8H - datetime.timedelta(days=1), pris=[LUNDI_8H.replace(hour=9), LUNDI_8H.replace(hour=9, minute=30)])
+        jours = planning.grouper_grille(grille)[:1]
+        self.assertEqual(jours[0]["total"], 0)
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=4, statut="en_attente")
+        t.pk = ObjectId()
+        html = render_to_string("patients/creneaux.html", {"triage": t, "medecin": {}, "jours": jours, "total": 1, "duree": 30}, self.requete("creneaux"))
+        self.assertIn("complet", html)
+
+    def test_grille_contient_tous_les_creneaux_libres_ou_non(self):
+        pris = [LUNDI_8H.replace(hour=10)]
+        grille = planning.grille({0: [(9, 12)]}, LUNDI_8H - datetime.timedelta(days=1), pris)
+        premier_jour = [(c, libre) for c, libre in grille if c.date() == LUNDI_8H.date()]
+        self.assertEqual(len(premier_jour), 6)
+        self.assertEqual([libre for _, libre in premier_jour], [True, True, False, True, True, True])
+        self.assertEqual(sum(1 for _, libre in grille if libre), len(planning.generer({0: [(9, 12)]}, LUNDI_8H - datetime.timedelta(days=1), pris)))
+
+    def test_la_page_de_la_file_du_medecin_montre_etat_et_planning(self):
+        d = Triage(patient=FauxPatient(), medecin_id="m1", niveau=4, statut="en_attente", explication="x", cree_le=LUNDI_8H)
+        d.pk = ObjectId()
+        d.__dict__.update(self.suivi(depassements=2).__dict__ | {"creneau": None})
+        p = Triage(patient=FauxPatient("Sonia Mejri"), medecin_id="m1", niveau=3, statut="en_attente", explication="x", cree_le=LUNDI_8H)
+        p.pk = ObjectId()
+        p.__dict__.update(self.suivi(etat="planifie", creneau=LUNDI_8H + datetime.timedelta(days=1)).__dict__)
+        html = render_to_string("patients/file_medecin.html", {"medecin": medecins_test.trouver("m1"), "demandes": [d], "planning": [p], "medecins": medecins_test.tous()}, self.requete("file_medecin_test"))
+        self.assertIn("Rendez-vous fixés", html)
+        self.assertIn("File d&#x27;attente", html.replace("File d'attente", "File d&#x27;attente"))
+        self.assertIn("Sonia Mejri", html)
+        self.assertIn("Amel Trabelsi", html)
+        self.assertIn("dépassée 2 fois", html)
+        self.assertIn("Dans les temps", html)
+
+    def test_les_styles_du_suivi_sont_presents(self):
+        css = (Path(__file__).resolve().parent.parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        for classe in (".meter-a_risque", ".meter-en_retard", ".sev-info", ".alert-warn", ".slot-pris", ".doctor-info", ".kpi-warn"):
+            self.assertIn(classe, css)
+
+    def test_filtres_de_gabarit(self):
+        from .templatetags import suivi_filtres as f
+
+        self.assertEqual(f.duree(90), "1 h 30")
+        self.assertEqual(f.duree(None), "")
+        self.assertEqual(f.duree("abc"), "")
+        self.assertEqual(f.classe_etat("a_risque"), "sev-moderee")
+        self.assertEqual(f.classe_etat("en_retard"), "sev-severe")
+        self.assertEqual(f.classe_etat("dans_les_temps"), "sev-legere")
+        self.assertEqual(f.classe_etat("planifie"), "sev-info")
+        self.assertEqual(f.classe_etat("inconnu"), "")
+
+    def test_le_parcours_de_creation_applique_le_double_verrou(self):
+        import inspect
+
+        source = inspect.getsource(vues_patients.creneaux)
+        self.assertIn("planning.grille(horaires, maintenant, pris)", source)  # les créneaux pris restent visibles, grisés
+        self.assertLess(source.index("choix not in disponibles"), source.index("triage.save"))  # vérifié AVANT l'enregistrement
+        self.assertIn("Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk)", source.split("Second verrou")[1])  # et APRÈS
+        self.assertIn("triage.creneau = ancien", source)  # annulation en cas de conflit simultané

@@ -370,3 +370,26 @@
 .slot input:hover + span { border-color: var(--a-accent); }
 .slot input:checked + span { background: var(--a-accent); color: var(--a-accent-ink); border-color: var(--a-accent); }
 .slot input:focus-visible + span { outline: 2px solid var(--a-accent-hover); outline-offset: 2px; }
+
+/* ---- Suivi de la file d'attente ---------------------------------------------------------- */
+.sev-info { background: var(--a-accent); }
+.alert-warn { background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.4); color: #FEF08A; }
+.suivi-ligne { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; font-size: 0.9rem; }
+.meter { height: 0.55rem; margin-top: 0.85rem; border-radius: 9999px; background: var(--a-line); overflow: hidden; }
+.meter > span { display: block; height: 100%; min-width: 0.3rem; border-radius: 9999px; background: var(--u4); transition: width 0.4s; }
+.meter-a_risque > span { background: var(--u3); }
+.meter-en_retard > span { background: var(--u1); }
+.note { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.85rem; color: var(--a-muted); }
+.note svg { flex: none; margin-top: 0.1rem; color: var(--a-accent); }
+.doctor-info { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.9rem 0 0; font-size: 0.8rem; }
+.doctor-info dt { color: var(--a-muted); }
+.doctor-info dd { margin: 0.1rem 0 0; font-weight: 500; }
+.slot-pris span { background: transparent; border-style: dashed; color: var(--a-muted); cursor: not-allowed; }
+.slot-pris { opacity: 0.7; }
+.slot-pris small { font-size: 0.7rem; }
+@media (prefers-reduced-motion: reduce) { .meter > span { transition: none; } }
+
+/* ---- Back-office : file d'attente ---------------------------------------------------------- */
+.kpi-warn .kpi-num { color: var(--u3); }
+.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; font-size: 0.9rem; }
+.rules li { display: flex; align-items: center; gap: 0.75rem; }

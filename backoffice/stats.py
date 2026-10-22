@@ -57,3 +57,25 @@ def chiffres_cles(lignes, nb_patients):
 def nombre_par_patient(ids_patients):
     """Nombre de demandes par identifiant de patient."""
     return Counter(str(i) for i in ids_patients)
+
+
+def chiffres_file(etats):
+    """Compteurs de la file d'attente à partir de [(état, protégée)] des demandes en attente."""
+    compteur = Counter(etat for etat, _ in etats)
+    return {
+        "total": len(etats),
+        "dans_les_temps": compteur["dans_les_temps"],
+        "a_risque": compteur["a_risque"],
+        "en_retard": compteur["en_retard"],
+        "planifies": compteur["planifie"],
+        "protegees": sum(1 for _, protegee in etats if protegee),
+    }
+
+
+def a_surveiller(demandes, limite=6):
+    """Demandes en retard d'abord, puis à risque ; les plus avancées dans leur délai en premier.
+
+    `demandes` : objets annotés par patients.suivi (attribut `delai` avec `etat` et `ratio`)."""
+    gravite = {"en_retard": 0, "a_risque": 1}
+    candidates = [d for d in demandes if d.delai.etat in gravite]
+    return sorted(candidates, key=lambda d: (gravite[d.delai.etat], -d.delai.ratio))[:limite]

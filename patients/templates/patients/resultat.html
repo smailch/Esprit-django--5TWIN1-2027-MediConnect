@@ -28,6 +28,13 @@
       <p class="mt-4 text-sm">{{ message }}</p>
     </section>
 
+    {% if triage.statut == "en_attente" %}
+    <section class="panel panel-pad" aria-labelledby="t-suivi">
+      <h2 id="t-suivi" class="section-title">Suivi de votre demande</h2>
+      <div class="mt-3">{% include "patients/_suivi_attente.html" with t=triage %}</div>
+    </section>
+    {% endif %}
+
     <section class="panel panel-pad" aria-labelledby="t-expl">
       <h2 id="t-expl" class="section-title">Comment ce niveau a été calculé</h2>
       <p class="muted mt-2 text-sm">{{ triage.explication }}</p>
@@ -80,7 +87,7 @@
         <i data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir un créneau
       </a>
       {% elif triage.statut == "en_attente" %}
-      <p class="muted mt-2 text-sm">Votre cas est pris en charge en priorité : aucun créneau à choisir, le médecin vous reçoit dès que possible.</p>
+      <p class="muted mt-2 text-sm">Votre cas est pris en charge en priorité : il n'y a pas de créneau à choisir. L'heure estimée de prise en charge est indiquée dans le suivi ci-dessus.</p>
       {% else %}
       <p class="muted mt-2 text-sm">Aucun créneau n'est réservé pour cette demande.</p>
       {% endif %}

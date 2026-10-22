@@ -1,0 +1,259 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — File d'attente équitable</title>
+<style>
+@page { size: A4; margin: 18mm 16mm 20mm 16mm; @bottom-center { content: 'MediConnect · File d\'attente équitable · page ' counter(page); font: 9pt 'Segoe UI', Arial; color: #64748B; } }
+@page :first { margin: 0; @bottom-center { content: none; } }
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 10.5pt; line-height: 1.5; margin: 0; }
+h1, h2, h3, h4 { font-family: 'Segoe UI Semibold', 'Segoe UI', Arial, sans-serif; color: #0E7490; line-height: 1.25; }
+h2 { font-size: 17pt; margin: 0 0 8pt; padding-bottom: 5pt; border-bottom: 2px solid #A5F3FC; break-after: avoid; }
+h3 { font-size: 12.5pt; margin: 16pt 0 5pt; color: #155E75; break-after: avoid; }
+h4 { font-size: 10.5pt; margin: 12pt 0 4pt; color: #334155; break-after: avoid; }
+p { margin: 5pt 0; } ul, ol { margin: 5pt 0; padding-left: 18pt; } li { margin: 2pt 0; }
+section.page { break-before: page; }
+.cover { height: 297mm; padding: 28mm 22mm; background: linear-gradient(160deg, #0B1D33 0%, #0E7490 120%); color: #F8FAFC; display: flex; flex-direction: column; justify-content: space-between; }
+.cover h1 { color: #fff; font-size: 34pt; margin: 0 0 10pt; } .cover p { color: #CFFAFE; font-size: 13pt; }
+.cover .tag { display: inline-block; padding: 3pt 10pt; border: 1px solid #67E8F9; border-radius: 99px; color: #67E8F9; font-size: 10pt; letter-spacing: .06em; text-transform: uppercase; }
+.cover .meta { font-size: 10.5pt; color: #A5F3FC; }
+.box { border-left: 4px solid #0E7490; background: #ECFEFF; padding: 7pt 11pt; margin: 9pt 0; border-radius: 0 6px 6px 0; break-inside: avoid; }
+.box.warn { border-color: #D97706; background: #FFFBEB; } .box.red { border-color: #DC2626; background: #FEF2F2; } .box.ok { border-color: #16A34A; background: #F0FDF4; }
+.box strong:first-child { display: block; margin-bottom: 2pt; }
+table.t { width: 100%; border-collapse: collapse; margin: 7pt 0; font-size: 9.5pt; break-inside: avoid; }
+table.t th { background: #0E7490; color: #fff; text-align: left; padding: 4pt 6pt; font-weight: 600; }
+table.t td { padding: 4pt 6pt; border-bottom: 1px solid #E2E8F0; vertical-align: top; }
+table.t tr:nth-child(even) td { background: #F8FAFC; }
+table.sim td, table.sim th { text-align: center; } table.sim td:first-child, table.sim th:first-child { text-align: left; }
+table.sim tr.bon td { background: #DCFCE7 !important; } table.sim tr.mauvais td { background: #FEE2E2 !important; }
+.fig { margin: 8pt 0; break-inside: avoid; text-align: center; } .fig img { width: 74%; border: 1px solid #CBD5E1; border-radius: 6px; } .fig figcaption { text-align: center; }
+.cols .fig img { width: 62%; max-height: 118mm; object-fit: contain; } .fig figcaption { font-size: 9pt; color: #64748B; margin-top: 3pt; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14pt; align-items: start; }
+code { font-family: Consolas, monospace; font-size: 9.5pt; background: #F1F5F9; padding: 0 3pt; border-radius: 3px; }
+.formule { font-family: Consolas, monospace; background: #F1F5F9; padding: 7pt 10pt; border-radius: 6px; margin: 7pt 0; font-size: 10.5pt; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8pt; margin: 8pt 0; }
+.kpi { border: 1px solid #CBD5E1; border-radius: 8px; padding: 8pt; text-align: center; } .kpi b { display: block; font-size: 17pt; color: #0E7490; } .kpi span { font-size: 8.5pt; color: #475569; }
+.legend span { display: inline-block; padding: 1pt 8pt; border-radius: 99px; font-size: 9pt; margin-right: 6pt; color: #0B1220; }
+</style></head><body>
+
+<section class='cover'>
+  <div><span class='tag'>Module Patients + triage IA</span></div>
+  <div>
+    <h1>File d'attente équitable</h1>
+    <p>Comment MediConnect évite qu'un patient attende indéfiniment, et ce que l'administrateur peut suivre et régler.</p>
+  </div>
+  <div class='meta'>MediConnect · plateforme de téléconsultation avec triage assisté par IA<br>Document technique et fonctionnel · 22 octobre 2026<br>Branche de travail : gestion-patient</div>
+</section>
+
+<section class='page'>
+<h2>1. En bref</h2>
+<p><strong>Le problème.</strong> Jusqu'ici, la file d'un médecin était triée par <em>niveau d'urgence, puis heure d'arrivée</em>. Un patient peu urgent (niveau 4 ou 5) passait derrière chaque nouveau cas plus urgent. Tant que de nouveaux cas urgents arrivaient, il n'était jamais vu : c'est ce qu'on appelle la <strong>famine</strong>.</p>
+<p><strong>La solution.</strong> Chaque demande reçoit une <strong>échéance</strong> (l'heure de la demande plus le délai cible de son niveau, comptée en temps de présence du médecin). La file est triée avec cinq groupes de passage, un <strong>plafond de dépassements</strong> et une <strong>garantie</strong> : une demande protégée qui a attendu trois fois son délai passe même devant les urgents (hors cas vital).</p>
+<div class='kpis'><div class='kpi'><b>5</b><span>groupes de passage, du vital au reste</span></div><div class='kpi'><b>3 états</b><span>dans les temps · à risque · en retard</span></div><div class='kpi'><b>427</b><span>tests automatiques (sans base)</span></div><div class='kpi'><b>33</b><span>contrôles réels sur MongoDB Atlas</span></div></div>
+<h3>Ce qui est livré</h3>
+<ul>
+<li><strong>Logique de file</strong> pure et testée : échéances, présence du médecin, plafond, garantie, attente estimée.</li>
+<li><strong>Espace patient</strong> : place dans la file, état et jauge du délai, prise en charge estimée, explications claires.</li>
+<li><strong>Créneaux sans conflit</strong> : un créneau déjà pris ne peut plus être choisi (créneaux barrés, double vérification côté serveur).</li>
+<li><strong>Back-office</strong> : indicateurs « en retard / à risque », liste « à surveiller », page File d'attente par médecin, panneau de délai par demande, page Paramètres pour régler les délais.</li>
+<li><strong>Simulation</strong> avec le vrai code du projet pour mesurer l'effet de la règle.</li>
+</ul>
+<div class='box warn'><strong>À retenir honnêtement</strong>Un meilleur ordre de passage <em>répartit</em> l'attente, il ne crée pas de capacité. Si un médecin reçoit plus de demandes qu'il ne peut en traiter, quelqu'un attendra : le logiciel le rend visible (indicateurs, alertes) pour qu'on réoriente les patients. Les sections 7 et 9 détaillent les chiffres et les limites.</div>
+</section>
+
+<section class='page'>
+<h2>2. Le problème : la famine</h2>
+<p>Exemple : Sana demande un rendez-vous lundi, avec un cas non urgent (niveau 5). Chaque jour, de nouveaux cas plus urgents arrivent. Avec le tri « niveau puis arrivée », Sana est toujours derrière eux.</p>
+<table class='t'><thead><tr><th>Moment</th><th>File avant le passage du médecin</th><th>Patient vu</th></tr></thead><tbody>
+<tr><td>Lundi 9 h</td><td>Sana (5)</td><td>Sana, s'il n'y a qu'elle</td></tr>
+<tr><td>Lundi 9 h 20</td><td>Sana (5) · Amine (2)</td><td>Amine : plus urgent, passe devant</td></tr>
+<tr><td>Mardi</td><td>Sana (5) · Leïla (3) · Karim (2)</td><td>Karim, puis Leïla</td></tr>
+<tr><td>Mercredi, jeudi…</td><td>Sana (5) · de nouveaux cas (2, 3, 4)</td><td>Toujours un cas plus urgent avant Sana</td></tr></tbody></table>
+<div class='box red'><strong>Conséquence</strong>Plus le médecin est chargé, plus Sana attend. Dans la simulation de la section 7, avec un médecin chargé à 100 %, un patient de niveau 5 attend jusqu'à <strong>219 h (9,1 j)</strong> et <strong>51 %</strong> des patients de niveau 5 dépassent leur délai cible.</div>
+<h3>Ce que la présentation du projet demande</h3>
+<p>La file doit être « <em>priorisée par urgence</em> » (cas graves en premier) mais aussi un parcours de soins sans « <em>parcours interrompu</em> ». Il faut donc concilier deux exigences : les urgents passent d'abord, et personne n'est oublié.</p>
+</section>
+
+<section class='page'>
+<h2>3. La logique</h2>
+<h3>3.1 Une échéance pour chaque demande</h3>
+<div class='formule'>échéance = heure de la demande + délai cible du niveau (en temps de présence du médecin)</div>
+<table class='t'><thead><tr><th>Niveau</th><th>Délai cible par défaut</th><th>Lecture</th></tr></thead><tbody>
+<tr><td>1 · Vital</td><td>immédiat</td><td>Hors file : appel du 190 / 15 / 112</td></tr>
+<tr><td>2 · Très urgent</td><td>30 min</td><td>Tête de file</td></tr>
+<tr><td>3 · Urgent</td><td>2 h</td><td>Consultation dans l'heure ou presque</td></tr>
+<tr><td>4 · Standard</td><td>8 h</td><td>Environ un jour de présence du médecin</td></tr>
+<tr><td>5 · Non urgent</td><td>24 h</td><td>Environ trois jours de présence</td></tr></tbody></table>
+<p>Ces délais sont des <strong>réglages de démonstration</strong>, modifiables dans la page Paramètres du back-office. Ils doivent être validés par un professionnel de santé avant tout usage réel. À titre de repère, le Manchester Triage System, utilisé aux urgences hospitalières, vise 0, 10, 60, 120 et 240 minutes selon la couleur.</p>
+<h3>3.2 Le temps de présence du médecin</h3>
+<p>Les délais comptent uniquement les heures où le médecin travaille. Un patient qui demande à 22 h n'est pas « en retard » à 8 h le lendemain. Sans cela, un cas très urgent arrivé la nuit serait déjà en retard à l'ouverture (la simulation d'origine montrait jusqu'à 16 h d'attente nocturne). Si un médecin n'a pas d'horaires, le temps réel est utilisé.</p>
+<h3>3.3 L'ordre de passage</h3>
+<div class='fig'><svg viewBox='0 0 680 330' width='100%' role='img' aria-label="Les cinq groupes de l'ordre de passage">
+<defs><marker id='f' markerWidth='8' markerHeight='8' refX='4' refY='4' orient='auto'><path d='M0,0 L8,4 L0,8 z' fill='#475569'/></marker></defs>
+<g font-family='Segoe UI,Arial' font-size='13'>
+<rect x='20' y='10' width='440' height='50' rx='8' fill='#FEE2E2' stroke='#F87171'/><text x='36' y='32' font-weight='600' fill='#7F1D1D'>0 · Cas vital (niveau 1)</text><text x='36' y='50' fill='#7F1D1D'>hors file : appel immédiat des secours</text>
+<rect x='20' y='70' width='440' height='50' rx='8' fill='#FFEDD5' stroke='#FB923C'/><text x='36' y='92' font-weight='600' fill='#7C2D12'>1 · Garantie : protégé ET attendu 3 fois son délai</text><text x='36' y='110' fill='#7C2D12'>filet de sécurité absolu, passe même devant les urgents</text>
+<rect x='20' y='130' width='440' height='50' rx='8' fill='#FEF9C3' stroke='#FACC15'/><text x='36' y='152' font-weight='600' fill='#713F12'>2 · Niveaux 2 et 3 (urgents)</text><text x='36' y='170' fill='#713F12'>triés par échéance (la plus proche d'abord)</text>
+<rect x='20' y='190' width='440' height='50' rx='8' fill='#DCFCE7' stroke='#4ADE80'/><text x='36' y='212' font-weight='600' fill='#14532D'>3 · Demandes protégées de niveau 4 et 5</text><text x='36' y='230' fill='#14532D'>déjà dépassées autant que le plafond le permet</text>
+<rect x='20' y='250' width='440' height='50' rx='8' fill='#E0F2FE' stroke='#7DD3FC'/><text x='36' y='272' font-weight='600' fill='#0C4A6E'>4 · Toutes les autres demandes</text><text x='36' y='290' fill='#0C4A6E'>triées par échéance</text>
+<line x1='500' y1='20' x2='500' y2='290' stroke='#475569' stroke-width='2' marker-end='url(#f)'/>
+<text x='516' y='60' fill='#334155'>le premier</text><text x='516' y='76' fill='#334155'>de la liste</text><text x='516' y='92' fill='#334155'>est vu en premier</text>
+</g></svg></div>
+<p>À l'intérieur d'un groupe, la demande dont l'<strong>échéance est la plus proche</strong> passe en premier ; à échéance égale, la plus ancienne.</p>
+<h3>3.4 Plafond de dépassements et garantie</h3>
+<ul>
+<li><strong>Dépassement</strong> : quand une demande arrivée <em>après</em> la vôtre est prise en charge avant vous, votre compteur augmente de 1. Le compteur est mis à jour automatiquement quand l'administrateur (ou, plus tard, le module médecin) passe une demande en consultation.</li>
+<li><strong>Plafond</strong> (5 par défaut) : au-delà, la demande est <strong>protégée</strong> et ne peut plus être dépassée par une demande de niveau 4 ou 5. Seuls les niveaux 1 à 3 passent encore devant elle.</li>
+<li><strong>Garantie</strong> (3 fois le délai par défaut) : une demande protégée qui a attendu trois fois son délai cible passe devant <em>tout le monde sauf le cas vital</em>. C'est la borne absolue : <strong>aucune demande n'attend indéfiniment</strong>.</li>
+</ul>
+<div class='box'><strong>Pourquoi les niveaux 2 et 3 restent prioritaires</strong>Des variantes où les demandes protégées passaient devant les urgents ont été simulées (section 7.3). Elles dégradaient les cas urgents, ce qui est médicalement inacceptable : à 95 % de charge, 32 % des patients de niveau 3 dépassaient leur délai, contre 2 % avec la règle finale.</div>
+<h3>3.5 Les créneaux : une voie à part</h3>
+<ul>
+<li>Un patient de niveau 3 à 5 peut <strong>choisir un jour et une heure</strong>. Sa demande sort alors de la file : le créneau est un engagement.</li>
+<li>Les niveaux 1 et 2 sont pris en charge en priorité, sans créneau fixé.</li>
+<li><strong>Un créneau pris ne peut pas être pris deux fois.</strong> Il est exclu de la liste, affiché barré (« déjà pris ») et vérifié deux fois côté serveur : avant d'enregistrer, puis juste après, pour couvrir deux patients qui valident au même instant. Le patient ne peut pas non plus avoir deux rendez-vous à la même heure.</li>
+<li>Un créneau libéré (annulation, changement) redevient disponible immédiatement.</li>
+</ul>
+<h3>3.6 États et attente estimée</h3>
+<p class='legend'><span style='background:#4ADE80'>Dans les temps</span><span style='background:#FACC15'>À risque : 75 % du délai écoulé</span><span style='background:#F87171'>En retard : délai dépassé</span><span style='background:#22D3EE'>Rendez-vous fixé</span></p>
+<p><strong>Prise en charge estimée</strong> = maintenant + (position − 1) × durée moyenne d'une consultation (20 minutes par défaut), en temps de présence du médecin.</p>
+</section>
+
+<section class='page'>
+<h2>4. Exemple pas à pas</h2>
+<p>Médecin présent de 9 h à 12 h et de 14 h à 17 h, du lundi au vendredi (6 h par jour). Sana, niveau 5, demande lundi à 9 h.</p>
+<table class='t'><thead><tr><th>Quand</th><th>Ce qui se passe</th><th>Ce que voit Sana</th></tr></thead><tbody>
+<tr><td>Lundi 9 h</td><td>Échéance = 24 h de présence plus tard, soit jeudi 17 h.</td><td>« 1re sur 1 », dans les temps, jauge à 0 %.</td></tr>
+<tr><td>Lundi à mardi</td><td>Cinq cas arrivés après elle sont vus avant elle (niveaux 2 et 3 : ils sont prioritaires).</td><td>« 5 personnes plus urgentes sont passées devant vous. »</td></tr>
+<tr><td>Après le 5e passage</td><td>Sana devient <strong>protégée</strong> : plus aucune demande de niveau 4 ou 5 ne la double.</td><td>« Votre demande est protégée : seuls les cas urgents peuvent encore passer devant vous. »</td></tr>
+<tr><td>Mercredi 17 h</td><td>18 h de présence écoulées (75 % du délai) : état <strong>à risque</strong>.</td><td>Jauge jaune, message d'avertissement.</td></tr>
+<tr><td>Jeudi 17 h</td><td>Délai dépassé : état <strong>en retard</strong>. Le back-office l'affiche dans « À surveiller ».</td><td>Jauge rouge, « Nous avons du retard… voir d'autres médecins ».</td></tr>
+<tr><td>3 × le délai (72 h de présence)</td><td><strong>Garantie</strong> : Sana passe devant tous les cas, sauf un cas vital.</td><td>1re place.</td></tr></tbody></table>
+<div class='box warn'><strong>Borne maximale</strong>Avec les réglages par défaut, une demande protégée passe en priorité après 72 heures de présence du médecin, soit 12 jours ouvrés pour un médecin à 6 h par jour. L'administrateur peut resserrer cette garantie (de 2 à 10 fois le délai) ; plus elle est basse, plus les cas urgents peuvent être retardés quand le médecin est surchargé (section 7).</div>
+<p>Dans la pratique, la simulation montre des attentes bien plus courtes que cette borne : même à 100 % de charge, l'attente maximale d'un patient de niveau 5 est de 121 h (5,0 j).</p>
+</section>
+
+<section class='page'>
+<h2>5. Espace patient</h2>
+<p>Chaque demande en cours affiche un bloc de suivi : état, place dans la file, jauge du délai cible, prise en charge estimée et, le cas échéant, le nombre de personnes passées devant. L'état est toujours écrit en toutes lettres (jamais la couleur seule) et la jauge est annoncée aux lecteurs d'écran.</p>
+<figure class='fig'><img src='img/patient_tableau_de_bord.jpg' alt="Tableau de bord du patient avec le suivi du délai"><figcaption>Tableau de bord du patient : état « À risque », place 3e sur 4, jauge du délai, prise en charge estimée et avertissement.</figcaption></figure>
+<h3>Choisir un médecin et un créneau</h3>
+<p>La liste des médecins montre le <strong>prochain créneau libre</strong> et le <strong>nombre de patients en attente</strong>. Le parcours compte quatre étapes : Médecin, Symptômes, Créneau, Résultat. Dans la grille des créneaux, un créneau déjà réservé reste visible mais barré et non sélectionnable.</p>
+<div class='cols'>
+<figure class='fig'><img src='img/patient_medecins_mobile.jpg' alt='Liste des médecins sur mobile'><figcaption>Liste des médecins : prochain créneau et patients en attente.</figcaption></figure>
+<figure class='fig'><img src='img/patient_creneaux_mobile.jpg' alt='Grille des créneaux avec créneaux barrés'><figcaption>Grille des créneaux : 14:30 et 15:00 sont déjà pris (exemple).</figcaption></figure>
+</div>
+</section>
+
+<section>
+<h2 style='margin-top:18pt'>6. Back-office</h2>
+<p>Le menu de l'administrateur compte cinq entrées (lisible aussi sur mobile) : Tableau de bord, Rendez-vous, <strong>File d'attente</strong>, Patients et <strong>Paramètres</strong> (qui regroupe le catalogue des symptômes et l'administration Django).</p>
+<h3>6.1 Tableau de bord</h3>
+<p>Une deuxième rangée d'indicateurs montre les demandes <strong>en retard</strong>, <strong>à risque</strong>, les <strong>rendez-vous fixés</strong> et les <strong>demandes protégées</strong>. Sous elle, la liste <strong>À surveiller</strong> classe les demandes en retard d'abord, puis celles à risque.</p>
+<figure class='fig'><img src='img/backoffice_tableau_de_bord.jpg' alt='Tableau de bord du back-office'><figcaption>Tableau de bord : indicateurs de la file et demandes à surveiller.</figcaption></figure>
+<h3>6.2 File d'attente</h3>
+<p>Pour chaque médecin : l'ordre de passage (position, niveau, ancienneté, échéance, état, dépassements) et ses rendez-vous fixés. Un rappel des règles en vigueur est affiché en haut de page.</p>
+<figure class='fig'><img src='img/backoffice_file_attente.jpg' alt="Page File d'attente du back-office"><figcaption>Page File d'attente : règles en vigueur et ordre de passage du Dr Sara Benali.</figcaption></figure>
+</section>
+
+<section>
+<h3>6.3 Liste et détail des rendez-vous</h3>
+<ul>
+<li>La liste des rendez-vous a une colonne <strong>Délai</strong> (état de chaque demande en attente).</li>
+<li>Le détail d'une demande affiche un panneau <strong>Délai de prise en charge</strong> : échéance, délai cible, temps écoulé (en présence du médecin), temps restant ou dépassé, dépassements subis, prise en charge estimée, créneau.</li>
+<li>Quand l'administrateur passe une demande en <em>En consultation</em>, les demandes plus anciennes du même médecin comptent un dépassement automatiquement.</li>
+</ul>
+<h3>6.4 Paramètres</h3>
+<p>L'administrateur règle la file sans toucher au code. Chaque champ est validé : les délais doivent augmenter avec le niveau, et chaque valeur a des bornes. Un bouton rétablit les valeurs par défaut.</p>
+<table class='t'><thead><tr><th>Paramètre</th><th>Défaut</th><th>Bornes</th></tr></thead><tbody>
+<tr><td>Délai cible niveau 2 / 3 / 4 / 5 (minutes de présence)</td><td>30 / 120 / 480 / 1440</td><td>5 minimum, croissant avec le niveau</td></tr>
+<tr><td>Dépassements maximum avant protection</td><td>5</td><td>1 à 20</td></tr>
+<tr><td>Seuil « à risque » (% du délai)</td><td>75 %</td><td>50 à 95 %</td></tr>
+<tr><td>Durée moyenne d'une consultation (minutes)</td><td>20</td><td>5 à 120</td></tr>
+<tr><td>Garantie : passage prioritaire après (× le délai)</td><td>3</td><td>2 à 10</td></tr></tbody></table>
+<figure class='fig'><img src='img/backoffice_parametres.jpg' alt='Page Paramètres du back-office'><figcaption>Page Paramètres : les réglages de la file et l'explication de la logique.</figcaption></figure>
+<h3>6.5 Droits d'accès</h3>
+<p>Les pages du back-office sont réservées aux administrateurs : un visiteur non connecté est renvoyé vers la connexion et un patient reçoit une erreur 403 (vérifié par des tests et sur la base réelle).</p>
+</section>
+
+<section class='page'>
+<h2>7. Simulation et résultats</h2>
+<h3>7.1 Protocole</h3>
+<p>Un médecin consulte 8 h par jour, 3 patients par heure (24 par jour), sept jours sur sept. Les demandes arrivent au hasard, à toute heure, avec 15 % de niveau 2, 25 % de niveau 3, 35 % de niveau 4 et 25 % de niveau 5. Chaque scénario dure 90 jours. La simulation utilise le <strong>vrai code du projet</strong> (<code>Triage.trier_file</code>, comptage des dépassements) et le compare à la règle d'origine. « Hors délai » compte les patients vus après leur délai cible, mesuré en temps de présence du médecin.</p>
+<h3>7.2 Attente maximale d'un patient de niveau 5</h3>
+<div class='fig'><svg viewBox='0 0 680 270' width='100%' role='img' aria-label="Attente maximale d'un patient de niveau 5 selon la charge du médecin">
+<line x1='50' y1='230' x2='670' y2='230' stroke='#CBD5E1'/><text x='8' y='20' font-size='11' fill='#64748B'>heures</text><rect x='60' y='203.5' width='46' height='26.5' fill='#94A3B8' rx='3'/><text x='83' y='197.5' text-anchor='middle' font-size='11' fill='#0F172A'>44 h</text><rect x='115' y='206.0' width='46' height='24.0' fill='#0E7490' rx='3'/><text x='138' y='200.0' text-anchor='middle' font-size='11' fill='#0F172A'>40 h</text><text x='110' y='252' text-anchor='middle' font-size='12' fill='#334155'>charge 85 %</text><rect x='210' y='182.4' width='46' height='47.6' fill='#94A3B8' rx='3'/><text x='233' y='176.4' text-anchor='middle' font-size='11' fill='#0F172A'>78 h</text><rect x='265' y='192.9' width='46' height='37.1' fill='#0E7490' rx='3'/><text x='288' y='186.9' text-anchor='middle' font-size='11' fill='#0F172A'>61 h</text><text x='260' y='252' text-anchor='middle' font-size='12' fill='#334155'>charge 95 %</text><rect x='360' y='97.1' width='46' height='132.9' fill='#94A3B8' rx='3'/><text x='383' y='91.1' text-anchor='middle' font-size='11' fill='#0F172A'>219 h</text><rect x='415' y='156.8' width='46' height='73.2' fill='#0E7490' rx='3'/><text x='438' y='150.8' text-anchor='middle' font-size='11' fill='#0F172A'>121 h</text><text x='410' y='252' text-anchor='middle' font-size='12' fill='#334155'>charge 100 %</text><rect x='510' y='40.0' width='46' height='190.0' fill='#94A3B8' rx='3'/><text x='533' y='34.0' text-anchor='middle' font-size='11' fill='#0F172A'>313 h</text><rect x='565' y='113.2' width='46' height='116.8' fill='#0E7490' rx='3'/><text x='588' y='107.2' text-anchor='middle' font-size='11' fill='#0F172A'>192 h</text><text x='560' y='252' text-anchor='middle' font-size='12' fill='#334155'>charge 105 %</text>
+<rect x='470' y='6' width='12' height='12' fill='#94A3B8' rx='2'/><text x='488' y='16' font-size='12' fill='#334155'>Règle d'origine</text>
+<rect x='580' y='6' width='12' height='12' fill='#0E7490' rx='2'/><text x='598' y='16' font-size='12' fill='#334155'>Règle finale</text></svg></div>
+<h4>Médecin chargé à 85 % de sa capacité</h4><table class='t sim'><thead><tr><th rowspan='2'>Niveau</th><th colspan='3'>Règle d'origine</th><th colspan='3'>Règle finale</th></tr><tr><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th></tr></thead><tbody><tr class=''><td>Très urgent</td><td>5.8 h</td><td>16 h</td><td>7 %</td><td>5.8 h</td><td>16 h</td><td>8 %</td></tr><tr class=''><td>Urgent</td><td>6.0 h</td><td>18 h</td><td>2 %</td><td>6.0 h</td><td>17 h</td><td>1 %</td></tr><tr class=''><td>Standard</td><td>7.6 h</td><td>20 h</td><td>0 %</td><td>8.2 h</td><td>22 h</td><td>0 %</td></tr><tr class=''><td>Non urgent</td><td>11.3 h</td><td>44 h</td><td>0 %</td><td>10.4 h</td><td>40 h</td><td>0 %</td></tr></tbody></table><h4>Médecin chargé à 95 % de sa capacité</h4><table class='t sim'><thead><tr><th rowspan='2'>Niveau</th><th colspan='3'>Règle d'origine</th><th colspan='3'>Règle finale</th></tr><tr><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th></tr></thead><tbody><tr class=''><td>Très urgent</td><td>4.9 h</td><td>16 h</td><td>12 %</td><td>4.9 h</td><td>16 h</td><td>12 %</td></tr><tr class=''><td>Urgent</td><td>5.9 h</td><td>18 h</td><td>3 %</td><td>5.9 h</td><td>18 h</td><td>2 %</td></tr><tr class='mauvais'><td>Standard</td><td>8.0 h</td><td>27 h</td><td>0 %</td><td>12.8 h</td><td>31 h</td><td>7 %</td></tr><tr class='bon'><td>Non urgent</td><td>25.6 h</td><td>78 h (3,3 j)</td><td>1 %</td><td>19.0 h</td><td>61 h (2,5 j)</td><td>0 %</td></tr></tbody></table><h4>Médecin chargé à 100 % de sa capacité</h4><table class='t sim'><thead><tr><th rowspan='2'>Niveau</th><th colspan='3'>Règle d'origine</th><th colspan='3'>Règle finale</th></tr><tr><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th></tr></thead><tbody><tr class=''><td>Très urgent</td><td>5.7 h</td><td>16 h</td><td>14 %</td><td>5.8 h</td><td>16 h</td><td>16 %</td></tr><tr class=''><td>Urgent</td><td>6.3 h</td><td>18 h</td><td>7 %</td><td>6.3 h</td><td>18 h</td><td>6 %</td></tr><tr class='mauvais'><td>Standard</td><td>7.9 h</td><td>21 h</td><td>0 %</td><td>26.1 h</td><td>75 h (3,1 j)</td><td>47 %</td></tr><tr class='bon'><td>Non urgent</td><td>77.0 h</td><td>219 h (9,1 j)</td><td>51 %</td><td>51.4 h</td><td>121 h (5,0 j)</td><td>34 %</td></tr></tbody></table><h4>Médecin chargé à 105 % de sa capacité</h4><table class='t sim'><thead><tr><th rowspan='2'>Niveau</th><th colspan='3'>Règle d'origine</th><th colspan='3'>Règle finale</th></tr><tr><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th><th>Attente moy.</th><th>Attente max.</th><th>Hors délai</th></tr></thead><tbody><tr class='mauvais'><td>Très urgent</td><td>5.7 h</td><td>16 h</td><td>14 %</td><td>6.1 h</td><td>18 h</td><td>31 %</td></tr><tr class='mauvais'><td>Urgent</td><td>6.4 h</td><td>18 h</td><td>6 %</td><td>6.9 h</td><td>29 h</td><td>17 %</td></tr><tr class='mauvais'><td>Standard</td><td>8.2 h</td><td>27 h</td><td>0 %</td><td>43.3 h</td><td>88 h (3,7 j)</td><td>62 %</td></tr><tr class='bon'><td>Non urgent</td><td>127.5 h</td><td>313 h (13,0 j)</td><td>62 %</td><td>76.7 h</td><td>192 h (8,0 j)</td><td>55 %</td></tr></tbody></table>
+<p class='legend'><span style='background:#DCFCE7'>nettement meilleur</span><span style='background:#FEE2E2'>nettement moins bon</span></p>
+</section>
+
+<section>
+<h3>7.3 Lecture des résultats</h3>
+<ul>
+<li><strong>Jusqu'à 95 % de charge</strong> : les cas urgents (niveaux 2 et 3) sont inchangés ; les patients de niveau 5 attendent moins (attente maximale 61 h (2,5 j) au lieu de 78 h (3,3 j) à 95 %). <strong>Le coût</strong> : les patients de niveau 4 attendent un peu plus (12.8 h en moyenne au lieu de 8.0 h), car ils passent derrière les demandes protégées.</li>
+<li><strong>À 100 % de charge</strong> : l'attente maximale d'un patient de niveau 5 passe de 219 h (9,1 j) à 121 h (5,0 j), et la part des niveaux 5 hors délai de 51 % à 34 %. <strong>Le coût</strong> : les patients de niveau 4 attendent plus (moyenne 26 h au lieu de 8 h). L'attente est partagée au lieu de peser seulement sur le niveau 5.</li>
+<li><strong>À 105 % de charge (surcharge)</strong> : aucun ordre ne suffit. L'attente maximale du niveau 5 passe de 313 h (13,0 j) à 192 h (8,0 j), mais les cas urgents en subissent une partie : 31 % des patients de niveau 2 dépassent leur délai (contre 14 %), car la file s'allonge sans fin et la garantie se déclenche. <strong>Dans ce cas, il faut réorienter les patients vers d'autres médecins.</strong></li>
+</ul>
+<div class='box red'><strong>Message clé</strong>La logique évite l'oubli d'un patient, mais seule la <em>capacité</em> résout une surcharge. C'est pourquoi le back-office signale les demandes en retard et propose, en phase suivante, des alertes de surcharge et un réorientation automatique.</div>
+<h3>7.4 Variantes comparées</h3>
+<p>Plusieurs règles ont été comparées avec le même simulateur (60 jours, charge de 100 %) avant de retenir la règle finale (chiffres d'une simulation de 60 jours, distincte de celle du 7.2) :</p>
+<table class='t'><thead><tr><th>Variante</th><th>Cas urgents (niveau 2) hors délai</th><th>Attente max. niveau 5</th><th>Verdict</th></tr></thead><tbody>
+<tr><td>A · les demandes protégées passent devant tous, sauf le vital</td><td>58 %</td><td>71 h</td><td>Trop de retard pour les urgents</td></tr>
+<tr><td>B · le niveau 2 passe avant les protégées</td><td>15 %</td><td>98 h</td><td>Le niveau 3 est pénalisé (59 %)</td></tr>
+<tr><td>C · les niveaux 2 et 3 passent avant les protégées</td><td>15 %</td><td>121 h</td><td>Protège les urgents, mais sans garantie absolue</td></tr>
+<tr><td>E · protégée et en retard : passe d'abord</td><td>40 %</td><td>89 h</td><td>Garantie forte, mais coûte aux urgents</td></tr>
+<tr><td><strong>Finale · C + garantie à 3 × le délai, réglable</strong></td><td><strong>15 %</strong></td><td><strong>121 h</strong></td><td><strong>Retenue : urgents protégés et borne absolue</strong></td></tr></tbody></table>
+</section>
+
+<section>
+<h2 style='margin-top:18pt'>8. Qualité et vérifications</h2>
+<ul>
+<li><strong>427 tests automatiques</strong> (dont 96 ajoutés pour ce chantier) : calcul du temps de présence, états, ordre de passage, plafond, garantie, comptage des dépassements, réglages, pages patient et back-office, droits d'accès.</li>
+<li><strong>Tests « négatifs »</strong> : 24 règles ont été volontairement cassées une à une (tri, plafond, garantie, comptage, verrou de créneau, textes) pour vérifier que les tests échouent bien. Ils échouent tous.</li>
+<li><strong>33 contrôles sur la base réelle (MongoDB Atlas)</strong> avec des comptes jetables supprimés ensuite : le scénario de l'ancien patient dépassé, le plafond, la garantie, un cas vital, la modification des réglages, les créneaux concurrents, les droits d'accès.</li>
+<li><strong>Un test de « simulation »</strong> reproduit le cas décrit (un flux continu de cas urgents) : avec la garantie le patient est vu avant 3 fois son délai ; sans elle il ne l'est jamais (test de contrôle).</li>
+<li><strong>Accessibilité</strong> : états écrits, jauge annoncée (<code>progressbar</code>), boutons nommés pour les lecteurs d'écran, navigation sans souris, affichage vérifié sur mobile.</li>
+</ul>
+<h3>Bug trouvé et corrigé pendant la vérification</h3>
+<p>Une date s'affichait « vCETThu, 22 Oct… » au lieu de « vers 10 h 44 » : dans les formats de date Django, les lettres de « vers » sont des codes. C'est corrigé et couvert par un test.</p>
+<h2 style='margin-top:18pt'>9. Limites et suite</h2>
+<h3>Hypothèses à valider</h3>
+<ul>
+<li>Les <strong>délais cibles</strong> et seuils sont des valeurs de démonstration à faire valider par un professionnel de santé.</li>
+<li>Les <strong>médecins et leurs horaires</strong> sont fictifs (<code>patients/medecins_test.py</code>) en attendant le module Médecins ; la durée de consultation (20 min) est une estimation.</li>
+<li>La <strong>simulation</strong> est simple : un seul médecin, arrivées aléatoires régulières, une graine aléatoire. Elle montre une tendance, pas des valeurs réelles.</li>
+<li>Le comptage des dépassements se fait au passage « En consultation » dans le back-office ; le module Médecin devra appeler la même fonction (<code>Triage.enregistrer_depassements</code>).</li>
+</ul>
+<h3>Prochaines étapes proposées</h3>
+<ol>
+<li><strong>Alerte de surcharge et réorientation</strong> : proposer un autre médecin disponible à tout patient « à risque » (aujourd'hui seulement les niveaux 1 et 2).</li>
+<li><strong>Notifications</strong> : prévenir le patient (e-mail ou SMS) quand sa demande passe à risque ou en retard.</li>
+<li><strong>Réévaluation périodique</strong> : trois questions pendant l'attente pour détecter une aggravation, ou permettre d'annuler en cas d'amélioration.</li>
+<li><strong>IA</strong> : analyse du texte libre (elle peut seulement faire monter le niveau), prédiction de l'attente avec l'historique réel, rapport d'écart entre niveau calculé et niveau requalifié par le médecin.</li>
+<li><strong>Verrou en base</strong> : une contrainte d'unicité sur le créneau d'un médecin, à ajouter avec le module Médecins.</li>
+</ol>
+</section>
+
+<section class='page'>
+<h2>Annexe · Fichiers du code</h2>
+<table class='t'><thead><tr><th>Fichier</th><th>Rôle</th></tr></thead><tbody>
+<tr><td><code>patients/file_attente.py</code></td><td>Logique pure : temps de présence, échéance, états, groupes de passage, dépassements, attente estimée</td></tr>
+<tr><td><code>patients/suivi.py</code></td><td>Annote les demandes (place, délai, estimation) ; mêmes chiffres côté patient et back-office</td></tr>
+<tr><td><code>patients/planning.py</code></td><td>Créneaux : génération, grille avec créneaux pris, regroupement par jour</td></tr>
+<tr><td><code>patients/models.py</code></td><td><code>Triage</code> (nb_depassements, creneau, tri de la file), <code>ReglageTriage</code> (paramètres modifiables)</td></tr>
+<tr><td><code>patients/views.py</code></td><td>Tableau de bord, résultat, liste des médecins, choix du créneau avec double verrou</td></tr>
+<tr><td><code>patients/templatetags/suivi_filtres.py</code></td><td>Filtres d'affichage (durées, classes d'état)</td></tr>
+<tr><td><code>backoffice/views.py</code>, <code>forms.py</code>, <code>stats.py</code></td><td>File d'attente, paramètres, indicateurs, comptage des dépassements</td></tr>
+<tr><td><code>patients/migrations/0007…0008</code></td><td>ReglageTriage, nb_depassements, garantie</td></tr>
+<tr><td><code>docs/simulation_file_attente.py</code></td><td>Script de simulation (voir ci-dessous)</td></tr></tbody></table>
+<h3>Rejouer les vérifications</h3>
+<p>Tests automatiques : <code>python manage.py test</code>. Simulation (quelques minutes) : <code>python docs/simulation_file_attente.py</code>, qui écrit <code>resultats_simulation.json</code> dans le dossier courant. Les contrôles sur base réelle utilisent des scripts jetables (non conservés dans le dépôt).</p>
+<h3>Glossaire</h3>
+<table class='t'><tbody>
+<tr><td><strong>Échéance</strong></td><td>Heure avant laquelle la demande devrait être prise en charge.</td></tr>
+<tr><td><strong>Temps de présence</strong></td><td>Heures où le médecin travaille ; seules elles comptent dans les délais.</td></tr>
+<tr><td><strong>Dépassement</strong></td><td>Une demande arrivée plus tard est prise en charge avant celle-ci.</td></tr>
+<tr><td><strong>Protégée</strong></td><td>Demande dépassée autant de fois que le plafond ; elle ne peut plus l'être par un niveau 4 ou 5.</td></tr>
+<tr><td><strong>Garantie</strong></td><td>Passage prioritaire d'une demande protégée après un multiple de son délai (3 par défaut).</td></tr>
+<tr><td><strong>Famine</strong></td><td>Situation où une demande n'est jamais traitée parce que d'autres passent toujours devant.</td></tr></tbody></table>
+</section>
+</body></html>

@@ -67,3 +67,26 @@ def grouper(libres):
             jour["groupes"].append({"nom": nom, "creneaux": []})
         jour["groupes"][-1]["creneaux"].append(instant)
     return jours
+
+
+def grille(horaires, maintenant, pris=()):
+    """Tous les créneaux de la période, libres ou déjà pris : [(instant, libre)]."""
+    pris = set(pris)
+    return [(c, c not in pris) for c in generer(horaires, maintenant)]
+
+
+def grouper_grille(grille_creneaux):
+    """Grille regroupée par jour puis par moment de la journée. Les créneaux pris restent visibles
+    (grisés) pour que le patient comprenne pourquoi ils ne sont pas proposés."""
+    jours = []
+    for instant, libre in grille_creneaux:
+        if not jours or jours[-1]["jour"] != instant.date():
+            jours.append({"jour": instant.date(), "total": 0, "groupes": []})
+        jour = jours[-1]
+        if libre:
+            jour["total"] += 1
+        nom = periode(instant)
+        if not jour["groupes"] or jour["groupes"][-1]["nom"] != nom:
+            jour["groupes"].append({"nom": nom, "creneaux": []})
+        jour["groupes"][-1]["creneaux"].append({"debut": instant, "libre": libre})
+    return jours

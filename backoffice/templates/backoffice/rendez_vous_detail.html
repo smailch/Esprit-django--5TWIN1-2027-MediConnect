@@ -1,4 +1,5 @@
 {% extends "backoffice/layout.html" %}
+{% load suivi_filtres %}
 
 {% block title %}Rendez-vous de {{ triage.patient }} — Administration MediConnect{% endblock %}
 
@@ -70,6 +71,31 @@
         {% endif %}
       </dl>
     </section>
+
+    {% if triage.delai %}
+    <section class="panel panel-pad" aria-labelledby="titre-delai">
+      <div class="flex items-center justify-between gap-3">
+        <h2 id="titre-delai" class="section-title">Délai de prise en charge</h2>
+        <span class="sev {{ triage.delai.etat|classe_etat }}">{{ triage.delai.libelle }}</span>
+      </div>
+      {% if triage.delai.echeance and not triage.creneau %}
+      <div class="meter meter-{{ triage.delai.etat }}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ triage.delai.pourcentage }}"
+           aria-label="Part du délai cible écoulée"><span style="width: {{ triage.delai.pourcentage }}%"></span></div>
+      {% endif %}
+      <dl class="dl mt-4">
+        {% if triage.creneau %}
+        <div class="wide"><dt>Rendez-vous fixé</dt><dd>{{ triage.creneau|date:"l j F Y à H:i" }}</dd></div>
+        {% else %}
+        <div><dt>Échéance</dt><dd>{{ triage.delai.echeance|date:"D j M, H:i" }}</dd></div>
+        <div><dt>Délai cible du niveau {{ triage.niveau_effectif }}</dt><dd>{{ triage.delai.cible_min|duree }}</dd></div>
+        <div><dt>Écoulé (présence du médecin)</dt><dd>{{ triage.delai.ecoule_min|duree }}</dd></div>
+        <div><dt>{% if triage.delai.etat == "en_retard" %}Dépassé de{% else %}Reste{% endif %}</dt><dd>{{ triage.delai.reste_min|duree }}</dd></div>
+        <div><dt>Dépassements subis</dt><dd>{% if triage.protegee %}{{ triage.nb_depassements }} (protégée){% else %}{{ triage.nb_depassements|default:0 }} sur {{ reglage.plafond }}{% endif %}</dd></div>
+        <div><dt>Prise en charge estimée</dt><dd>{{ triage.prise_en_charge_estimee|date:"D j M, H:i" }}</dd></div>
+        {% endif %}
+      </dl>
+    </section>
+    {% endif %}
 
     <section class="panel panel-pad" aria-labelledby="titre-maj">
       <h2 id="titre-maj" class="section-title">Mettre à jour</h2>
