@@ -1432,7 +1432,7 @@ class DossierPageTests(SimpleTestCase):
         requete.resolver_match = SimpleNamespace(url_name=nom)
         return requete
 
-    def page(self, patient=None, dossier="defaut", allergies=(), mesures=(), demande=None, manquants=()):
+    def page(self, patient=None, dossier="defaut", allergies=(), mesures=(), demande=None, manquants=(), analyse=None):
         patient = patient or un_patient_complet()
         allergies = list(allergies)
         for a in allergies:
@@ -1442,7 +1442,7 @@ class DossierPageTests(SimpleTestCase):
         return render_to_string("patients/dossier.html", {
             "patient": patient, "dossier": un_dossier() if dossier == "defaut" else dossier,
             "allergies": allergies, "severes": [a for a in allergies if a.est_severe], "mesures": list(mesures),
-            "derniere_demande": demande, "manquants": list(manquants)}, self.requete())
+            "derniere_demande": demande, "manquants": list(manquants), "analyse": analyse or analyser_cas()}, self.requete())
 
     def test_adresse_et_vue(self):
         self.assertEqual(reverse("patients:dossier"), "/patients/dossier/")
@@ -1509,7 +1509,7 @@ class DossierPageTests(SimpleTestCase):
 
     def test_page_pas_trop_chargee_quatre_blocs_et_deux_sections(self):
         html = self.page(manquants=["Groupe sanguin"], demande=None)
-        self.assertEqual(html.count('class="panel panel-pad'), 4 + 2)  # 4 blocs, dernière demande, à compléter
+        self.assertEqual(html.count('class="panel panel-pad'), 4 + 3)  # 4 blocs, analyse, dernière demande, à compléter
         self.assertEqual(html.count("<h1"), 1)
 
     def test_le_menu_a_quatre_entrees_dont_mon_dossier(self):
@@ -2454,3 +2454,401 @@ class SuiviPagesTests(SimpleTestCase):
         self.assertLess(source.index("choix not in disponibles"), source.index("triage.save"))  # vérifié AVANT l'enregistrement
         self.assertIn("Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk)", source.split("Second verrou")[1])  # et APRÈS
         self.assertIn("triage.creneau = ancien", source)  # annulation en cas de conflit simultané
+
+
+# --- Analyse automatique du dossier (assistant à règles) ----------------------------------------------
+from . import analyse_dossier as ad  # noqa: E402
+from . import analyse_service  # noqa: E402
+
+MAINTENANT = datetime.datetime(2026, 10, 22, 10, 0, tzinfo=TUNIS)
+
+
+def mesure_ad(type_, valeur, jours=1, valeur2=None):
+    return {"type": type_, "valeur": valeur, "valeur2": valeur2, "mesure_le": MAINTENANT - datetime.timedelta(days=jours)}
+
+
+def allergie_ad(substance="Pénicilline", gravite="severe", active=True):
+    return {"substance": substance, "gravite": gravite, "active": active}
+
+
+def analyser_cas(**kw):
+    """Analyse d'un patient type : tout est renseigné et il a une allergie (donc dossier « calme » par défaut)."""
+    valeurs = dict(age=35, sexe="F", groupe_sanguin="O+", antecedents="", traitements="", allergies=[allergie_ad("Arachide", "legere")],
+                   mesures=[], manquants=[], total_controles=4, maintenant=MAINTENANT)
+    valeurs.update(kw)
+    return ad.analyser(**valeurs)
+
+
+def titres(analyse, gravite=None):
+    return [p.titre for p in analyse.points if gravite is None or p.gravite == gravite]
+
+
+class AnalyseTexteTests(SimpleTestCase):
+    def test_normalisation(self):
+        self.assertEqual(ad.normaliser("Pénicilline, 2x/jour !"), "penicilline 2x jour")
+        self.assertEqual(ad.normaliser(None), "")
+        self.assertEqual(ad.normaliser("ÉPILEPSIE"), "epilepsie")
+
+    def test_antecedents_reperes_malgre_accents_et_majuscules(self):
+        self.assertEqual(ad.conditions_reperees("Asthme depuis l'enfance, Hypertension artérielle (HTA)"), ["asthme", "hypertension"])
+        self.assertEqual(ad.conditions_reperees("DIABÈTE de type 2"), ["diabète"])
+
+    def test_negation_ignoree(self):
+        for texte in ("pas de diabète", "Sans asthme", "non diabétique", "aucun problème cardiaque, jamais d'asthme", "ni diabète ni asthme"):
+            with self.subTest(texte=texte):
+                self.assertEqual(ad.conditions_reperees(texte), [])
+
+    def test_la_negation_ne_deborde_pas_sur_la_proposition_suivante(self):
+        self.assertEqual(ad.conditions_reperees("pas de diabète, asthme"), ["asthme"])
+        self.assertEqual(ad.conditions_reperees("pas de diabète. Hypertension"), ["hypertension"])
+
+    def test_antecedent_familial_n_est_pas_celui_du_patient(self):
+        self.assertEqual(ad.conditions_reperees("mon père est diabétique"), [])
+        self.assertEqual(ad.conditions_reperees("ma mère a un cancer, moi asthme"), ["asthme"])
+        self.assertEqual(ad.conditions_reperees("grand-père hypertendu"), [])
+
+    def test_mot_entier_seulement(self):
+        self.assertEqual(ad.conditions_reperees("thyroidectomie"), [])
+        self.assertEqual(ad.conditions_reperees("thyroïde"), ["problème de thyroïde"])
+
+    def test_texte_vide(self):
+        self.assertEqual(ad.conditions_reperees(""), [])
+        self.assertEqual(ad.conditions_reperees(None), [])
+        self.assertEqual(ad.medicaments_reperes(None), [])
+
+    def test_medicaments_reconnus_par_nom_ou_marque(self):
+        self.assertEqual(ad.medicaments_reperes("Ventoline 2 bouffées si besoin, Doliprane, metformine 850 mg"), ["salbutamol", "metformine"])
+        self.assertEqual(ad.medicaments_reperes("Glucophage, Lantus"), ["metformine", "insuline"])
+        self.assertEqual(ad.medicaments_reperes("des vitamines"), [])
+
+    def test_familles_de_medicaments(self):
+        self.assertEqual(ad.familles_de("Pénicilline"), ["penicillines"])
+        self.assertEqual(ad.familles_de("Amoxicilline 1 g"), ["penicillines"])
+        self.assertEqual(ad.familles_de("aspirine"), ["ains"])
+        self.assertEqual(ad.familles_de("Arachide"), [])
+
+
+class AnalyseRegleTraitementsTests(SimpleTestCase):
+    def test_traitement_de_la_meme_famille_que_l_allergie(self):
+        a = analyser_cas(allergies=[allergie_ad("Pénicilline")], traitements="Amoxicilline 1g matin et soir")
+        self.assertIn("Traitement et allergie de la même famille", titres(a, "important"))
+        p = next(p for p in a.points if p.titre.startswith("Traitement et allergie"))
+        self.assertIn("amoxicilline", p.detail)
+        self.assertIn("Pénicilline", p.detail)
+        self.assertEqual(p.action, "rdv")
+        self.assertEqual(a.vigilance, "important")
+
+    def test_allergie_disparue_ne_declenche_rien(self):
+        a = analyser_cas(allergies=[allergie_ad("Pénicilline", active=False)], traitements="Amoxicilline")
+        self.assertNotIn("Traitement et allergie de la même famille", titres(a))
+
+    def test_autre_famille_aucune_alerte(self):
+        a = analyser_cas(allergies=[allergie_ad("Pénicilline")], traitements="Doliprane")
+        self.assertEqual(titres(a, "important"), [])
+
+    def test_aspirine_et_allergie_aux_anti_inflammatoires(self):
+        a = analyser_cas(allergies=[allergie_ad("Ibuprofène", "moderee")], traitements="Kardegic 75")
+        self.assertIn("Traitement et allergie de la même famille", titres(a))
+
+    def test_reaction_croisee_penicilline_cephalosporine(self):
+        a = analyser_cas(allergies=[allergie_ad("Pénicilline")], traitements="Céfixime")
+        self.assertIn("Réaction croisée possible", titres(a, "attention"))
+        self.assertEqual(titres(a, "important"), [])
+
+    def test_anticoagulant_et_anti_inflammatoire(self):
+        a = analyser_cas(traitements="Previscan, ibuprofène si douleur")
+        self.assertIn("Anticoagulant et anti-inflammatoire", titres(a, "important"))
+        self.assertEqual(titres(analyser_cas(traitements="Previscan"), "important"), [])
+        self.assertEqual(titres(analyser_cas(traitements="ibuprofène"), "important"), [])
+
+    def test_traitement_sans_antecedent_correspondant(self):
+        a = analyser_cas(traitements="Ventoline")
+        self.assertIn("Un antécédent semble manquer (asthme)", titres(a, "info"))
+        self.assertEqual(next(p for p in a.points if "antécédent semble" in p.titre).action, "completer")
+
+    def test_pas_de_remarque_si_l_antecedent_est_indique(self):
+        for traitements, antecedents in (("Ventoline", "Asthme"), ("Ventoline", "BPCO"), ("Metformine", "Diabète de type 2"), ("Bisoprolol", "infarctus en 2019"), ("Amlodipine", "HTA")):
+            with self.subTest(traitements=traitements):
+                self.assertFalse([t for t in titres(analyser_cas(traitements=traitements, antecedents=antecedents)) if "antécédent semble" in t])
+
+    def test_un_antecedent_nie_ne_compte_pas(self):
+        a = analyser_cas(traitements="Metformine", antecedents="pas de diabète")
+        self.assertIn("Un antécédent semble manquer (diabète)", titres(a))
+
+    def test_anticoagulant_seul_ne_demande_pas_d_antecedent(self):
+        self.assertFalse([t for t in titres(analyser_cas(traitements="Eliquis")) if "antécédent semble" in t])
+
+
+class AnalyseRegleMesuresTests(SimpleTestCase):
+    def points(self, mesures, **kw):
+        return analyser_cas(mesures=mesures, **kw)
+
+    def test_tension_normale_rien(self):
+        self.assertEqual(titres(self.points([mesure_ad("tension", 120, valeur2=80)])), [])
+
+    def test_une_tension_elevee_invite_a_refaire_la_mesure(self):
+        a = self.points([mesure_ad("tension", 150, valeur2=95)])
+        self.assertEqual(titres(a, "attention"), ["Tension élevée"])
+        self.assertEqual(a.points[0].action, "mesure_nouvelle")
+        self.assertEqual(a.vigilance, "a_surveiller")
+
+    def test_tension_elevee_a_plusieurs_reprises(self):
+        a = self.points([mesure_ad("tension", 150, 5, 95), mesure_ad("tension", 145, 1, 92)])
+        self.assertEqual(titres(a, "attention"), ["Tension anormale à plusieurs reprises"])
+        self.assertEqual(a.points[0].action, "rdv")
+
+    def test_tension_tres_elevee_ou_tres_basse_importante(self):
+        self.assertEqual(titres(self.points([mesure_ad("tension", 190, valeur2=100)]), "important"), ["Tension très élevée"])
+        self.assertEqual(titres(self.points([mesure_ad("tension", 150, valeur2=115)]), "important"), ["Tension très élevée"])
+        self.assertEqual(titres(self.points([mesure_ad("tension", 75, valeur2=50)]), "important"), ["Tension très basse"])
+
+    def test_tension_basse(self):
+        self.assertEqual(titres(self.points([mesure_ad("tension", 85, valeur2=55)]), "attention"), ["Tension basse"])
+
+    def test_les_mesures_de_plus_d_un_mois_sont_ignorees(self):
+        self.assertEqual(titres(self.points([mesure_ad("tension", 190, 31, 110)])), [])
+
+    def test_glycemie(self):
+        cas = ((2.1, "important", "Glycémie très élevée"), (1.3, "attention", "Glycémie élevée"), (0.6, "attention", "Glycémie basse"),
+               (0.5, "important", "Glycémie très basse"), (0.9, None, None))
+        for valeur, gravite, titre in cas:
+            with self.subTest(valeur=valeur):
+                a = self.points([mesure_ad("glycemie", valeur)])
+                self.assertEqual(titres(a, gravite) if gravite else titres(a), [titre] if titre else [])
+
+    def test_saturation(self):
+        self.assertEqual(titres(self.points([mesure_ad("saturation", 88)]), "important"), ["Saturation en oxygène très basse"])
+        self.assertEqual(titres(self.points([mesure_ad("saturation", 92)]), "attention"), ["Saturation en oxygène basse"])
+        self.assertEqual(titres(self.points([mesure_ad("saturation", 97)])), [])
+
+    def test_temperature_ne_compte_que_quelques_jours(self):
+        self.assertEqual(titres(self.points([mesure_ad("temperature", 38.5, 2)]), "attention"), ["Fièvre"])
+        self.assertEqual(titres(self.points([mesure_ad("temperature", 40.2, 1)]), "important"), ["Fièvre très élevée"])
+        self.assertEqual(titres(self.points([mesure_ad("temperature", 38.5, 10)])), [])  # une fièvre d'il y a 10 jours est passée
+        self.assertEqual(titres(self.points([mesure_ad("temperature", 35.0, 1)]), "attention"), ["Température basse"])
+
+    def test_pouls(self):
+        self.assertEqual(titres(self.points([mesure_ad("frequence", 140)]), "important"), ["Pouls très anormal"])
+        self.assertEqual(titres(self.points([mesure_ad("frequence", 105)]), "attention"), ["Pouls inhabituel"])
+        self.assertEqual(titres(self.points([mesure_ad("frequence", 45)]), "attention"), ["Pouls inhabituel"])
+        self.assertEqual(titres(self.points([mesure_ad("frequence", 72)])), [])
+
+    def test_variation_de_poids(self):
+        a = self.points([mesure_ad("poids", 70, 20), mesure_ad("poids", 74.5, 1)])  # +6,4 %
+        self.assertEqual(titres(a, "attention"), ["Variation de poids importante"])
+        self.assertIn("pris 6 %", a.points[0].detail)
+        self.assertIn("perdu", self.points([mesure_ad("poids", 80, 20), mesure_ad("poids", 74, 1)]).points[0].detail)
+        self.assertEqual(titres(self.points([mesure_ad("poids", 70, 20), mesure_ad("poids", 71, 1)])), [])
+        self.assertEqual(titres(self.points([mesure_ad("poids", 70, 1)])), [])  # une seule mesure : pas de variation
+
+    def test_suivi_manquant_pour_hypertension_et_diabete(self):
+        a = self.points([], antecedents="Hypertension, diabète")
+        self.assertEqual(titres(a, "info"), ["Aucune mesure de tension récente", "Aucune mesure de glycémie récente"])
+        self.assertTrue(all(p.action == "mesure_nouvelle" for p in a.points))
+        b = self.points([mesure_ad("tension", 120, 60, 80), mesure_ad("glycemie", 0.9, 60)], antecedents="Hypertension, diabète")
+        self.assertEqual(titres(b), [])  # des mesures datant de deux mois suffisent
+
+    def test_plusieurs_alertes_se_cumulent(self):
+        a = self.points([mesure_ad("tension", 190, 1, 110), mesure_ad("saturation", 85, 1), mesure_ad("glycemie", 1.4, 1)])
+        self.assertEqual(len(a.importants), 2)
+        self.assertEqual(len(a.attentions), 1)
+
+
+class AnalyseAssemblageTests(SimpleTestCase):
+    def test_dossier_complet_et_sans_probleme_est_calme(self):
+        a = analyser_cas(mesures=[mesure_ad("tension", 120, valeur2=80)])
+        self.assertEqual((a.vigilance, a.points, a.completude), ("calme", [], 100))
+        self.assertIn("Rien d'inquiétant", a.message)
+
+    def test_vigilance_prend_la_gravite_la_plus_haute(self):
+        self.assertEqual(analyser_cas(mesures=[mesure_ad("tension", 150, valeur2=95)]).vigilance, "a_surveiller")
+        self.assertEqual(analyser_cas(mesures=[mesure_ad("tension", 150, valeur2=95), mesure_ad("saturation", 80)]).vigilance, "important")
+        self.assertEqual(analyser_cas(manquants=["Groupe sanguin"]).vigilance, "calme")  # une information manquante n'est pas inquiétante
+
+    def test_completude(self):
+        a = analyser_cas(manquants=["Groupe sanguin", "Traitements en cours"], total_controles=4)
+        self.assertEqual((a.completude, a.manquants), (50, ["Groupe sanguin", "Traitements en cours"]))
+        self.assertIn("Des informations utiles manquent", titres(a, "info"))
+        self.assertIn("groupe sanguin, traitements en cours", a.points[0].detail)
+        self.assertEqual(analyser_cas(total_controles=0).completude, 100)
+
+    def test_aucune_allergie_invite_a_verifier(self):
+        a = analyser_cas(allergies=[])
+        self.assertIn("Aucune allergie enregistrée", titres(a, "info"))
+        self.assertEqual(next(p for p in a.points if "allergie" in p.titre).action, "allergies")
+        self.assertNotIn("Aucune allergie enregistrée", titres(analyser_cas(allergies=[allergie_ad()])))
+
+    def test_tri_par_gravite_puis_ordre_des_regles(self):
+        a = analyser_cas(allergies=[], manquants=["Groupe sanguin"], mesures=[mesure_ad("tension", 150, valeur2=95), mesure_ad("saturation", 80)])
+        self.assertEqual([p.gravite for p in a.points], ["important", "attention", "info", "info"])
+
+    def test_chaque_remarque_est_expliquee(self):
+        a = analyser_cas(
+            allergies=[allergie_ad("Pénicilline")], traitements="Amoxicilline, Previscan, ibuprofène, Ventoline", antecedents="",
+            manquants=["Groupe sanguin"], mesures=[mesure_ad("tension", 190, 1, 112), mesure_ad("glycemie", 1.4), mesure_ad("temperature", 39),
+                                                    mesure_ad("poids", 60, 20), mesure_ad("poids", 70, 1)])
+        self.assertGreaterEqual(len(a.points), 7)
+        for p in a.points:
+            with self.subTest(titre=p.titre):
+                self.assertTrue(p.detail.strip() and p.pourquoi.strip())  # jamais une boîte noire
+
+    def test_resume(self):
+        a = analyser_cas(allergies=[allergie_ad("Pénicilline")], antecedents="Asthme", traitements="Ventoline",
+                         mesures=[mesure_ad("tension", 120, valeur2=80), mesure_ad("poids", 70.5)])
+        self.assertEqual(a.resume, "Femme de 35 ans · groupe sanguin O+ · allergie sévère à Pénicilline · antécédents repérés : asthme · "
+                                   "1 type de traitement reconnu · dernières mesures : tension 120/80 mmHg, poids 70.5 kg.")
+        self.assertTrue(analyser_cas(sexe="H", age=60).resume.startswith("Homme de 60 ans"))
+
+    def test_resume_pluriels_et_valeurs_absentes(self):
+        a = analyser_cas(groupe_sanguin="", allergies=[allergie_ad("A", "legere"), allergie_ad("B", "legere")], antecedents="", traitements="Ventoline, metformine")
+        self.assertIn("2 allergies enregistrées", a.resume)
+        self.assertIn("2 types de traitement reconnus", a.resume)
+        self.assertNotIn("groupe sanguin", a.resume)
+        self.assertNotIn("dernières mesures", a.resume)
+
+    def test_profil_et_ce_que_l_analyse_a_lu(self):
+        a = analyser_cas(antecedents="Asthme, hypertension", traitements="Ventoline", mesures=[mesure_ad("poids", 70, 2), mesure_ad("poids", 71, 50)])
+        self.assertEqual(a.profil, ["asthme", "hypertension"])
+        self.assertEqual(a.lu, {"antecedents": 2, "traitements": 1, "allergies": 1, "mesures": 1})  # une seule mesure date du dernier mois
+
+    def test_l_analyse_ne_pose_jamais_de_diagnostic(self):
+        a = analyser_cas(antecedents="", traitements="Metformine", mesures=[mesure_ad("glycemie", 2.5), mesure_ad("tension", 190, valeur2=115)])
+        texte = " ".join(p.titre + " " + p.detail for p in a.points).lower()
+        for interdit in ("vous avez un diabète", "vous êtes diabétique", "vous souffrez", "diagnostic", "vous avez de l'hypertension"):
+            self.assertNotIn(interdit, texte)
+
+    def test_les_urgences_sont_citees_pour_les_alertes_graves(self):
+        a = analyser_cas(mesures=[mesure_ad("tension", 190, valeur2=115)])
+        self.assertIn("190", a.importants[0].detail)  # numéro d'urgence cité en cas de tension très élevée
+
+
+class AnalyseServiceEtPagesTests(SimpleTestCase):
+    def requete(self, nom="analyse_dossier"):
+        requete = RequestFactory().get("/patients/dossier/analyse/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a", get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def appeler_la_vue(self, analyse):
+        with mock.patch.object(vues_patients, "_patient_connecte", return_value=un_patient()), \
+                mock.patch.object(analyse_service, "analyser_patient", return_value=analyse):
+            return vues_patients.analyse(self.requete()).content.decode()
+
+    def cas_riche(self):
+        return analyser_cas(allergies=[allergie_ad("Pénicilline")], traitements="Amoxicilline, Ventoline", antecedents="",
+                            manquants=["Groupe sanguin"], mesures=[mesure_ad("tension", 190, 1, 112), mesure_ad("glycemie", 1.4)])
+
+    def test_adresse_et_acces(self):
+        self.assertEqual(reverse("patients:analyse_dossier"), "/patients/dossier/analyse/")
+        self.assertIs(resolve("/patients/dossier/analyse/").func, vues_patients.analyse)
+        reponse = self.client.get("/patients/dossier/analyse/")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(reponse["Location"].startswith("/comptes/connexion/"))
+        requete = RequestFactory().get("/x/")
+        requete.user = get_user_model()(username="medecin", role="medecin", is_active=True)
+        with self.assertRaises(PermissionDenied):
+            vues_patients.analyse(requete)
+
+    def test_page_avec_remarques_expliquees_et_actions(self):
+        html = self.appeler_la_vue(self.cas_riche())
+        for texte in ("Analyse de mon dossier", "Niveau de vigilance", ">Important<", "Pourquoi cette remarque ?", "Traitement et allergie de la même famille",
+                      "Tension très élevée", "Glycémie élevée", "Un antécédent semble manquer (asthme)", "Prendre rendez-vous", "Compléter mon dossier",
+                      "Résumé", "Femme de 35 ans", "Ce que l'analyse a lu", "Mesures du mois", "règles médicales simples", "aucun service externe",
+                      "ne remplace pas un médecin", "190, le 15 ou le 112"):
+            self.assertIn(texte, html)
+        self.assertEqual(html.count("<details"), 5)  # une explication « pourquoi » par remarque
+
+    def test_groupes_dans_l_ordre_de_gravite(self):
+        html = self.appeler_la_vue(self.cas_riche())
+        self.assertLess(html.index(">Important <"), html.index("À surveiller <"))
+        self.assertLess(html.index("À surveiller <"), html.index("Pour compléter ou vérifier"))
+
+    def test_boutons_d_action_pointent_vers_les_bonnes_pages(self):
+        html = self.appeler_la_vue(self.cas_riche())
+        self.assertIn('href="/patients/medecins/"', html)
+        self.assertIn('href="/patients/profil/"', html)
+
+    def test_dossier_calme(self):
+        html = self.appeler_la_vue(analyser_cas())
+        self.assertIn(">Calme<", html)
+        self.assertIn("Aucune remarque", html)
+        self.assertNotIn("Pourquoi cette remarque", html)
+        self.assertNotIn("Prendre rendez-vous", html)  # pas de rendez-vous suggéré quand tout est calme
+        self.assertIn("Rien d&#x27;inquiétant", html)
+
+    def test_dossier_a_surveiller(self):
+        html = self.appeler_la_vue(analyser_cas(mesures=[mesure_ad("tension", 150, valeur2=95)]))
+        self.assertIn(">À surveiller<", html)
+        self.assertIn("vigilance-a_surveiller", html)
+
+    def test_completude_affichee_et_accessible(self):
+        html = self.appeler_la_vue(analyser_cas(manquants=["Groupe sanguin", "Traitements en cours"]))
+        self.assertIn("Dossier rempli à 50 %", html)
+        self.assertIn('role="progressbar"', html)
+        self.assertIn('aria-valuenow="50"', html)
+        self.assertIn("Il manque : groupe sanguin, traitements en cours.", html)
+
+    def test_le_menu_marque_mon_dossier(self):
+        html = self.appeler_la_vue(analyser_cas())
+        self.assertEqual(html.count('aria-current="page"'), 1)
+
+    def test_antecedents_repares_affiches_en_etiquettes(self):
+        html = self.appeler_la_vue(analyser_cas(antecedents="Asthme, hypertension"))
+        self.assertIn('<li class="tag">asthme</li>', html)
+        self.assertIn('<li class="tag">hypertension</li>', html)
+
+    def test_carte_sur_la_page_dossier(self):
+        patient_page = DossierPageTests.page
+        self.assertTrue(callable(patient_page))
+        html = render_to_string("patients/dossier.html", {
+            "patient": un_patient_complet(), "dossier": un_dossier(), "allergies": [], "severes": [], "mesures": [], "derniere_demande": None,
+            "manquants": [], "analyse": analyser_cas(mesures=[mesure_ad("tension", 190, 1, 112)])}, self.requete("dossier"))
+        self.assertIn("Analyse automatique de mon dossier", html)
+        self.assertIn('href="/patients/dossier/analyse/"', html)
+        self.assertIn(">Important<", html)
+        self.assertIn("1 remarque.", html)
+        calme = render_to_string("patients/dossier.html", {
+            "patient": un_patient_complet(), "dossier": un_dossier(), "allergies": [], "severes": [], "mesures": [], "derniere_demande": None,
+            "manquants": [], "analyse": analyser_cas()}, self.requete("dossier"))
+        self.assertIn(">Calme<", calme)
+        self.assertNotIn("remarque", calme.split("Analyse automatique de mon dossier")[1].split("</section>")[0].replace("Voir l'analyse", ""))
+
+    def test_service_assemble_les_donnees_du_patient(self):
+        patient = un_patient_complet()
+        fiche = un_dossier(antecedents="Asthme", traitements_en_cours="Amoxicilline")
+        allergie = Allergie(patient=patient, substance="Pénicilline", gravite="severe", active=True)
+        mesure = Mesure(patient=patient, type="tension", valeur=190, valeur2=112, mesure_le=timezone.now() - datetime.timedelta(days=1))
+        faux_dossiers = mock.Mock()
+        faux_dossiers.first.return_value = fiche
+        with mock.patch.object(DossierMedical.objects, "filter", return_value=faux_dossiers), \
+                mock.patch.object(Allergie.objects, "filter", return_value=[allergie]), \
+                mock.patch.object(Mesure.objects, "filter", return_value=[mesure]):
+            analyse = analyse_service.analyser_patient(patient)
+        self.assertEqual(analyse.vigilance, "important")
+        self.assertIn("Traitement et allergie de la même famille", titres(analyse))
+        self.assertIn("Tension très élevée", titres(analyse))
+        self.assertEqual(analyse.profil, ["asthme"])
+        self.assertIn("Femme de", analyse.resume)
+
+    def test_service_sans_dossier(self):
+        patient = un_patient_complet()
+        faux_dossiers = mock.Mock()
+        faux_dossiers.first.return_value = None
+        with mock.patch.object(DossierMedical.objects, "filter", return_value=faux_dossiers), \
+                mock.patch.object(Allergie.objects, "filter", return_value=[]), \
+                mock.patch.object(Mesure.objects, "filter", return_value=[]):
+            analyse = analyse_service.analyser_patient(patient)
+        self.assertEqual(analyse.completude, 100 - 100 * 3 // 4)  # seul le contact d'urgence est renseigné
+        self.assertEqual(analyse.profil, [])
+
+    def test_le_back_office_affiche_l_analyse(self):
+        racine = Path(__file__).resolve().parent.parent
+        self.assertIn("analyse_service.analyser_patient(patient)", (racine / "backoffice" / "views.py").read_text(encoding="utf-8"))
+        gabarit = (racine / "backoffice" / "templates" / "backoffice" / "patient_detail.html").read_text(encoding="utf-8")
+        for texte in ("Analyse automatique du dossier", "analyse.importants", "analyse.attentions", "ne remplace pas l'avis du médecin"):
+            self.assertIn(texte, gabarit)
+
+    def test_styles_de_l_analyse(self):
+        css = (Path(__file__).resolve().parent.parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        for classe in (".vigilance-important", ".vigilance-a_surveiller", ".tag", ".remarque-important", ".remarque-attention"):
+            self.assertIn(classe, css)

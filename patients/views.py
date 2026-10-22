@@ -7,12 +7,13 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import dossier as synthese, medecins_test, mesures_stats, planning, suivi
+from . import analyse_service, dossier as synthese, medecins_test, mesures_stats, planning, suivi
 from .forms import (
     AllergieForm,
     MesureForm,
@@ -531,4 +532,35 @@ def dossier(request):
         "mesures": mesures_recentes,
         "derniere_demande": demandes[0] if demandes else None,
         "manquants": synthese.elements_manquants(patient, fiche),
+        "analyse": analyse_service.analyser_patient(patient),
+    })
+
+
+# Où mène le bouton d'action d'une remarque de l'analyse.
+_LIENS_ANALYSE = {
+    "rdv": "patients:medecins",
+    "completer": "patients:profil",
+    "allergies": "patients:allergies",
+    "mesures": "patients:mesures",
+    "mesure_nouvelle": "patients:mesure_creer",
+}
+
+
+@login_required
+def analyse(request):
+    """Analyse automatique du dossier : ce que l'assistant a repéré, et pourquoi."""
+    patient = _patient_connecte(request)
+    resultat = analyse_service.analyser_patient(patient)
+    liens = {cle: reverse(nom) for cle, nom in _LIENS_ANALYSE.items()}
+
+    def avec_lien(points):
+        return [{"point": p, "url": liens.get(p.action)} for p in points]
+
+    return render(request, "patients/analyse_dossier.html", {
+        "analyse": resultat,
+        "groupes": [
+            ("Important", "important", avec_lien(resultat.importants)),
+            ("À surveiller", "attention", avec_lien(resultat.attentions)),
+            ("Pour compléter ou vérifier", "info", avec_lien(resultat.infos)),
+        ],
     })

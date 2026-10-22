@@ -393,3 +393,16 @@
 .kpi-warn .kpi-num { color: var(--u3); }
 .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; font-size: 0.9rem; }
 .rules li { display: flex; align-items: center; gap: 0.75rem; }
+
+/* ---- Analyse automatique du dossier ---------------------------------------------------------- */
+.vigilance { border-left: 4px solid var(--u4); }
+.vigilance-a_surveiller { border-left-color: var(--u3); }
+.vigilance-important { border-left-color: var(--u1); }
+.tags { display: flex; flex-wrap: wrap; gap: 0.5rem; list-style: none; margin: 0; padding: 0; }
+.tag { padding: 0.2rem 0.75rem; border: 1px solid var(--a-line2); border-radius: 9999px; font-size: 0.8rem; background: var(--a-surface); }
+.remarque { padding: 1rem 1.25rem; border-bottom: 1px solid var(--a-line); border-left: 3px solid var(--a-line2); }
+.remarque:last-child { border-bottom: 0; }
+.remarque-important { border-left-color: var(--u1); }
+.remarque-attention { border-left-color: var(--u3); }
+.remarque-info { border-left-color: var(--a-accent); }
+.remarque summary { width: fit-content; }

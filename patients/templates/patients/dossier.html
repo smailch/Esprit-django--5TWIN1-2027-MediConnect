@@ -27,6 +27,17 @@
 </p>
 {% endif %}
 
+<section class="panel panel-pad mt-6 vigilance vigilance-{{ analyse.vigilance }}" aria-labelledby="titre-analyse">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 id="titre-analyse" class="section-title">Analyse automatique de mon dossier</h2>
+      <span class="sev {% if analyse.vigilance == 'important' %}sev-severe{% elif analyse.vigilance == 'a_surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{% if analyse.vigilance == "important" %}Important{% elif analyse.vigilance == "a_surveiller" %}À surveiller{% else %}Calme{% endif %}</span>
+    </div>
+    <a href="{% url 'patients:analyse_dossier' %}" class="abtn abtn-primary"><i data-lucide="sparkles" class="h-4 w-4"></i>Voir l'analyse</a>
+  </div>
+  <p class="muted mt-2 text-sm">{{ analyse.message }}{% if analyse.points %} {{ analyse.points|length }} remarque{{ analyse.points|length|pluralize }}.{% endif %}</p>
+</section>
+
 <div class="mt-6 grid gap-6 lg:grid-cols-2">
 
   <section class="panel panel-pad" aria-labelledby="titre-allergies">

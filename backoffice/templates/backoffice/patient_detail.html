@@ -46,6 +46,27 @@
       {% endif %}
     </section>
 
+    <section class="panel panel-pad" aria-labelledby="titre-analyse">
+      <div class="flex items-center justify-between gap-3">
+        <h2 id="titre-analyse" class="section-title">Analyse automatique du dossier</h2>
+        <span class="sev {% if analyse.vigilance == 'important' %}sev-severe{% elif analyse.vigilance == 'a_surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{% if analyse.vigilance == "important" %}Important{% elif analyse.vigilance == "a_surveiller" %}À surveiller{% else %}Calme{% endif %}</span>
+      </div>
+      <p class="muted mt-2 text-sm">{{ analyse.resume }}</p>
+      {% if analyse.importants or analyse.attentions %}
+      <ul class="mt-3 space-y-3">
+        {% for p in analyse.importants %}
+        <li class="text-sm"><span class="sev sev-severe">Important</span> <strong class="font-medium">{{ p.titre }}</strong><span class="muted block">{{ p.pourquoi }}</span></li>
+        {% endfor %}
+        {% for p in analyse.attentions %}
+        <li class="text-sm"><span class="sev sev-moderee">À surveiller</span> <strong class="font-medium">{{ p.titre }}</strong><span class="muted block">{{ p.pourquoi }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted mt-3 text-sm">Aucun point d'attention repéré. Dossier rempli à {{ analyse.completude }} %.</p>
+      {% endif %}
+      <p class="muted mt-3 text-xs">Analyse faite par des règles simples à partir des données saisies par le patient ; elle ne remplace pas l'avis du médecin.</p>
+    </section>
+
     <section class="panel panel-pad" aria-labelledby="titre-mesures">
       <h2 id="titre-mesures" class="section-title">Dernières mesures de santé</h2>
       {% if mesures %}
