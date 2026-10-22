@@ -141,6 +141,9 @@ class Analyse:
     completude: int = 0
     manquants: list = field(default_factory=list)
     lu: dict = field(default_factory=dict)
+    profil_ia: list = field(default_factory=list)  # antécédents repérés par l'IA seulement (à confirmer)
+    en_clair: str = ""  # reformulation en langage simple, produite par l'IA et validée
+    ia: dict = field(default_factory=dict)  # état de l'IA pour cette analyse (actif, consentement, statut…)
 
     @property
     def importants(self):
@@ -169,7 +172,20 @@ def _libelle_famille(cle):
     return FAMILLES[cle][0]
 
 
-def _points_allergies_traitements(allergies, traitements):
+def _familles_allergie_ia(allergie, familles_ia):
+    """Familles que l'IA a reconnues pour cette allergie : son extrait figure dans la substance ou la réaction."""
+    connues = familles_de(allergie.get("substance", ""))
+    texte = f" {normaliser(allergie.get('substance', '') + ' ' + (allergie.get('reaction') or ''))} "
+    trouvees = []
+    for cle, extrait in familles_ia or []:
+        if cle not in connues and cle not in trouvees and f" {normaliser(extrait)} " in texte:
+            trouvees.append(cle)
+    return trouvees
+
+
+def _points_allergies_traitements(allergies, traitements, familles_ia=None, familles_allergies_ia=None):
+    """`familles_ia` : {famille: extrait} repérées par l'IA dans le texte des traitements (en plus des mots connus) ;
+    `familles_allergies_ia` : [(famille, extrait)] repérées par l'IA dans la liste des allergies."""
     points = []
     actives = [a for a in allergies if a.get("active", True)]
     familles_traitement = {}  # famille -> premier médicament cité qui en fait partie
@@ -178,16 +194,24 @@ def _points_allergies_traitements(allergies, traitements):
             for terme in termes:
                 if re.search(rf"(?<![a-z0-9]){re.escape(terme)}(?![a-z0-9])", segment) and cle not in familles_traitement:
                     familles_traitement[cle] = terme
+    origine_ia = set()
+    for cle, extrait in (familles_ia or {}).items():
+        if cle not in familles_traitement:
+            familles_traitement[cle] = extrait
+            origine_ia.add(cle)
     for a in actives:
         substance = a.get("substance", "")
-        familles_allergie = familles_de(substance)
+        reperees_ia = _familles_allergie_ia(a, familles_allergies_ia)
+        familles_allergie = familles_de(substance) + reperees_ia
         for cle in familles_allergie:
             if cle in familles_traitement:
                 points.append(Point(
                     IMPORTANT, "Traitement et allergie de la même famille",
                     f"Votre traitement mentionne « {familles_traitement[cle]} », de la famille des {_libelle_famille(cle)}, "
                     f"et vous avez déclaré une allergie à « {substance} ». Parlez-en à votre médecin ou à votre pharmacien avant de le prendre.",
-                    f"Le médicament cité ({familles_traitement[cle]}) et l'allergie ({substance}) appartiennent à la même famille : {_libelle_famille(cle)}.",
+                    f"Le médicament cité ({familles_traitement[cle]}) et l'allergie ({substance}) appartiennent à la même famille : {_libelle_famille(cle)}."
+                    + (" Cette famille a été reconnue par l'IA dans votre texte : à confirmer." if cle in origine_ia else "")
+                    + (" La famille de cette allergie a été reconnue par l'IA : à confirmer." if cle in reperees_ia else ""),
                     "rdv",
                 ))
         if "penicillines" in familles_allergie and "cephalosporines" in familles_traitement:
@@ -201,9 +225,9 @@ def _points_allergies_traitements(allergies, traitements):
     return points
 
 
-def _points_interactions(medicaments, traitements):
+def _points_interactions(medicaments, traitements, familles_ia=None):
     points = []
-    if "anticoagulant" in medicaments and "ains" in familles_de(traitements):
+    if "anticoagulant" in medicaments and ("ains" in familles_de(traitements) or "ains" in (familles_ia or {})):
         points.append(Point(
             IMPORTANT, "Anticoagulant et anti-inflammatoire",
             "Votre traitement mentionne un anticoagulant et un anti-inflammatoire (aspirine, ibuprofène…). "
@@ -372,15 +396,20 @@ def _resume(age, sexe, groupe_sanguin, allergies, conditions, medicaments, mesur
     return " · ".join(morceaux) + "."
 
 
-def analyser(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, mesures, manquants, total_controles, maintenant):
+def analyser(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, mesures, manquants, total_controles, maintenant, extras=None):
     """Analyse complète. `allergies` : [{substance, gravite, active}] ; `mesures` : [{type, valeur, valeur2, mesure_le}].
     `manquants` : informations utiles non renseignées (voir patients.dossier) sur `total_controles` contrôles.
-    """
+    `extras` : éléments repérés par l'IA (déjà validés) {"antecedents"|"medicaments"|"familles"|"familles_allergies": [(nom, extrait)]}."""
+    extras = extras or {}
     conditions = conditions_reperees(antecedents)
+    profil_ia = [nom for nom, _ in extras.get("antecedents", []) if nom not in conditions]
+    conditions = conditions + profil_ia
     medicaments = medicaments_reperes(traitements)
+    medicaments = medicaments + [nom for nom, _ in extras.get("medicaments", []) if nom not in medicaments]
+    familles_ia = {nom: extrait for nom, extrait in extras.get("familles", [])}
     points = []
-    points += _points_allergies_traitements(allergies, traitements)
-    points += _points_interactions(medicaments, traitements)
+    points += _points_allergies_traitements(allergies, traitements, familles_ia, extras.get("familles_allergies", []))
+    points += _points_interactions(medicaments, traitements, familles_ia)
     points += _points_mesures(mesures, maintenant, conditions)
     points += _points_coherence(medicaments, conditions)
     points += _points_completude(manquants, allergies)
@@ -399,6 +428,7 @@ def analyser(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, 
         message=MESSAGES_VIGILANCE[vigilance],
         points=points,
         profil=conditions,
+        profil_ia=profil_ia,
         completude=completude,
         manquants=list(manquants),
         lu={

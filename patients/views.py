@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import analyse_service, dossier as synthese, medecins_test, mesures_stats, planning, suivi
+from . import analyse_service, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, planning, suivi
 from .forms import (
     AllergieForm,
     MesureForm,
@@ -29,6 +29,7 @@ from .models import (
     ConstantesVitales,
     DossierMedical,
     Patient,
+    Symptome,
     SymptomeDeclare,
     Triage,
 )
@@ -131,6 +132,7 @@ def declarer_symptomes(request, medecin_id):
         ]
         constantes = form.constantes()
         auto_evaluation = form.auto_evaluation()
+        ia_statut, ia_signes = _symptomes_par_ia(patient, form.cleaned_data["texte_libre"], symptomes)
         resultat = evaluer(symptomes, constantes, auto_evaluation)
         triage = Triage.objects.create(
             patient=patient,
@@ -146,14 +148,47 @@ def declarer_symptomes(request, medecin_id):
             texte_libre=form.cleaned_data["texte_libre"],
             score=resultat.score,
             niveau=resultat.niveau,
-            explication=resultat.explication,
+            explication=resultat.explication + (
+                " L'IA a repéré dans votre texte : " + ", ".join(s.split(" — ")[0] for s in ia_signes) + " (à confirmer par le médecin)."
+                if ia_signes else ""
+            ),
             drapeaux_rouges=resultat.drapeaux_rouges,
+            ia_statut=ia_statut,
+            ia_signes=ia_signes,
         )
         if planning.reservable(triage.statut, triage.niveau_effectif):
             return redirect("patients:creneaux", pk=triage.pk)  # étape 3 : choisir le jour et l'heure
         return redirect("patients:resultat", pk=triage.pk)  # cas prioritaire : pas de créneau à choisir
 
-    return render(request, "patients/symptomes.html", {"form": form, "medecin": medecin})
+    return render(request, "patients/symptomes.html", {
+        "form": form, "medecin": medecin, "ia": ia_client.description(), "consentement_ia": patient.consentement_ia,
+    })
+
+
+def _symptomes_par_ia(patient, texte, symptomes):
+    """Complète `symptomes` (liste modifiée sur place) avec ceux que l'IA repère dans le texte libre.
+
+    L'IA ne fait qu'AJOUTER des symptômes du catalogue, chacun cité dans le texte : les règles existantes les pèsent
+    ensuite comme les autres, donc le niveau ne peut que monter. Renvoie (statut, ["nom — « extrait »", …])."""
+    if not (texte or "").strip() or not ia_client.est_active():
+        return "", []
+    if not patient.consentement_ia:
+        return "non_consentie", []
+    catalogue = {s.nom: s for s in Symptome.objects.filter(actif=True)}
+    sortie = ia_taches.detecter_symptomes(
+        texte, list(catalogue), age=patient.age, sexe=patient.sexe, identifiant=str(patient.pk)
+    )
+    if not sortie.ok:
+        return sortie.statut, []
+    deja = {s["nom"] for s in symptomes}
+    signes = []
+    for nom, extrait in sortie.elements["symptomes"]:
+        if nom in deja:
+            continue
+        sy = catalogue[nom]
+        symptomes.append({"nom": sy.nom, "poids": sy.poids, "drapeau_rouge": sy.drapeau_rouge, "niveau_minimal": sy.niveau_minimal})
+        signes.append(f"{nom} — « {extrait} »")
+    return sortie.statut, signes
 
 
 def _propositions(triage, en_attente=None):
@@ -532,7 +567,7 @@ def dossier(request):
         "mesures": mesures_recentes,
         "derniere_demande": demandes[0] if demandes else None,
         "manquants": synthese.elements_manquants(patient, fiche),
-        "analyse": analyse_service.analyser_patient(patient),
+        "analyse": analyse_service.analyser_patient(patient, ia=analyse_service.CACHE),
     })
 
 
@@ -550,7 +585,7 @@ _LIENS_ANALYSE = {
 def analyse(request):
     """Analyse automatique du dossier : ce que l'assistant a repéré, et pourquoi."""
     patient = _patient_connecte(request)
-    resultat = analyse_service.analyser_patient(patient)
+    resultat = analyse_service.analyser_patient(patient, ia=analyse_service.COMPLET)
     liens = {cle: reverse(nom) for cle, nom in _LIENS_ANALYSE.items()}
 
     def avec_lien(points):
@@ -563,4 +598,26 @@ def analyse(request):
             ("À surveiller", "attention", avec_lien(resultat.attentions)),
             ("Pour compléter ou vérifier", "info", avec_lien(resultat.infos)),
         ],
+    })
+
+
+# --- IA : consentement du patient -------------------------------------------------------------------------
+
+_RETOURS_IA = {"analyse": "patients:analyse_dossier", "symptomes": "patients:medecins", "dossier": "patients:dossier"}
+
+
+@login_required
+def ia_consentement(request):
+    """Explique ce que l'IA lit et où, et permet au patient de l'activer ou de la désactiver (désactivée par défaut)."""
+    patient = _patient_connecte(request)
+    retour = _RETOURS_IA.get(request.POST.get("retour") or request.GET.get("retour"), "patients:dossier")
+    if request.method == "POST":
+        actif = request.POST.get("actif") == "1" and ia_client.est_active()
+        patient.consentement_ia = actif
+        patient.consentement_ia_le = timezone.now() if actif else None
+        patient.save(update_fields=["consentement_ia", "consentement_ia_le"])
+        messages.success(request, "L'analyse par IA est activée." if actif else "L'analyse par IA est désactivée.")
+        return redirect(retour)
+    return render(request, "patients/ia_consentement.html", {
+        "ia": ia_client.description(), "patient": patient, "retour": request.GET.get("retour", "dossier"),
     })

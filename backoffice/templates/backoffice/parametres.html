@@ -42,6 +42,28 @@
       <p class="muted mt-3 text-sm">Ces valeurs sont des réglages de démonstration : à faire valider par un professionnel de santé.</p>
     </section>
 
+    <section class="panel panel-pad" aria-labelledby="titre-ia">
+      <h2 id="titre-ia" class="section-title">Intelligence artificielle</h2>
+      <dl class="dl mt-3">
+        <div><dt>Fournisseur</dt><dd>{{ ia.nom }}</dd></div>
+        <div><dt>État</dt><dd>{% if ia.active %}<span class="sev sev-legere">Configurée</span>{% else %}<span class="sev sev-moderee">Désactivée</span>{% endif %}</dd></div>
+        {% if ia.active %}
+        <div><dt>Modèle</dt><dd>{{ ia.modele }}</dd></div>
+        <div><dt>Service</dt><dd>{{ ia.hote }}</dd></div>
+        {% endif %}
+        {% if ia.cle_requise %}<div class="wide"><dt>Clé d'API</dt><dd>{% if ia.cle_presente %}présente dans le fichier .env{% else %}<strong class="font-medium">absente</strong> : ajoutez GROQ_API_KEY dans le fichier .env{% endif %}</dd></div>{% endif %}
+      </dl>
+      {% if ia.active %}
+      <form method="post" class="mt-4">
+        {% csrf_token %}
+        <button type="submit" name="tester_ia" value="1" class="abtn abtn-outline"><i data-lucide="plug-zap" class="h-4 w-4"></i>Tester la connexion</button>
+      </form>
+      {% else %}
+      <p class="muted mt-3 text-sm">Pour l'activer (gratuit) : créez une clé sur console.groq.com, puis dans le fichier .env ajoutez <code>IA_FOURNISSEUR=groq</code> et <code>GROQ_API_KEY=…</code>, et redémarrez le serveur.</p>
+      {% endif %}
+      <p class="muted mt-3 text-xs">Chaque patient décide s'il active l'IA pour lui-même. La clé n'est jamais affichée.</p>
+    </section>
+
     <section class="panel panel-pad" aria-labelledby="titre-raccourcis">
       <h2 id="titre-raccourcis" class="section-title">Autres réglages</h2>
       <ul class="mt-3 space-y-2">

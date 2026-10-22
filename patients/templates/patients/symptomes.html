@@ -47,6 +47,13 @@
     <!-- 4. Description libre -->
     <section class="panel panel-pad order-4 lg:order-none">
       {% with field=form.texte_libre %}{% include "core/_champ.html" %}{% endwith %}
+      {% if ia.active %}
+      <p class="note mt-3">
+        <i data-lucide="sparkles" class="h-4 w-4" aria-hidden="true"></i>
+        {% if consentement_ia %}L'IA lira votre texte pour repérer des signes que vous n'avez pas cochés. <a class="link" href="{% url 'patients:ia_consentement' %}?retour=symptomes">Désactiver</a>
+        {% else %}Voulez-vous que l'IA lise votre texte pour repérer des signes que vous n'avez pas cochés ? <a class="link" href="{% url 'patients:ia_consentement' %}?retour=symptomes">En savoir plus et décider</a>{% endif %}
+      </p>
+      {% endif %}
     </section>
 
   </div>

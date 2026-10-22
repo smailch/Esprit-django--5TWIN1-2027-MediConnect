@@ -69,6 +69,13 @@
         {% if triage.drapeaux_rouges %}
         <div class="wide"><dt>Signes d'alerte</dt><dd>{{ triage.drapeaux_rouges|join:", " }}</dd></div>
         {% endif %}
+        {% if triage.ia_signes %}
+        <div class="wide"><dt>Repéré par l'IA dans le texte libre <span class="muted">(à confirmer)</span></dt><dd>{% for s in triage.ia_signes %}{{ s }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>
+        {% elif triage.ia_statut == "non_consentie" %}
+        <div class="wide"><dt>Analyse IA du texte libre</dt><dd class="muted">non faite : le patient n'a pas activé l'IA</dd></div>
+        {% elif triage.ia_statut and triage.ia_statut != "ok" %}
+        <div class="wide"><dt>Analyse IA du texte libre</dt><dd class="muted">indisponible lors de la demande ({{ triage.ia_statut }})</dd></div>
+        {% endif %}
       </dl>
     </section>
 

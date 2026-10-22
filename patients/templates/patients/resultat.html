@@ -49,6 +49,15 @@
         </div>
         {% endif %}
 
+        {% if triage.ia_signes %}
+        <div class="sm:col-span-2">
+          <h3 class="text-sm font-medium"><i data-lucide="sparkles" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Repéré par l'IA dans votre texte <span class="muted font-normal">(à confirmer par le médecin)</span></h3>
+          <ul class="muted mt-1 list-disc pl-5 text-sm">
+            {% for s in triage.ia_signes %}<li>{{ s }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         {% with resume=triage.auto_evaluation_resume %}
         {% if resume %}
         <div>

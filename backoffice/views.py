@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.shortcuts import redirect, render
 
 from core.utils import objet_ou_404
-from patients import analyse_service, medecins_test, suivi
+from patients import analyse_service, ia_client, medecins_test, suivi
 from patients.models import Allergie, DossierMedical, Mesure, Patient, ReglageTriage, Symptome, Triage
 
 from .forms import FiltreRendezVousForm, MajRendezVousForm, ReglageTriageForm
@@ -134,7 +134,7 @@ def patient_detail(request, pk):
         "dossier": DossierMedical.objects.filter(patient=patient).first(),
         "allergies": Allergie.objects.filter(patient=patient).order_by("-active", "substance"),
         "mesures": sorted(Mesure.objects.filter(patient=patient), key=lambda m: m.mesure_le, reverse=True)[:10],
-        "analyse": analyse_service.analyser_patient(patient),
+        "analyse": analyse_service.analyser_patient(patient, ia=analyse_service.CACHE),
         "demandes": Triage.objects.filter(patient=patient).order_by("-cree_le"),
     })
 
@@ -181,6 +181,13 @@ def file_attente(request):
 @administrateur_requis
 def parametres(request):
     """Réglages de la file d'attente (délais cibles, plafond de dépassements) et raccourcis d'administration."""
+    if request.method == "POST" and "tester_ia" in request.POST:
+        resultat = ia_client.tester_connexion()
+        if resultat.ok:
+            messages.success(request, f"Connexion à l'IA réussie en {resultat.duree_ms} ms.")
+        else:
+            messages.error(request, f"Connexion à l'IA impossible : {resultat.message}")
+        return redirect("backoffice:parametres")
     reglage = ReglageTriage.actuel()
     if request.method == "POST" and "defaut" in request.POST:
         for champ in ReglageTriageForm._meta.model._meta.get_fields():
@@ -194,4 +201,4 @@ def parametres(request):
         form.save()
         messages.success(request, "Les réglages de la file d'attente ont été enregistrés.")
         return redirect("backoffice:parametres")
-    return render(request, "backoffice/parametres.html", {"form": form})
+    return render(request, "backoffice/parametres.html", {"form": form, "ia": ia_client.description()})

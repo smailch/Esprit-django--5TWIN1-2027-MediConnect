@@ -11,6 +11,24 @@
   </div>
 </header>
 
+{% if analyse.ia.disponible and not analyse.ia.consentement %}
+<section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-activer">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="max-w-2xl">
+      <h2 id="titre-ia-activer" class="section-title"><i data-lucide="sparkles" class="mr-1 inline h-5 w-5" aria-hidden="true"></i>L'analyse par intelligence artificielle est disponible</h2>
+      <p class="muted mt-2 text-sm">Activez-la pour que l'IA lise vos antécédents et traitements écrits avec vos mots, repère ce que les règles ne reconnaissent pas et résume votre analyse en langage simple. C'est facultatif : vous décidez, et vous pouvez la désactiver à tout moment.</p>
+    </div>
+    <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="abtn abtn-primary abtn-lg">Voir et activer l'IA</a>
+  </div>
+</section>
+{% elif analyse.ia.disponible and analyse.ia.consentement and analyse.ia.statut == "ok" and not analyse.ia.contenu_a_lire %}
+<section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-rien">
+  <h2 id="titre-ia-rien" class="section-title"><i data-lucide="sparkles" class="mr-1 inline h-5 w-5" aria-hidden="true"></i>L'IA est activée, mais elle n'a rien à lire</h2>
+  <p class="muted mt-2 text-sm">Votre dossier ne contient encore aucune information médicale. Ajoutez vos allergies et vos mesures de santé, et écrivez vos <strong class="font-medium text-gray-800">antécédents</strong> et vos <strong class="font-medium text-gray-800">traitements en cours</strong> avec vos mots (par exemple « asthme depuis l'enfance, tension haute » ou « Ventoline, Amoxypen 500 »), puis revenez ici : l'IA lira tout votre dossier.</p>
+  <a href="{% url 'patients:profil' %}" class="abtn abtn-outline mt-4">Compléter mon dossier</a>
+</section>
+{% endif %}
+
 <section class="panel panel-pad mt-8 vigilance vigilance-{{ analyse.vigilance }}" aria-labelledby="titre-vigilance">
   <div class="flex flex-wrap items-center gap-3">
     <h2 id="titre-vigilance" class="section-title">Niveau de vigilance</h2>
@@ -26,12 +44,23 @@
 <div class="mt-6 grid gap-6 lg:grid-cols-12 lg:items-start">
 
   <div class="space-y-6 lg:col-span-8">
+    {% if analyse.en_clair %}
+    <section class="panel panel-pad ia-bloc" aria-labelledby="titre-clair">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="titre-clair" class="section-title">En clair</h2>
+        <span class="tag tag-ia"><i data-lucide="sparkles" class="mr-1 inline h-3 w-3" aria-hidden="true"></i>Reformulé par l'IA</span>
+      </div>
+      <p class="mt-3 text-sm">{{ analyse.en_clair }}</p>
+      <p class="muted mt-2 text-xs">Ce résumé reprend l'ensemble de votre dossier et les remarques ci-dessous, sans rien ajouter.</p>
+    </section>
+    {% endif %}
+
     <section class="panel panel-pad" aria-labelledby="titre-resume">
       <h2 id="titre-resume" class="section-title">Résumé</h2>
       <p class="mt-3 text-sm">{{ analyse.resume }}</p>
       {% if analyse.profil %}
       <ul class="tags mt-4" aria-label="Antécédents repérés">
-        {% for p in analyse.profil %}<li class="tag">{{ p }}</li>{% endfor %}
+        {% for p in analyse.profil %}<li class="tag{% if p in analyse.profil_ia %} tag-ia{% endif %}">{{ p }}{% if p in analyse.profil_ia %} · IA, à confirmer{% endif %}</li>{% endfor %}
       </ul>
       {% endif %}
     </section>
@@ -89,10 +118,38 @@
       </dl>
     </section>
 
+    {% if analyse.ia.disponible %}
+    <section class="panel panel-pad" aria-labelledby="titre-ia">
+      <h2 id="titre-ia" class="section-title">Analyse par IA</h2>
+      {% if analyse.ia.consentement %}
+      <p class="mt-3 text-sm">
+        {% if analyse.ia.statut == "ok" %}<span class="sev sev-legere">Active</span> L'IA a lu votre dossier complet.
+        {% else %}<span class="sev sev-moderee">Indisponible</span> L'IA n'a pas pu répondre cette fois : l'analyse ci-dessus vient des règles seules.{% endif %}
+      </p>
+      {% if analyse.ia.lu %}
+      <ul class="ia-lu mt-3 text-sm" aria-label="Ce que l'IA a lu de votre dossier">
+        {% for rubrique, detail, renseignee in analyse.ia.lu %}
+        <li{% if not renseignee %} class="ia-lu-vide"{% endif %}><span class="font-medium">{{ rubrique }}</span><span class="muted">{{ detail }}</span></li>
+        {% endfor %}
+      </ul>
+      <details class="mt-3 text-sm">
+        <summary class="link cursor-pointer">Voir exactement ce qui est envoyé</summary>
+        <pre class="ia-envoye mt-2">{{ analyse.ia.envoye }}</pre>
+        <p class="muted mt-2 text-xs">Votre nom, votre date de naissance, votre téléphone, votre adresse, votre e-mail et votre contact d'urgence ne sont jamais envoyés.</p>
+      </details>
+      {% endif %}
+      <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="link mt-3 inline-block text-sm">Désactiver ou en savoir plus</a>
+      {% else %}
+      <p class="muted mt-3 text-sm">Désactivée. Activée, elle lit l'ensemble de votre dossier (profil, antécédents, traitements, allergies, mesures, demandes de rendez-vous) et le résume en langage simple.</p>
+      <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="abtn abtn-outline mt-3">Découvrir et décider</a>
+      {% endif %}
+    </section>
+    {% endif %}
+
     <section class="panel panel-pad" aria-labelledby="titre-limites">
       <h2 id="titre-limites" class="section-title">À savoir</h2>
       <ul class="muted mt-3 list-disc space-y-2 pl-5 text-sm">
-        <li>Cette analyse est faite par des <strong class="font-medium text-gray-800">règles médicales simples</strong>, sur le serveur de MediConnect : vos données ne sont envoyées à aucun service externe.</li>
+        <li>Cette analyse est faite par des <strong class="font-medium text-gray-800">règles médicales simples</strong>, sur le serveur de MediConnect.{% if analyse.ia.consentement %} Comme vous avez activé l'IA, votre dossier (sans nom, téléphone, adresse ni date de naissance) est aussi transmis au service d'IA.{% else %} Vos données ne sont envoyées à aucun service externe.{% endif %}</li>
         <li>Elle <strong class="font-medium text-gray-800">ne remplace pas un médecin</strong> et peut se tromper ou ne pas reconnaître un mot.</li>
         <li>Plus votre dossier est précis, plus elle est utile.</li>
       </ul>

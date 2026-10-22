@@ -146,3 +146,13 @@ DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 LOGIN_URL = 'core:connexion'
 LOGIN_REDIRECT_URL = 'home'  # repli ; la destination réelle dépend du rôle (core.views.ConnexionView)
 LOGOUT_REDIRECT_URL = 'home'
+
+
+# --- Intelligence artificielle (facultative, désactivée par défaut) ---------------------------------------
+# IA_FOURNISSEUR : « aucun » (défaut), « groq » (cloud, gratuit) ou « ollama » (sur ce serveur).
+# La clé d'API se met dans le fichier .env (jamais dans le code ni dans Git). Voir .env.example.
+IA_FOURNISSEUR = os.environ.get('IA_FOURNISSEUR', 'aucun')
+IA_CLE_API = os.environ.get('IA_CLE_API') or os.environ.get('GROQ_API_KEY', '')
+IA_MODELE = os.environ.get('IA_MODELE', '')  # vide : modèle par défaut du fournisseur
+IA_URL = os.environ.get('IA_URL', '')  # vide : adresse par défaut du fournisseur
+IA_DELAI_MAX = float(os.environ.get('IA_DELAI_MAX', '6'))  # secondes ; au-delà, l'application garde ses règles

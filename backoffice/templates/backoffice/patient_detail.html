@@ -52,6 +52,7 @@
         <span class="sev {% if analyse.vigilance == 'important' %}sev-severe{% elif analyse.vigilance == 'a_surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{% if analyse.vigilance == "important" %}Important{% elif analyse.vigilance == "a_surveiller" %}À surveiller{% else %}Calme{% endif %}</span>
       </div>
       <p class="muted mt-2 text-sm">{{ analyse.resume }}</p>
+      {% if analyse.profil_ia %}<p class="muted mt-1 text-xs">Repéré par l'IA, à confirmer : {{ analyse.profil_ia|join:", " }}.</p>{% endif %}
       {% if analyse.importants or analyse.attentions %}
       <ul class="mt-3 space-y-3">
         {% for p in analyse.importants %}

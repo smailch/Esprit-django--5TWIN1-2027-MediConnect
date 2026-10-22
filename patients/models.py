@@ -31,6 +31,9 @@ class Patient(models.Model):
     )
     contact_urgence_nom = models.CharField(max_length=150, blank=True)
     contact_urgence_tel = models.CharField(max_length=20, blank=True)
+    # Accord du patient pour que l'IA lise son texte libre (triage) et son dossier. Désactivé par défaut.
+    consentement_ia = models.BooleanField(default=False)
+    consentement_ia_le = models.DateTimeField(null=True, blank=True)
     cree_le = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -393,6 +396,10 @@ class Triage(models.Model):
 
     # Créneau choisi par le patient (niveaux 3 à 5), pris dans les horaires du médecin.
     creneau = models.DateTimeField(null=True, blank=True)
+
+    # Analyse du texte libre par l'IA : statut (ok, indisponible…) et signes repérés, avec leur citation.
+    ia_statut = models.CharField(max_length=20, blank=True)
+    ia_signes = ArrayField(models.CharField(max_length=250), blank=True, default=list)
 
     # Nombre de fois où une demande arrivée après celle-ci a été prise en charge avant elle.
     # Au-delà du plafond (voir ReglageTriage), la demande ne peut plus être dépassée.

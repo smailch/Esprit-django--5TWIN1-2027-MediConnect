@@ -10,6 +10,7 @@ urlpatterns = [
     path("profil/", views.profil, name="profil"),
     path("dossier/", views.dossier, name="dossier"),
     path("dossier/analyse/", views.analyse, name="analyse_dossier"),
+    path("ia/", views.ia_consentement, name="ia_consentement"),
     path("allergies/", views.allergies, name="allergies"),
     path("allergies/nouvelle/", views.allergie_creer, name="allergie_creer"),
     path("allergies/<str:pk>/modifier/", views.allergie_modifier, name="allergie_modifier"),

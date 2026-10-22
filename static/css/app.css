@@ -406,3 +406,12 @@
 .remarque-attention { border-left-color: var(--u3); }
 .remarque-info { border-left-color: var(--a-accent); }
 .remarque summary { width: fit-content; }
+
+/* ---- IA ------------------------------------------------------------------------------------------ */
+.tag-ia { border-color: var(--a-accent); color: var(--a-accent-hover); }
+.ia-bloc { border-left: 3px solid var(--a-accent); }
+.ia-lu { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.ia-lu li { display: flex; justify-content: space-between; gap: 0.75rem; }
+.ia-lu li > .muted { text-align: right; }
+.ia-lu-vide { opacity: 0.65; }
+.ia-envoye { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; margin: 0; padding: 0.75rem; border-radius: 0.5rem; background: rgb(127 127 127 / 0.1); font: 0.75rem/1.5 ui-monospace, Consolas, monospace; }
