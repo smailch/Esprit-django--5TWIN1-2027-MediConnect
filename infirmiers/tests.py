@@ -4,13 +4,18 @@ from unittest import mock
 
 from bson import ObjectId
 from django.contrib import admin
-from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase
+from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.test import RequestFactory, SimpleTestCase
+from django.urls import resolve, reverse
 from django.utils import timezone
 
 from core.models import User
+from core.views import ConnexionView
 from patients.models import ConstantesVitales, Patient
 
+from . import views
+from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, TypeSoin
 
 
@@ -126,12 +131,33 @@ class InterventionModeleTests(SimpleTestCase):
             une_intervention(date_souhaitee=hier).clean()
         self.assertIn("date_souhaitee", ctx.exception.message_dict)
 
+    def test_date_passee_toleree_pour_une_demande_deja_enregistree(self):
+        it = une_intervention(date_souhaitee=timezone.localdate() - datetime.timedelta(days=3))
+        it._state.adding = False  # comme une demande relue depuis la base
+        it.clean()
+
+    def test_a_cloturer(self):
+        self.assertTrue(une_intervention(statut="acceptee", date_prevue=plus_tard(-1)).a_cloturer)
+        self.assertFalse(une_intervention(statut="acceptee", date_prevue=plus_tard()).a_cloturer)
+        self.assertFalse(une_intervention(statut="realisee", date_prevue=plus_tard(-1)).a_cloturer)
+
+    def test_heure_conseillee_selon_le_moment(self):
+        self.assertEqual(une_intervention(moment="matin").heure_conseillee, (9, 0))
+        self.assertEqual(une_intervention(moment="apres_midi").heure_conseillee, (14, 0))
+        self.assertEqual(une_intervention().heure_conseillee, (10, 0))
+
+    def test_demandes_pour_un_infirmier_sans_ville(self):
+        demandes = InterventionDomicile.objects.demandes_pour(un_infirmier(ville="", zones=[]))
+        self.assertTrue(demandes.query.is_empty())  # aucune requête : la liste est vide d'office
+
     def test_date_passee_acceptee_une_fois_realisee(self):
         hier = timezone.localdate() - datetime.timedelta(days=1)
-        une_intervention(
+        it = une_intervention(
             date_souhaitee=hier, statut="realisee", infirmier=un_infirmier(), date_prevue=timezone.now(),
             compte_rendu="Fait.", realisee_le=timezone.now(),
-        ).clean()
+        )
+        it._state.adding = False
+        it.clean()
 
     def test_acceptee_sans_infirmier_ni_heure_refusee(self):
         with self.assertRaises(ValidationError) as ctx:
@@ -239,6 +265,206 @@ class TerminerEtAnnulerTests(SansBaseMixin, SimpleTestCase):
         it.terminer("Fait.")
         with self.assertRaises(ValidationError):
             it.annuler("Trop tard")
+
+    def test_replanifier(self):
+        it = self.acceptee()
+        nouveau = plus_tard(3)
+        it.replanifier(nouveau)
+        self.assertEqual(it.date_prevue, nouveau)
+        with self.assertRaises(ValidationError):
+            it.replanifier(plus_tard(-1))
+        self.assertEqual(it.date_prevue, nouveau)
+        with self.assertRaises(ValidationError):
+            une_intervention().replanifier(plus_tard())
+
+    def test_liberer_rend_la_demande(self):
+        it = self.acceptee()
+        it.liberer()
+        self.assertEqual((it.statut, it.infirmier_id, it.date_prevue, it.acceptee_le), ("demandee", None, None, None))
+        with self.assertRaises(ValidationError):
+            it.liberer()
+
+
+# --- Formulaires ---------------------------------------------------------------------------
+
+
+def donnees_inscription(**kw):
+    valeurs = {
+        "username": "rania", "first_name": "Rania", "last_name": "Essai", "email": "rania@exemple.tn",
+        "password1": "Tres-Secret-2026", "password2": "Tres-Secret-2026",
+        "telephone": "24000000", "numero_ordre": " tn-55 ", "ville": "Tunis", "zones": "Ariana, , la  Marsa",
+        "soins": ["pansement"],
+    }
+    valeurs.update(kw)
+    return valeurs
+
+
+class InscriptionFormTests(SimpleTestCase):
+    def setUp(self):
+        # Aucun accès à la base : unicité de l'identifiant, de l'e-mail et du numéro d'Ordre remplacée.
+        for cible in ("infirmiers.forms.email_deja_utilise", "infirmiers.forms.numero_ordre_utilise"):
+            p = mock.patch(cible, return_value=False)
+            p.start()
+            self.addCleanup(p.stop)
+        for nom, remplacement in (("clean_username", lambda form: form.cleaned_data["username"]), ("validate_unique", lambda form: None)):
+            p = mock.patch.object(InscriptionInfirmierForm, nom, remplacement)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_donnees_nettoyees(self):
+        form = InscriptionInfirmierForm(donnees_inscription())
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["numero_ordre"], "TN-55")
+        self.assertEqual(form.cleaned_data["zones"], ["Ariana", "la Marsa"])
+        self.assertEqual(form.cleaned_data["soins"], ["pansement"])
+
+    def test_soins_et_zones_facultatifs(self):
+        form = InscriptionInfirmierForm(donnees_inscription(zones="", soins=[]))
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual((form.cleaned_data["zones"], form.cleaned_data["soins"]), ([], []))
+
+    def test_champs_obligatoires(self):
+        form = InscriptionInfirmierForm(donnees_inscription(telephone="", numero_ordre="", ville=""))
+        self.assertFalse(form.is_valid())
+        self.assertTrue({"telephone", "numero_ordre", "ville"} <= set(form.errors))
+
+    def test_numero_ordre_deja_pris(self):
+        with mock.patch("infirmiers.forms.numero_ordre_utilise", return_value=True):
+            form = InscriptionInfirmierForm(donnees_inscription())
+            self.assertFalse(form.is_valid())
+        self.assertIn("numero_ordre", form.errors)
+
+    def test_soin_inconnu_refuse(self):
+        form = InscriptionInfirmierForm(donnees_inscription(soins=["massage"]))
+        self.assertFalse(form.is_valid())
+        self.assertIn("soins", form.errors)
+
+
+class ProfilFormTests(SimpleTestCase):
+    def test_valeurs_initiales(self):
+        form = ProfilInfirmierForm(instance=un_infirmier(zones=["Ariana", "La Marsa"]))
+        self.assertEqual(form.initial["first_name"], "Sami")
+        self.assertEqual(form.initial["zones"], "Ariana, La Marsa")
+
+
+class PassageFormTests(SimpleTestCase):
+    def test_heure_proposee_selon_le_moment_souhaite(self):
+        jour = timezone.localdate() + datetime.timedelta(days=2)
+        form = PassageForm(intervention=une_intervention(date_souhaitee=jour, moment="apres_midi"))
+        self.assertEqual(form.initial["date_prevue"], datetime.datetime.combine(jour, datetime.time(14, 0)))
+
+    def test_demande_en_retard_proposee_aujourd_hui(self):
+        it = une_intervention(date_souhaitee=timezone.localdate() - datetime.timedelta(days=2))
+        self.assertEqual(PassageForm(intervention=it).initial["date_prevue"].date(), timezone.localdate())
+
+    def test_date_passee_refusee(self):
+        hier = timezone.localtime() - datetime.timedelta(days=1)
+        form = PassageForm({"date_prevue": hier.strftime("%Y-%m-%dT%H:%M")})
+        self.assertFalse(form.is_valid())
+        self.assertIn("date_prevue", form.errors)
+
+
+class CompteRenduFormTests(SimpleTestCase):
+    def donnees(self, **kw):
+        valeurs = {"compte_rendu": "Fait.", "realisee_le": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
+        valeurs.update(kw)
+        return valeurs
+
+    def test_sans_constantes(self):
+        form = CompteRenduForm(self.donnees())
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.constantes())
+
+    def test_avec_constantes(self):
+        form = CompteRenduForm(self.donnees(temperature="38.2", tension_systolique="130", tension_diastolique="80"))
+        self.assertTrue(form.is_valid(), form.errors)
+        c = form.constantes()
+        self.assertEqual((c.temperature, c.tension_systolique, c.tension_diastolique), (Decimal("38.2"), 130, 80))
+
+    def test_refus(self):
+        cas = {
+            "compte rendu vide": ({"compte_rendu": ""}, "compte_rendu"),
+            "date future": ({"realisee_le": (timezone.localtime() + datetime.timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")}, "realisee_le"),
+            "tension incomplète": ({"tension_systolique": "130"}, "tension_diastolique"),
+            "tension inversée": ({"tension_systolique": "80", "tension_diastolique": "130"}, "tension_diastolique"),
+            "température absurde": ({"temperature": "60"}, "temperature"),
+            "saturation > 100": ({"saturation_oxygene": "120"}, "saturation_oxygene"),
+        }
+        for nom, (champs, attendu) in cas.items():
+            with self.subTest(nom):
+                form = CompteRenduForm(self.donnees(**champs))
+                self.assertFalse(form.is_valid())
+                self.assertIn(attendu, form.errors)
+
+
+class AnnulationFormTests(SimpleTestCase):
+    def test_motif_obligatoire(self):
+        self.assertFalse(AnnulationForm({"motif": ""}).is_valid())
+        self.assertTrue(AnnulationForm({"motif": "Patient absent"}).is_valid())
+
+
+# --- Adresses et droits d'accès ----------------------------------------------------------------
+
+
+class UrlsTests(SimpleTestCase):
+    def test_adresses(self):
+        pk = str(ObjectId())
+        cas = {
+            "/infirmiers/inscription/": "inscription",
+            "/infirmiers/tableau-de-bord/": "tableau_de_bord",
+            "/infirmiers/demandes/": "demandes",
+            "/infirmiers/planning/": "planning",
+            "/infirmiers/historique/": "historique",
+            "/infirmiers/profil/": "profil",
+            f"/infirmiers/interventions/{pk}/": "intervention",
+            f"/infirmiers/interventions/{pk}/accepter/": "accepter",
+            f"/infirmiers/interventions/{pk}/replanifier/": "replanifier",
+            f"/infirmiers/interventions/{pk}/compte-rendu/": "terminer",
+            f"/infirmiers/interventions/{pk}/annuler/": "annuler",
+            f"/infirmiers/interventions/{pk}/liberer/": "liberer",
+        }
+        for url, nom in cas.items():
+            with self.subTest(url=url):
+                self.assertEqual(resolve(url).view_name, f"infirmiers:{nom}")
+
+
+class DroitsTests(SimpleTestCase):
+    VUES = ("tableau_de_bord", "demandes", "planning", "historique", "profil")
+    VUES_INTERVENTION = ("intervention", "replanifier", "terminer", "annuler")
+
+    def appeler(self, nom, user, *args):
+        requete = RequestFactory().get("/infirmiers/")
+        requete.user = user
+        return getattr(views, nom)(requete, *args)
+
+    def test_anonyme_renvoye_vers_la_connexion(self):
+        for nom in self.VUES + self.VUES_INTERVENTION:
+            args = ("x",) if nom in self.VUES_INTERVENTION else ()
+            with self.subTest(vue=nom):
+                reponse = self.appeler(nom, AnonymousUser(), *args)
+                self.assertEqual(reponse.status_code, 302)
+                self.assertTrue(reponse["Location"].startswith(reverse("core:connexion")))
+
+    def test_un_compte_sans_profil_infirmier_est_refuse(self):
+        patient = User(username="amel", role="patient")  # jamais enregistré : aucun profil infirmier
+        for nom in self.VUES + self.VUES_INTERVENTION:
+            args = ("x",) if nom in self.VUES_INTERVENTION else ()
+            with self.subTest(vue=nom):
+                with self.assertRaises(PermissionDenied):
+                    self.appeler(nom, patient, *args)
+
+    def test_les_actions_n_acceptent_que_post(self):
+        for nom in ("accepter", "liberer"):
+            requete = RequestFactory().get("/")
+            requete.user = User(username="sami", role="infirmier")
+            with self.subTest(vue=nom):
+                self.assertEqual(getattr(views, nom)(requete, "x").status_code, 405)
+
+    def test_connexion_d_un_infirmier_mene_a_son_tableau_de_bord(self):
+        vue = ConnexionView()
+        vue.request = RequestFactory().get("/comptes/connexion/")
+        vue.request.user = User(username="sami", role="infirmier")
+        self.assertEqual(vue.get_default_redirect_url(), reverse("infirmiers:tableau_de_bord"))
 
 
 class AdminTests(SimpleTestCase):

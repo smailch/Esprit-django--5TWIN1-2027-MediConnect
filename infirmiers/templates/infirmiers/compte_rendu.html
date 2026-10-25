@@ -1,0 +1,41 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Compte rendu de soin — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'infirmiers:intervention' intervention.pk %}" class="link text-sm">← {{ intervention.get_type_soin_display }} · {{ intervention.patient }}</a>
+    <h1 class="page-title mt-2">Compte rendu de soin</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Une fois enregistré, l'intervention est terminée et ne peut plus être modifiée.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="mt-8 max-w-3xl space-y-8">
+  {% csrf_token %}
+  {% include "infirmiers/_erreurs.html" %}
+
+  <section class="panel panel-pad space-y-5" aria-labelledby="titre-soin">
+    <h2 id="titre-soin" class="section-title">Le soin</h2>
+    {% with field=form.realisee_le %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.compte_rendu %}{% include "core/_champ.html" %}{% endwith %}
+  </section>
+
+  <section class="panel panel-pad" aria-labelledby="titre-constantes">
+    <h2 id="titre-constantes" class="section-title">Constantes relevées</h2>
+    <p class="muted mt-1 text-sm">Facultatif : remplissez seulement ce que vous avez mesuré.</p>
+    <div class="mt-5 grid gap-5 sm:grid-cols-2">
+      {% with field=form.temperature %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.saturation_oxygene %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.tension_systolique %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.tension_diastolique %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.frequence_cardiaque %}{% include "core/_champ.html" %}{% endwith %}
+    </div>
+  </section>
+
+  <div class="flex flex-wrap gap-3">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer et terminer</button>
+    <a href="{% url 'infirmiers:intervention' intervention.pk %}" class="abtn abtn-ghost abtn-lg">Retour</a>
+  </div>
+</form>
+{% endblock %}

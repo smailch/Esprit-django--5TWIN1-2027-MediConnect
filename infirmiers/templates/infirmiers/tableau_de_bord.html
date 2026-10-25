@@ -1,0 +1,72 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Tableau de bord — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Bonjour {{ user.first_name|default:user.username }}</h1>
+    <p class="muted mt-2 text-sm">Vos soins à domicile : {{ infirmier.villes_desservies|join:", " }}.</p>
+  </div>
+  <a href="{% url 'infirmiers:demandes' %}" class="abtn abtn-primary">
+    <i aria-hidden="true" data-lucide="inbox" class="h-4 w-4"></i>Voir les demandes
+  </a>
+</header>
+
+{% if not infirmier.est_valide %}
+<p class="alert alert-warn mt-6" role="note">
+  <strong class="font-medium">Compte en attente de validation.</strong>
+  Un administrateur vérifie votre numéro d'Ordre ({{ infirmier.numero_ordre }}). Vous pouvez consulter les demandes, mais pas encore les accepter.
+</p>
+{% elif not infirmier.disponible %}
+<p class="alert alert-warn mt-6" role="note">
+  Vous êtes indiqué comme <strong class="font-medium">indisponible</strong> : vous ne pouvez pas accepter de nouvelle demande.
+  <a href="{% url 'infirmiers:profil' %}" class="link">Modifier ma disponibilité</a>
+</p>
+{% endif %}
+
+<section class="kpi-grid mt-8" aria-label="Chiffres clés">
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.demandes }}</p><p class="kpi-label">Demandes dans votre zone</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.du_jour }}</p><p class="kpi-label">Passages restants aujourd'hui</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.a_venir }}</p><p class="kpi-label">Passages les jours suivants</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.realisees_mois }}</p><p class="kpi-label">Soins réalisés ce mois-ci</p></div>
+</section>
+
+{% if a_cloturer %}
+<section class="panel mt-6" aria-labelledby="titre-cloturer">
+  <h2 id="titre-cloturer" class="section-title px-5 pt-5">Comptes rendus à saisir <span class="count">{{ a_cloturer|length }}</span></h2>
+  <p class="muted px-5 pt-1 text-sm">Le passage prévu est dépassé : saisissez le compte rendu, ou annulez si le soin n'a pas eu lieu.</p>
+  <ul class="mt-2">
+    {% for i in a_cloturer %}{% include "infirmiers/_ligne.html" %}{% endfor %}
+  </ul>
+  <div class="pb-3"></div>
+</section>
+{% endif %}
+
+<div class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+  <section class="lg:col-span-7" aria-labelledby="titre-jour">
+    <h2 id="titre-jour" class="section-title">Aujourd'hui <span class="count">{{ du_jour|length }}</span></h2>
+    {% if du_jour %}
+    <ul class="panel mt-4">
+      {% for i in du_jour %}{% include "infirmiers/_ligne.html" with heure=True %}{% endfor %}
+    </ul>
+    {% else %}
+    <p class="panel panel-pad muted mt-4 text-sm">Aucun passage prévu pour le reste de la journée.</p>
+    {% endif %}
+  </section>
+
+  <section class="lg:col-span-5" aria-labelledby="titre-venir">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="titre-venir" class="section-title">Prochains jours <span class="count">{{ kpis.a_venir }}</span></h2>
+      <a href="{% url 'infirmiers:planning' %}" class="link text-sm">Tout le planning</a>
+    </div>
+    {% if a_venir %}
+    <ul class="panel mt-4">
+      {% for i in a_venir %}{% include "infirmiers/_ligne.html" %}{% endfor %}
+    </ul>
+    {% else %}
+    <p class="panel panel-pad muted mt-4 text-sm">Rien de prévu pour l'instant.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

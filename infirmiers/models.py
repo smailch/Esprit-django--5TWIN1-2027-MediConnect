@@ -85,6 +85,23 @@ class Infirmier(models.Model):
             raise ValidationError({"user": "Ce compte n'a pas le rôle « infirmier »."})
 
 
+class InterventionQuerySet(models.QuerySet):
+    def demandes_pour(self, infirmier):
+        """Demandes en attente que cet infirmier peut accepter : dans ses villes et parmi ses soins."""
+        zone = models.Q()
+        for ville in infirmier.villes_desservies:
+            zone |= models.Q(ville__iexact=ville)
+        if not zone:
+            return self.none()
+        demandes = self.filter(zone, statut=InterventionDomicile.Statut.DEMANDEE, infirmier__isnull=True)
+        if infirmier.soins:
+            demandes = demandes.filter(type_soin__in=infirmier.soins)
+        return demandes
+
+    def de(self, infirmier):
+        return self.filter(infirmier=infirmier)
+
+
 class InterventionDomicile(models.Model):
     """Un soin à domicile, de la demande au compte rendu.
 
@@ -131,6 +148,8 @@ class InterventionDomicile(models.Model):
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
 
+    objects = InterventionQuerySet.as_manager()
+
     class Meta:
         verbose_name = "intervention à domicile"
         verbose_name_plural = "interventions à domicile"
@@ -144,13 +163,24 @@ class InterventionDomicile(models.Model):
         """Une intervention réalisée ou annulée est archivée : on ne la change plus."""
         return self.statut in (self.Statut.DEMANDEE, self.Statut.ACCEPTEE)
 
+    @property
+    def a_cloturer(self):
+        """Passage prévu dépassé sans compte rendu."""
+        return self.statut == self.Statut.ACCEPTEE and self.date_prevue is not None and self.date_prevue <= timezone.now()
+
+    @property
+    def heure_conseillee(self):
+        """Heure proposée par défaut à l'infirmier qui accepte : selon le moment souhaité par le patient."""
+        return {self.Moment.MATIN: (9, 0), self.Moment.APRES_MIDI: (14, 0)}.get(self.moment, (10, 0))
+
     def clean(self):
         super().clean()
         erreurs = {}
         self.ville = " ".join((self.ville or "").split())
         aujourdhui = timezone.localdate()
 
-        if self.statut == self.Statut.DEMANDEE and self.date_souhaitee and self.date_souhaitee < aujourdhui:
+        # Seulement à la création : une demande restée sans réponse garde sa date, même dépassée.
+        if self._state.adding and self.date_souhaitee and self.date_souhaitee < aujourdhui:
             erreurs["date_souhaitee"] = "La date souhaitée ne peut pas être dans le passé."
 
         if self.statut in (self.Statut.ACCEPTEE, self.Statut.REALISEE):
@@ -202,6 +232,19 @@ class InterventionDomicile(models.Model):
         if date_prevue < timezone.now():
             raise ValidationError({"date_prevue": "Le passage prévu ne peut pas être dans le passé."})
         self._passer(infirmier=infirmier, date_prevue=date_prevue, statut=self.Statut.ACCEPTEE, acceptee_le=timezone.now())
+
+    def replanifier(self, date_prevue):
+        if self.statut != self.Statut.ACCEPTEE:
+            raise ValidationError("Seule une intervention acceptée peut être replanifiée.")
+        if date_prevue < timezone.now():
+            raise ValidationError({"date_prevue": "Le passage prévu ne peut pas être dans le passé."})
+        self._passer(date_prevue=date_prevue)
+
+    def liberer(self):
+        """L'infirmier se désiste : la demande retourne aux infirmiers de la zone."""
+        if self.statut != self.Statut.ACCEPTEE:
+            raise ValidationError("Seule une intervention acceptée peut être rendue.")
+        self._passer(infirmier=None, date_prevue=None, acceptee_le=None, statut=self.Statut.DEMANDEE)
 
     def terminer(self, compte_rendu, constantes=None, realisee_le=None):
         if self.statut != self.Statut.ACCEPTEE:

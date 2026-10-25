@@ -1,0 +1,45 @@
+{% extends "core/auth_layout.html" %}
+
+{% block title %}Créer un compte infirmier — MediConnect{% endblock %}
+
+{% block auth_link %}
+<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>
+{% endblock %}
+
+{% block page %}
+<h1 class="auth-title">Rejoindre MediConnect comme infirmier</h1>
+<p class="muted mt-2 text-sm">Recevez les demandes de soins à domicile de votre zone. Un administrateur vérifie votre numéro d'Ordre avant votre première intervention.</p>
+
+<form method="post" novalidate class="mt-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Votre compte</legend>
+    {% for field in form %}
+      {% if field.name in "username first_name last_name email password1 password2" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Votre activité</legend>
+    {% with field=form.telephone %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.numero_ordre %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.ville %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.zones %}{% include "core/_champ.html" %}{% endwith %}
+    {% include "infirmiers/_soins.html" with field=form.soins %}
+  </fieldset>
+
+  <button type="submit" class="abtn abtn-primary abtn-lg abtn-block mt-8">Créer mon compte</button>
+</form>
+
+<p class="muted mt-6 text-center text-sm">
+  Déjà inscrit ? <a href="{% url 'core:connexion' %}" class="text-accent underline underline-offset-2">Se connecter</a>
+</p>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Demandes de soins — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Demandes de soins</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Demandes en attente dans vos villes ({{ villes|join:", " }}){% if infirmier.soins %}, pour les soins que vous pratiquez{% endif %}. Les plus anciennes dates souhaitées apparaissent en premier.</p>
+  </div>
+</header>
+
+{% if not infirmier.est_valide %}
+<p class="alert alert-warn mt-6" role="note">Votre compte est en attente de validation : vous pourrez accepter des demandes une fois validé.</p>
+{% endif %}
+
+<form method="get" class="toolbar" role="search" aria-label="Filtrer les demandes">
+  <div>
+    <label for="filtre-ville" class="f-label">Ville</label>
+    <select id="filtre-ville" name="ville" class="field">
+      <option value="">Toutes mes villes</option>
+      {% for v in villes %}<option value="{{ v }}" {% if v == filtre.ville %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="filtre-soin" class="f-label">Soin</label>
+    <select id="filtre-soin" name="soin" class="field">
+      <option value="">Tous les soins</option>
+      {% for valeur, libelle in soins %}<option value="{{ valeur }}" {% if valeur == filtre.soin %}selected{% endif %}>{{ libelle }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="abtn abtn-outline">Filtrer</button>
+</form>
+
+<section class="mt-8" aria-labelledby="titre-liste">
+  <h2 id="titre-liste" class="section-title">En attente <span class="count">{{ demandes|length }}</span></h2>
+  {% if demandes %}
+  <ul class="panel mt-4">
+    {% for i in demandes %}
+    <li class="item-row">
+      <div>
+        <p class="item-name"><a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.get_type_soin_display }}</a></p>
+        <p class="muted mt-1 text-sm">
+          {{ i.ville }} · souhaité le {{ i.date_souhaitee|date:"D j M" }}{% if i.moment != 'indifferent' %} ({{ i.get_moment_display|lower }}){% endif %}
+          {% if i.date_souhaitee < aujourdhui %} · <strong class="font-medium">date dépassée</strong>{% endif %}
+        </p>
+        {% if i.description %}<p class="mt-1 text-sm">{{ i.description|truncatechars:120 }}</p>{% endif %}
+      </div>
+      <a href="{% url 'infirmiers:intervention' i.pk %}" class="abtn abtn-outline">Voir et accepter<span class="sr-only"> : {{ i.get_type_soin_display }} à {{ i.ville }}</span></a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="panel panel-pad mt-4 text-center">
+    <p class="muted text-sm">Aucune demande en attente{% if filtre.ville or filtre.soin %} pour ces filtres{% endif %}.</p>
+    {% if filtre.ville or filtre.soin %}<a href="{% url 'infirmiers:demandes' %}" class="abtn abtn-outline mt-4">Voir toutes les demandes</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

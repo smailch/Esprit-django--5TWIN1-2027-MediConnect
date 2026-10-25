@@ -1,0 +1,59 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Mon profil — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mon profil</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Vos villes et vos soins déterminent les demandes que vous recevez.</p>
+  </div>
+  <a href="{% url 'core:mot_de_passe' %}" class="abtn abtn-outline">
+    <i aria-hidden="true" data-lucide="key-round" class="h-4 w-4"></i>Changer mon mot de passe
+  </a>
+</header>
+
+<form method="post" novalidate class="mt-10">
+  {% csrf_token %}
+  {% include "infirmiers/_erreurs.html" %}
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-identite">
+    <div class="lg:col-span-4">
+      <h2 id="titre-identite" class="section-title">Mes informations</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Le patient voit votre nom et votre téléphone une fois sa demande acceptée.</p>
+      <dl class="dl mt-4">
+        <div class="wide"><dt>Numéro d'Ordre</dt><dd>{{ infirmier.numero_ordre }}</dd></div>
+        <div class="wide"><dt>Compte</dt><dd>{% if infirmier.est_valide %}Validé par l'administrateur{% else %}En attente de validation{% endif %}</dd></div>
+      </dl>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <div class="grid gap-5 sm:grid-cols-2">
+        {% with field=form.first_name %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.last_name %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.email %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.telephone %}{% include "core/_champ.html" %}{% endwith %}
+      </div>
+    </div>
+  </section>
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-activite">
+    <div class="lg:col-span-4">
+      <h2 id="titre-activite" class="section-title">Mon activité</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Décochez « disponible » pendant vos congés : vos interventions déjà acceptées restent dans votre planning.</p>
+    </div>
+    <div class="panel panel-pad space-y-5 lg:col-span-8">
+      {% with field=form.ville %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.zones %}{% include "core/_champ.html" %}{% endwith %}
+      {% include "infirmiers/_soins.html" with field=form.soins %}
+      <div>
+        <label class="check-row" for="{{ form.disponible.id_for_label }}">{{ form.disponible }}<span>{{ form.disponible.label }}</span></label>
+        {% for erreur in form.disponible.errors %}<p class="f-error" role="alert">{{ erreur }}</p>{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div class="flex justify-end border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg w-full sm:w-auto">Enregistrer</button>
+  </div>
+</form>
+{% endblock %}
