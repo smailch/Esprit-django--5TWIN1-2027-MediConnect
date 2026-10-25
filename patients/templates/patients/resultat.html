@@ -6,7 +6,8 @@
 {% with n=triage.niveau_effectif %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Votre demande a été envoyée</h1>
+    <a href="{% url 'patients:tableau_de_bord' %}" class="link text-sm">← Tableau de bord</a>
+    <h1 class="page-title mt-2">Votre demande a été envoyée</h1>
     <p class="muted mt-2 text-sm">Médecin : {{ triage.medecin_nom }} ({{ triage.medecin_specialite }})</p>
   </div>
 </header>
@@ -35,6 +36,14 @@
     </section>
     {% endif %}
 
+    {% if consultation %}
+    <section class="panel panel-pad" aria-labelledby="t-compte-rendu">
+      <h2 id="t-compte-rendu" class="section-title">Compte rendu de la consultation</h2>
+      <p class="muted mt-1 text-sm">{{ consultation.date|date:"l j F Y" }} · {{ consultation.medecin_nom }}</p>
+      <div class="mt-4">{% include "patients/_consultation.html" with c=consultation %}</div>
+    </section>
+    {% endif %}
+
     <section class="panel panel-pad" aria-labelledby="t-expl">
       <h2 id="t-expl" class="section-title">Comment ce niveau a été calculé</h2>
       <p class="muted mt-2 text-sm">{{ triage.explication }}</p>
@@ -46,6 +55,13 @@
           <ul class="muted mt-1 list-disc pl-5 text-sm">
             {% for s in triage.symptomes %}<li>{{ s.nom }}</li>{% endfor %}
           </ul>
+        </div>
+        {% endif %}
+
+        {% if triage.modele_releve %}
+        <div class="sm:col-span-2">
+          <h3 class="text-sm font-medium"><i data-lucide="cpu" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Lecture de votre texte <span class="muted font-normal">(à confirmer par le médecin)</span></h3>
+          <p class="muted mt-1 text-sm">Un modèle installé sur le serveur a lu votre texte et a relevé votre niveau d'urgence{% if triage.modele_mots %} (mots repérés : {{ triage.modele_mots|join:", " }}){% endif %}.</p>
         </div>
         {% endif %}
 
@@ -93,7 +109,7 @@
       {% elif can_book %}
       <p class="muted mt-2 text-sm">Vous pouvez choisir le jour et l'heure de votre consultation, ou rester dans la file : le médecin vous recevra dans l'ordre d'arrivée.</p>
       <a href="{% url 'patients:creneaux' triage.pk %}" class="abtn abtn-primary mt-4">
-        <i data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir un créneau
+        <i aria-hidden="true" data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir un créneau
       </a>
       {% elif triage.statut == "en_attente" %}
       <p class="muted mt-2 text-sm">Votre cas est pris en charge en priorité : il n'y a pas de créneau à choisir. L'heure estimée de prise en charge est indiquée dans le suivi ci-dessus.</p>

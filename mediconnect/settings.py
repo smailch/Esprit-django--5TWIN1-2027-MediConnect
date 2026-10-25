@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'infirmiers',
     'pharmacies',
     'laboratoires',
+    'ia',
 ]
 
 AUTH_USER_MODEL = 'core.User'
@@ -156,3 +157,16 @@ IA_CLE_API = os.environ.get('IA_CLE_API') or os.environ.get('GROQ_API_KEY', '')
 IA_MODELE = os.environ.get('IA_MODELE', '')  # vide : modèle par défaut du fournisseur
 IA_URL = os.environ.get('IA_URL', '')  # vide : adresse par défaut du fournisseur
 IA_DELAI_MAX = float(os.environ.get('IA_DELAI_MAX', '6'))  # secondes ; au-delà, l'application garde ses règles
+
+
+# --- E-mail : réinitialisation du mot de passe ---------------------------------------------------------------
+# Par défaut, les messages s'affichent dans la console du serveur : pratique en développement, rien n'est envoyé.
+# Pour envoyer de vrais messages : EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend, EMAIL_HOST, etc. dans .env.
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'MediConnect <no-reply@mediconnect.local>')
+PASSWORD_RESET_TIMEOUT = 2 * 60 * 60  # le lien de réinitialisation reste valable deux heures

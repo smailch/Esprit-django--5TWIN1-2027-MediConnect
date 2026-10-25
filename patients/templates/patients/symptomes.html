@@ -5,7 +5,8 @@
 {% block page %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Décrivez vos symptômes</h1>
+    <a href="{% url 'patients:medecins' %}" class="link text-sm">← Choisir un médecin</a>
+    <h1 class="page-title mt-2">Décrivez vos symptômes</h1>
     <p class="muted mt-2 text-sm">
       Rendez-vous avec <strong class="font-medium text-gray-800">{{ medecin.nom }}</strong> ({{ medecin.specialite }}, {{ medecin.ville }}).
     </p>
@@ -47,6 +48,10 @@
     <!-- 4. Description libre -->
     <section class="panel panel-pad order-4 lg:order-none">
       {% with field=form.texte_libre %}{% include "core/_champ.html" %}{% endwith %}
+      <p class="note mt-3">
+        <i data-lucide="cpu" class="h-4 w-4" aria-hidden="true"></i>
+        Un modèle installé sur le serveur de MediConnect lit aussi votre texte, pour ne pas passer à côté d'un signe d'alerte. Rien ne sort du serveur.
+      </p>
       {% if ia.active %}
       <p class="note mt-3">
         <i data-lucide="sparkles" class="h-4 w-4" aria-hidden="true"></i>

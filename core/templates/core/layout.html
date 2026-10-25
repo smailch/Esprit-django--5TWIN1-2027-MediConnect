@@ -12,7 +12,7 @@
 <div class="app app-shell">
   <aside class="rail">
     <a href="{% url 'home' %}" class="brand rail-brand">
-      <span class="brand-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+      <span class="brand-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
       <span class="brand-name">MediConnect</span>
     </a>
 
@@ -28,7 +28,7 @@
       </div>
       <form method="post" action="{% url 'core:deconnexion' %}">
         {% csrf_token %}
-        <button type="submit" class="abtn abtn-ghost abtn-block"><i data-lucide="log-out" class="h-4 w-4"></i>Se déconnecter</button>
+        <button type="submit" class="abtn abtn-ghost abtn-block"><i aria-hidden="true" data-lucide="log-out" class="h-4 w-4"></i>Se déconnecter</button>
       </form>
     </div>
     {% endif %}
@@ -37,13 +37,13 @@
   <div class="app-main">
     <header class="topbar">
       <a href="{% url 'home' %}" class="brand">
-        <span class="brand-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="brand-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
         <span class="brand-name">MediConnect</span>
       </a>
       {% if user.is_authenticated %}
       <form method="post" action="{% url 'core:deconnexion' %}">
         {% csrf_token %}
-        <button type="submit" class="abtn abtn-ghost"><i data-lucide="log-out" class="h-4 w-4"></i>Se déconnecter</button>
+        <button type="submit" class="abtn abtn-ghost"><i aria-hidden="true" data-lucide="log-out" class="h-4 w-4"></i>Se déconnecter</button>
       </form>
       {% endif %}
     </header>
@@ -58,6 +58,9 @@
       {% endif %}
       {% block page %}{% endblock %}
     </main>
+    <footer class="app-footer">
+      {% include "core/_pied.html" %}
+    </footer>
   </div>
 </div>
 {% endblock %}

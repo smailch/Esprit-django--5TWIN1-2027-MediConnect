@@ -401,6 +401,12 @@ class Triage(models.Model):
     ia_statut = models.CharField(max_length=20, blank=True)
     ia_signes = ArrayField(models.CharField(max_length=250), blank=True, default=list)
 
+    # Lecture du texte libre par le modèle local (app ia) : niveau estimé, confiance, mots décisifs, niveau relevé ou non.
+    modele_niveau = models.PositiveSmallIntegerField(null=True, blank=True)
+    modele_confiance = models.FloatField(null=True, blank=True)
+    modele_mots = ArrayField(models.CharField(max_length=60), blank=True, default=list)
+    modele_releve = models.BooleanField(default=False)
+
     # Nombre de fois où une demande arrivée après celle-ci a été prise en charge avant elle.
     # Au-delà du plafond (voir ReglageTriage), la demande ne peut plus être dépassée.
     nb_depassements = models.PositiveSmallIntegerField(default=0)
@@ -511,6 +517,39 @@ class Triage(models.Model):
         return f"Triage {self.patient} – niveau {self.niveau_effectif or '?'}"
 
 
+class Consultation(models.Model):
+    """Compte rendu d'une consultation terminée : l'historique médical du patient.
+
+    Saisi par l'administrateur en terminant un rendez-vous (en attendant le module des médecins), puis lu dans
+    le dossier du patient. Un rendez-vous a au plus un compte rendu."""
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="consultations")
+    triage = models.OneToOneField(Triage, on_delete=models.CASCADE, related_name="consultation")
+    medecin_nom = models.CharField(max_length=150)
+    medecin_specialite = models.CharField(max_length=100, blank=True)
+    date = models.DateTimeField("Date de la consultation", default=timezone.now)
+    motif = models.CharField("Motif de la consultation", max_length=200, blank=True)
+    resume = models.TextField("Compte rendu", help_text="Ce qui s'est passé pendant la consultation.")
+    diagnostic = models.CharField("Diagnostic", max_length=200, blank=True)
+    prescription = models.TextField("Prescription", blank=True, help_text="Médicaments et examens prescrits.")
+    recommandations = models.TextField("Recommandations", blank=True, help_text="Conseils, prochain contrôle…")
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name = "consultation"
+        verbose_name_plural = "consultations"
+
+    def __str__(self):
+        return f"Consultation du {self.date:%d/%m/%Y} – {self.medecin_nom}"
+
+    def clean(self):
+        super().clean()
+        if self.date and self.date > timezone.now():
+            raise ValidationError({"date": "La date de la consultation ne peut pas être dans le futur."})
+
+
 class ReglageTriage(models.Model):
     """Paramètres de la file d'attente, modifiables par l'administrateur (une seule ligne).
 
@@ -548,6 +587,10 @@ class ReglageTriage(models.Model):
     facteur_garantie = models.PositiveSmallIntegerField(
         "Garantie : passage prioritaire après (× le délai)", default=3, validators=[MinValueValidator(2), MaxValueValidator(10)],
         help_text="Une demande protégée qui a attendu ce nombre de fois son délai cible passe devant tous les cas, sauf le vital.",
+    )
+    seuil_modele = models.PositiveSmallIntegerField(
+        "Lecture du texte : confiance minimale (%)", default=85, validators=[MinValueValidator(50), MaxValueValidator(99)],
+        help_text="Le modèle qui lit le texte du patient ne relève l'urgence que s'il est sûr à au moins ce pourcentage.",
     )
     modifie_le = models.DateTimeField(auto_now=True)
 

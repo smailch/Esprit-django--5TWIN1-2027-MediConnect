@@ -9,16 +9,26 @@
     <h1 class="page-title mt-1">Patients</h1>
     <p class="muted mt-2 text-sm">Les comptes patients, du plus récent au plus ancien.</p>
   </div>
+  <a href="{% url 'backoffice:patients_exporter' %}{% if parametres %}?{{ parametres }}{% endif %}" class="abtn abtn-outline">
+    <i aria-hidden="true" data-lucide="download" class="h-4 w-4"></i>Exporter en CSV
+  </a>
 </header>
 
-<form method="get" class="mt-8 flex max-w-xl gap-2" role="search" aria-label="Rechercher un patient">
-  <div class="grow">
-    <label for="q" class="f-label">Nom, e-mail, téléphone ou ville</label>
-    <input type="search" id="q" name="q" value="{{ q }}" class="field" placeholder="Rechercher un patient">
+<form method="get" class="panel panel-pad mt-8" role="search" aria-label="Rechercher et filtrer les patients">
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="sm:col-span-2">{% with field=filtre.q %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.sexe %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.ville %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.age_min %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.age_max %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.compte %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div class="flex items-end pb-2">
+      <label class="flex items-center gap-2 text-sm">{{ filtre.allergie_severe }} {{ filtre.allergie_severe.label }}</label>
+    </div>
   </div>
-  <div class="flex items-end gap-2">
-    <button type="submit" class="abtn abtn-primary">Rechercher</button>
-    {% if q %}<a href="{% url 'backoffice:patients' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  <div class="mt-5 flex flex-wrap gap-2">
+    <button type="submit" class="abtn abtn-primary">Filtrer</button>
+    {% if filtres_actifs %}<a href="{% url 'backoffice:patients' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
   </div>
 </form>
 
@@ -36,6 +46,7 @@
         <tr>
           <td>
             <a class="link" href="{% url 'backoffice:patient_detail' p.pk %}">{{ p }}</a>
+            {% if not p.user.is_active %}<span class="st st-annule ml-1">Désactivé</span>{% endif %}
             <span class="muted block text-xs">{{ p.user.email }}</span>
           </td>
           <td>{{ p.ville }}</td>
@@ -45,7 +56,7 @@
           <td class="num"><a class="abtn abtn-outline" href="{% url 'backoffice:patient_detail' p.pk %}">Voir</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="muted">{% if q %}Aucun patient ne correspond à « {{ q }} ».{% else %}Aucun patient inscrit pour le moment.{% endif %}</td></tr>
+        <tr><td colspan="6" class="muted">{% if filtres_actifs %}Aucun patient ne correspond à ces critères.{% else %}Aucun patient inscrit pour le moment.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

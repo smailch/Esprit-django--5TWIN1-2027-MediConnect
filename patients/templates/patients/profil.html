@@ -9,9 +9,11 @@
     <p class="muted mt-2 max-w-xl text-sm">Gardez vos informations à jour : elles aident le médecin à mieux vous soigner.</p>
   </div>
   <a href="{% url 'patients:medecins' %}" class="abtn abtn-outline">
-    <i data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous
+    <i aria-hidden="true" data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous
   </a>
 </header>
+
+{% include "patients/_profil_onglets.html" with actif="informations" %}
 
 <form method="post" novalidate class="mt-10">
   {% csrf_token %}
@@ -37,7 +39,7 @@
       <h2 id="titre-dossier" class="section-title">Mon dossier médical</h2>
       <p class="muted mt-2 max-w-xs text-sm">Antécédents et traitements : le médecin les consulte avant votre rendez-vous.</p>
       <a href="{% url 'patients:allergies' %}" class="abtn abtn-outline mt-4">
-        <i data-lucide="shield-alert" class="h-4 w-4"></i>Gérer mes allergies
+        <i aria-hidden="true" data-lucide="shield-alert" class="h-4 w-4"></i>Gérer mes allergies
       </a>
     </div>
     <div class="panel panel-pad lg:col-span-8">

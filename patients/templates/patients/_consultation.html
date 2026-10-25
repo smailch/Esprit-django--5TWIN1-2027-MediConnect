@@ -1,0 +1,8 @@
+{# Le contenu d'un compte rendu de consultation. Paramètre : c (Consultation). #}
+<dl class="dl">
+  {% if c.motif %}<div class="wide"><dt>Motif</dt><dd>{{ c.motif }}</dd></div>{% endif %}
+  <div class="wide"><dt>Compte rendu</dt><dd class="whitespace-pre-line">{{ c.resume }}</dd></div>
+  {% if c.diagnostic %}<div class="wide"><dt>Diagnostic</dt><dd>{{ c.diagnostic }}</dd></div>{% endif %}
+  {% if c.prescription %}<div class="wide"><dt>Prescription</dt><dd class="whitespace-pre-line">{{ c.prescription }}</dd></div>{% endif %}
+  {% if c.recommandations %}<div class="wide"><dt>Recommandations</dt><dd class="whitespace-pre-line">{{ c.recommandations }}</dd></div>{% endif %}
+</dl>

@@ -420,3 +420,426 @@ class IdentifiantMalFormeTests(SimpleTestCase):
             with self.subTest(fichier=chemin):
                 self.assertIn("objet_ou_404", src)
                 self.assertNotIn("get_object_or_404(", src)
+
+
+# --- Mot de passe : changement, oubli, e-mail unique ----------------------------------------------------------
+import re  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+from unittest import mock  # noqa: E402
+
+from bson import ObjectId  # noqa: E402
+from django.conf import settings  # noqa: E402
+from django.contrib.auth.forms import PasswordResetForm  # noqa: E402
+from django.core import mail  # noqa: E402
+from django.test import override_settings  # noqa: E402
+
+from . import views  # noqa: E402
+from .forms import ChangementMotDePasseForm, DemandeReinitialisationForm, NouveauMotDePasseForm, email_deja_utilise  # noqa: E402
+
+ANCIEN, NOUVEAU = "Ancien-Mdp-2026!", "Nouveau-Mdp-2027?"
+SESSIONS_EN_COOKIE = "django.contrib.sessions.backends.signed_cookies"  # aucune base de données pour les sessions
+HACHAGE_RAPIDE = override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])  # les vrais hachages sont lents
+
+
+def un_compte(**kw):
+    valeurs = dict(pk=ObjectId(), username="amel", first_name="Amel", last_name="Zouari", email="amel@exemple.tn")
+    valeurs.update(kw)
+    compte = User(**valeurs)
+    compte.set_password(ANCIEN)
+    return compte
+
+
+class AdressesMotDePasseTests(SimpleTestCase):
+    def test_adresses(self):
+        attendu = {
+            "mot_de_passe": "/comptes/mot-de-passe/",
+            "reinitialisation": "/comptes/mot-de-passe-oublie/",
+            "reinitialisation_envoyee": "/comptes/mot-de-passe-oublie/envoye/",
+            "reinitialisation_terminee": "/comptes/reinitialisation/terminee/",
+        }
+        for nom, adresse in attendu.items():
+            with self.subTest(nom=nom):
+                self.assertEqual(reverse(f"core:{nom}"), adresse)
+        self.assertEqual(reverse("core:reinitialisation_confirmation", kwargs={"uidb64": "abc", "token": "set-password"}), "/comptes/reinitialisation/abc/set-password/")
+
+    def test_vues(self):
+        self.assertIs(resolve("/comptes/mot-de-passe/").func.view_class, views.ChangementMotDePasseView)
+        self.assertIs(resolve("/comptes/mot-de-passe-oublie/").func.view_class, views.ReinitialisationView)
+        self.assertIs(resolve("/comptes/reinitialisation/terminee/").func.view_class, views.ReinitialisationTermineeView)
+        self.assertIs(resolve("/comptes/reinitialisation/abc/def/").func.view_class, views.ReinitialisationConfirmationView)
+
+    def test_changer_son_mot_de_passe_demande_d_etre_connecte(self):
+        reponse = self.client.get("/comptes/mot-de-passe/")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(reponse["Location"].startswith("/comptes/connexion/"))
+
+    def test_la_connexion_propose_mot_de_passe_oublie(self):
+        reponse = self.client.get("/comptes/connexion/")
+        self.assertContains(reponse, "Mot de passe oublié ?")
+        self.assertContains(reponse, 'href="/comptes/mot-de-passe-oublie/"')
+
+    def test_pages_publiques(self):
+        for adresse, gabarit, texte in (
+            ("/comptes/mot-de-passe-oublie/", "core/reinitialisation.html", "Envoyer le lien"),
+            ("/comptes/mot-de-passe-oublie/envoye/", "core/reinitialisation_envoyee.html", "Vérifiez votre messagerie"),
+            ("/comptes/reinitialisation/terminee/", "core/reinitialisation_terminee.html", "Mot de passe changé"),
+        ):
+            with self.subTest(adresse=adresse):
+                reponse = self.client.get(adresse)
+                self.assertEqual(reponse.status_code, 200)
+                self.assertTemplateUsed(reponse, gabarit)
+                self.assertTemplateUsed(reponse, "core/auth_layout.html")
+                self.assertContains(reponse, texte)
+
+    def test_un_lien_invalide_est_explique(self):
+        reponse = self.client.get("/comptes/reinitialisation/zzz/lien-bidon/")
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, "Ce lien n'est plus valable")
+        self.assertContains(reponse, 'href="/comptes/mot-de-passe-oublie/"')
+
+    def test_le_lien_dure_deux_heures_et_le_courriel_est_configurable(self):
+        self.assertEqual(settings.PASSWORD_RESET_TIMEOUT, 2 * 60 * 60)
+        exemple = (Path(__file__).resolve().parent.parent / ".env.example").read_text(encoding="utf-8")
+        for variable in ("EMAIL_BACKEND", "EMAIL_HOST", "EMAIL_HOST_USER", "DEFAULT_FROM_EMAIL"):
+            self.assertIn(variable, exemple)
+        self.assertNotRegex(exemple, r"EMAIL_HOST_PASSWORD=\S")  # le modèle ne contient aucun secret
+
+
+class EmailUniqueTests(SimpleTestCase):
+    def test_la_recherche_ignore_les_majuscules_et_les_espaces(self):
+        with mock.patch.object(User.objects, "filter") as filtre:
+            filtre.return_value.exists.return_value = True
+            self.assertTrue(email_deja_utilise("  Amel@Exemple.TN "))
+        filtre.assert_called_once_with(email__iexact="Amel@Exemple.TN")
+
+    def test_on_peut_exclure_son_propre_compte(self):
+        pk = ObjectId()
+        with mock.patch.object(User.objects, "filter") as filtre:
+            filtre.return_value.exclude.return_value.exists.return_value = False
+            self.assertFalse(email_deja_utilise("a@b.tn", exclure_pk=pk))
+        filtre.return_value.exclude.assert_called_once_with(pk=pk)
+
+
+@HACHAGE_RAPIDE
+class FormulairesMotDePasseTests(SimpleTestCase):
+    def donnees(self, **kw):
+        valeurs = {"old_password": ANCIEN, "new_password1": NOUVEAU, "new_password2": NOUVEAU}
+        valeurs.update(kw)
+        return valeurs
+
+    def test_changement_valide(self):
+        compte = un_compte()
+        form = ChangementMotDePasseForm(compte, self.donnees())
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save(commit=False)
+        self.assertTrue(compte.check_password(NOUVEAU))
+
+    def test_ancien_mot_de_passe_faux(self):
+        form = ChangementMotDePasseForm(un_compte(), self.donnees(old_password="faux"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("old_password", form.errors)
+
+    def test_confirmation_differente(self):
+        form = ChangementMotDePasseForm(un_compte(), self.donnees(new_password2="autre-chose-123"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("new_password2", form.errors)
+
+    def test_mot_de_passe_trop_faible_refuse(self):
+        for faible in ("12345678", "azerty", "password"):
+            with self.subTest(faible=faible):
+                form = ChangementMotDePasseForm(un_compte(), self.donnees(new_password1=faible, new_password2=faible))
+                self.assertFalse(form.is_valid())
+                self.assertIn("new_password2", form.errors)
+
+    def test_libelles_en_francais_et_style_commun(self):
+        form = ChangementMotDePasseForm(un_compte())
+        self.assertEqual(
+            [c.label for c in form.fields.values()], ["Mot de passe actuel", "Nouveau mot de passe", "Confirmation du nouveau mot de passe"]
+        )
+        self.assertTrue(all(c.widget.attrs.get("class") == "field" for c in form.fields.values()))
+        self.assertEqual(DemandeReinitialisationForm().fields["email"].label, "Adresse e-mail de votre compte")
+        self.assertEqual(NouveauMotDePasseForm(un_compte()).fields["new_password1"].label, "Nouveau mot de passe")
+
+    def test_nouveau_mot_de_passe_apres_oubli(self):
+        compte = un_compte()
+        form = NouveauMotDePasseForm(compte, {"new_password1": NOUVEAU, "new_password2": NOUVEAU})
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save(commit=False)
+        self.assertTrue(compte.check_password(NOUVEAU))
+        self.assertFalse(compte.check_password(ANCIEN))
+
+
+@HACHAGE_RAPIDE
+class ChangementMotDePasseVueTests(SimpleTestCase):
+    def vue(self, utilisateur):
+        requete = RequestFactory().get("/comptes/mot-de-passe/")
+        requete.user = utilisateur
+        vue = views.ChangementMotDePasseView()
+        vue.setup(requete)
+        return vue
+
+    def test_un_patient_garde_son_menu_et_revient_a_son_compte(self):
+        contexte = self.vue(SimpleNamespace(is_authenticated=True, patient=object())).get_context_data()
+        self.assertEqual((contexte["cadre"], contexte["retour"]), ("patients/layout.html", "/patients/compte/"))
+
+    def test_les_autres_roles_ont_le_cadre_commun(self):
+        contexte = self.vue(SimpleNamespace(is_authenticated=True)).get_context_data()
+        self.assertEqual((contexte["cadre"], contexte["retour"]), ("core/layout.html", "/"))
+
+    def test_apres_le_changement_un_message_et_la_session_reste_ouverte(self):
+        compte = un_compte()
+        vue = self.vue(compte)
+        form = ChangementMotDePasseForm(compte, {"old_password": ANCIEN, "new_password1": NOUVEAU, "new_password2": NOUVEAU})
+        self.assertTrue(form.is_valid())
+        with mock.patch.object(User, "save"), mock.patch("django.contrib.auth.views.update_session_auth_hash") as garde_session, \
+                mock.patch.object(views, "messages") as messages:
+            reponse = vue.form_valid(form)
+        garde_session.assert_called_once()  # sans cela, changer son mot de passe déconnecterait le patient
+        messages.success.assert_called_once()
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, "/comptes/mot-de-passe/"))
+        self.assertTrue(compte.check_password(NOUVEAU))
+
+
+@HACHAGE_RAPIDE
+@override_settings(SESSION_ENGINE=SESSIONS_EN_COOKIE)
+class ReinitialisationParcoursTests(SimpleTestCase):
+    """Le parcours complet « mot de passe oublié », avec un faux compte (aucune base de données)."""
+
+    def setUp(self):
+        self.compte = un_compte()
+
+    def demander(self, email, comptes):
+        with mock.patch.object(PasswordResetForm, "get_users", return_value=comptes):
+            return self.client.post("/comptes/mot-de-passe-oublie/", {"email": email})
+
+    def lien(self):
+        return re.search(r"http://testserver(/comptes/reinitialisation/\S+)", mail.outbox[0].body).group(1)
+
+    def test_un_message_part_avec_un_lien(self):
+        reponse = self.demander("amel@exemple.tn", [self.compte])
+        self.assertRedirects(reponse, "/comptes/mot-de-passe-oublie/envoye/", fetch_redirect_response=False)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ["amel@exemple.tn"])
+        self.assertEqual(message.subject, "Réinitialisation de votre mot de passe MediConnect")  # une seule ligne
+        for texte in ("Bonjour Amel Zouari", "identifiant : amel", "valable deux heures", "ignorez ce message"):
+            self.assertIn(texte, message.body)
+        self.assertNotIn("&#x27;", message.body)  # texte brut : pas d'échappement HTML
+
+    def test_meme_reponse_pour_une_adresse_inconnue(self):
+        reponse = self.demander("inconnu@exemple.tn", [])
+        self.assertRedirects(reponse, "/comptes/mot-de-passe-oublie/envoye/", fetch_redirect_response=False)
+        self.assertEqual(mail.outbox, [])  # on ne révèle pas qui a un compte
+
+    def test_adresse_mal_formee(self):
+        reponse = self.client.post("/comptes/mot-de-passe-oublie/", {"email": "pas-une-adresse"})
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("email", reponse.context["form"].errors)
+        self.assertEqual(mail.outbox, [])
+
+    def test_le_lien_permet_de_choisir_un_nouveau_mot_de_passe_une_seule_fois(self):
+        self.demander("amel@exemple.tn", [self.compte])
+        lien = self.lien()
+        with mock.patch.object(type(User._default_manager), "get", return_value=self.compte), mock.patch.object(User, "save"):
+            etape = self.client.get(lien)  # le jeton passe en session, puis on est redirigé vers le formulaire
+            self.assertEqual(etape.status_code, 302)
+            formulaire = self.client.get(etape["Location"])
+            self.assertEqual(formulaire.status_code, 200)
+            self.assertContains(formulaire, "Enregistrer le mot de passe")
+            fin = self.client.post(etape["Location"], {"new_password1": NOUVEAU, "new_password2": NOUVEAU})
+            self.assertRedirects(fin, "/comptes/reinitialisation/terminee/", fetch_redirect_response=False)
+            self.assertTrue(self.compte.check_password(NOUVEAU))
+            reutilise = self.client.get(lien)  # le lien est lié à l'ancien mot de passe : il ne sert plus
+            self.assertContains(reutilise, "Ce lien n'est plus valable")
+
+    def test_mot_de_passe_trop_faible_refuse_apres_oubli(self):
+        self.demander("amel@exemple.tn", [self.compte])
+        with mock.patch.object(type(User._default_manager), "get", return_value=self.compte), mock.patch.object(User, "save"):
+            etape = self.client.get(self.lien())
+            reponse = self.client.post(etape["Location"], {"new_password1": "12345678", "new_password2": "12345678"})
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(self.compte.check_password(ANCIEN))  # rien n'a changé
+
+
+# --- Accessibilité --------------------------------------------------------------------------------------------------
+import io  # noqa: E402
+
+from django import forms as django_forms  # noqa: E402
+from django.contrib.auth.models import AnonymousUser  # noqa: E402
+from django.core.management import call_command  # noqa: E402
+from django.template import engines  # noqa: E402
+from django.template.loader import render_to_string  # noqa: E402
+
+from .accessibilite import SEUIL_TEXTE_NORMAL, contraste, contrastes_du_projet, couleurs_css, verifier_html  # noqa: E402
+from .forms import ConnexionForm, StyledFormMixin  # noqa: E402
+
+RACINE_PROJET = Path(__file__).resolve().parent.parent
+PAGE_PARFAITE = (
+    "<!doctype html><html lang='fr'><head><title>Une page</title></head><body><a href='#c'>Aller au contenu</a>"
+    "<header><nav aria-label='Principale'><a href='/'>Accueil</a></nav></header><main id='c'><h1>Titre</h1><h2>Sous-titre</h2>"
+    "<form><label for='n'>Nom</label><input id='n' name='n'><button type='submit'>Envoyer</button></form>"
+    "<table><tr><th scope='col'>A</th></tr></table><i data-lucide='x' aria-hidden='true'></i></main><footer><p>Pied</p></footer></body></html>"
+)
+
+
+class ContrastesTests(SimpleTestCase):
+    def test_formule_wcag(self):
+        self.assertAlmostEqual(contraste("#000000", "#FFFFFF"), 21.0, places=1)
+        self.assertAlmostEqual(contraste("#FFFFFF", "#FFFFFF"), 1.0, places=2)
+        self.assertEqual(contraste("#123456", "#ABCDEF"), contraste("#ABCDEF", "#123456"))  # symétrique
+
+    def test_toutes_les_couleurs_du_projet_respectent_le_niveau_AA(self):
+        for nom, texte, fond, rapport in contrastes_du_projet():
+            with self.subTest(nom):
+                self.assertGreaterEqual(rapport, SEUIL_TEXTE_NORMAL, f"{texte} sur {fond}")
+
+    def test_les_couleurs_viennent_des_fichiers_css(self):
+        couleurs = couleurs_css("app.css", "ui.css")
+        for variable in ("--a-text", "--a-muted", "--a-bg", "--a-accent", "--u1", "--u5", "--text", "--muted", "--bg"):
+            self.assertIn(variable, couleurs)
+        self.assertEqual(len(contrastes_du_projet()), 16)
+
+    def test_un_contraste_insuffisant_serait_detecte(self):
+        self.assertLess(contraste("#4A6688", "#0C1A30"), SEUIL_TEXTE_NORMAL)  # le gris « text-gray-400 » du thème sombre ne convient pas au texte
+
+
+class StructureHtmlTests(SimpleTestCase):
+    def test_une_page_correcte_ne_signale_rien(self):
+        self.assertEqual(verifier_html(PAGE_PARFAITE), [])
+
+    def test_chaque_defaut_est_detecte(self):
+        cas = {
+            "sans lang": (PAGE_PARFAITE.replace(" lang='fr'", ""), "sans attribut lang"),
+            "sans titre": (PAGE_PARFAITE.replace("<title>Une page</title>", "<title></title>"), "<title> vide"),
+            "sans pied": (PAGE_PARFAITE.replace("<footer><p>Pied</p></footer>", ""), "pas de <footer>"),
+            "deux main": (PAGE_PARFAITE.replace("</main>", "</main><main></main>"), "2 élément(s) <main>"),
+            "nav anonyme": (PAGE_PARFAITE.replace(" aria-label='Principale'", ""), "<nav> sans aria-label"),
+            "deux h1": (PAGE_PARFAITE.replace("<h2>Sous-titre</h2>", "<h1>Autre</h1>"), "2 titre(s) h1"),
+            "saut de titre": (PAGE_PARFAITE.replace("<h2>", "<h3>").replace("</h2>", "</h3>"), "h1 puis h3"),
+            "id en double": (PAGE_PARFAITE.replace("<h1>", "<h1 id='c'>"), "identifiant en double : c"),
+            "champ sans étiquette": (PAGE_PARFAITE.replace("<label for='n'>Nom</label>", ""), "champ sans étiquette : n"),
+            "bouton muet": (PAGE_PARFAITE.replace("Envoyer</button>", "</button>"), "button sans nom accessible"),
+            "image sans alt": (PAGE_PARFAITE.replace("<i data", "<img src='a.png'><i data"), "image sans alt : a.png"),
+            "icône exposée": (PAGE_PARFAITE.replace(" aria-hidden='true'", ""), "1 icône(s) sans aria-hidden"),
+            "tabindex positif": (PAGE_PARFAITE.replace("<h1>", "<h1 tabindex='3'>"), "1 tabindex positif"),
+            "th sans scope": (PAGE_PARFAITE.replace(" scope='col'", ""), "1 cellule(s) <th> sans scope"),
+        }
+        for nom, (html, attendu) in cas.items():
+            with self.subTest(nom):
+                self.assertTrue(any(attendu in p for p in verifier_html(html)), verifier_html(html))
+
+    def test_un_champ_dans_son_etiquette_ou_avec_aria_label_est_accepte(self):
+        for champ in ("<label>Nom <input name='n'></label>", "<input name='n' aria-label='Nom'>"):
+            self.assertEqual(verifier_html(PAGE_PARFAITE.replace("<label for='n'>Nom</label><input id='n' name='n'>", champ)), [])
+
+    def test_un_lien_qui_n_a_que_son_icone_est_signale_mais_pas_s_il_a_un_nom(self):
+        muet = PAGE_PARFAITE.replace("Accueil</a>", "<i data-lucide='home' aria-hidden='true'></i></a>")
+        self.assertTrue(any("a sans nom accessible" in p for p in verifier_html(muet)))
+        nomme = PAGE_PARFAITE.replace("Accueil</a>", "<i data-lucide='home' aria-hidden='true'></i></a>").replace("<a href='/'>", "<a href='/' aria-label='Accueil'>")
+        self.assertEqual(verifier_html(nomme), [])
+
+
+class PagesAccessiblesTests(SimpleTestCase):
+    PUBLIQUES = ("/", "/comptes/connexion/", "/patients/inscription/", "/comptes/mot-de-passe-oublie/", "/comptes/mot-de-passe-oublie/envoye/", "/comptes/reinitialisation/terminee/")
+
+    def test_les_pages_publiques_n_ont_aucun_defaut(self):
+        for url in self.PUBLIQUES:
+            with self.subTest(url):
+                self.assertEqual(verifier_html(self.client.get(url).content.decode()), [])
+
+    def test_les_liens_internes_de_l_accueil_ont_une_cible(self):
+        html = self.client.get("/").content.decode()
+        ancres = set(re.findall(r'href="#([^"]+)"', html))
+        for ancre in ancres:
+            with self.subTest(ancre):
+                self.assertIn(f'id="{ancre}"', html)
+        self.assertTrue({"contenu", "a-propos", "contact"} <= ancres)
+
+    def test_les_cadres_de_l_application_ont_un_pied_et_un_seul_main(self):
+        requete = RequestFactory().get("/")
+        requete.user = AnonymousUser()
+        page = engines["django"].from_string('{% extends "core/layout.html" %}{% block page %}<h1>Titre</h1>{% endblock %}')
+        html = page.render({}, requete)
+        self.assertEqual(verifier_html(html), [])
+        self.assertIn('<footer class="app-footer">', html)
+        self.assertIn("Urgence vitale ?", html)
+
+    def test_aucune_icone_n_est_oubliee_dans_les_gabarits(self):
+        manquantes = []
+        for dossier in ("core", "patients", "backoffice", "templates"):
+            for chemin in (RACINE_PROJET / dossier).rglob("*.html"):
+                for balise in re.findall(r"<i\b[^>]*data-lucide[^>]*>", chemin.read_text(encoding="utf-8")):
+                    if "aria-hidden" not in balise:
+                        manquantes.append(f"{chemin.relative_to(RACINE_PROJET)} : {balise[:60]}")
+        self.assertEqual(manquantes, [])
+
+    def test_le_focus_clavier_est_visible_partout(self):
+        ui = (RACINE_PROJET / "static" / "css" / "ui.css").read_text(encoding="utf-8")
+        self.assertRegex(ui, r"a:focus-visible, button:focus-visible")
+        self.assertIn("prefers-reduced-motion", ui)
+        self.assertEqual(self.client.get("/").content.decode().count('class="skip-link"'), 1)  # lien « Aller au contenu principal »
+
+
+class ChampsDeFormulaireTests(SimpleTestCase):
+    class Formulaire(StyledFormMixin, django_forms.Form):
+        nom = django_forms.CharField(label="Nom", help_text="Votre nom de famille.")
+        age = django_forms.IntegerField(label="Âge", required=False)
+
+    def rendre(self, donnees=None):
+        form = self.Formulaire(donnees)
+        return "".join(render_to_string("core/_champ.html", {"field": champ}) for champ in form)
+
+    def test_l_aide_est_reliee_au_champ(self):
+        html = self.rendre()
+        self.assertIn('aria-describedby="id_nom_aide"', html)
+        self.assertIn('<div class="f-help" id="id_nom_aide">Votre nom de famille.</div>', html)
+        self.assertNotIn("aria-invalid", html)
+
+    def test_l_erreur_est_annoncee_et_reliee_au_champ(self):
+        html = self.rendre({"nom": "", "age": "abc"})
+        self.assertIn('aria-invalid="true"', html)
+        self.assertIn('aria-describedby="id_nom_aide id_nom_erreur"', html)  # aide puis erreur
+        self.assertIn('<div id="id_nom_erreur">', html)
+        self.assertIn('role="alert"', html)
+        self.assertIn('aria-describedby="id_age_erreur"', html)  # pas d'aide pour ce champ : seulement l'erreur
+
+    def test_un_champ_sans_aide_ni_erreur_reste_inchange(self):
+        html = self.rendre({"nom": "Amel", "age": "30"})
+        self.assertNotIn("aria-describedby", html.split("id_age")[1])
+        self.assertNotIn("aria-invalid", html)
+
+    def test_les_champs_connus_du_navigateur(self):
+        connexion = ConnexionForm()
+        self.assertEqual(connexion.fields["username"].widget.attrs["autocomplete"], "username")
+        self.assertEqual(connexion.fields["password"].widget.attrs["autocomplete"], "current-password")
+        from .forms import ChangementMotDePasseForm, DemandeReinitialisationForm, NouveauMotDePasseForm
+
+        compte = User(username="u")
+        self.assertEqual(ChangementMotDePasseForm(compte).fields["old_password"].widget.attrs["autocomplete"], "current-password")
+        self.assertEqual(ChangementMotDePasseForm(compte).fields["new_password1"].widget.attrs["autocomplete"], "new-password")
+        self.assertEqual(NouveauMotDePasseForm(compte).fields["new_password2"].widget.attrs["autocomplete"], "new-password")
+        self.assertEqual(DemandeReinitialisationForm().fields["email"].widget.attrs["autocomplete"], "email")
+
+    def test_les_formulaires_du_patient_declarent_leurs_champs(self):
+        from patients.forms import CompteForm, FermetureCompteForm, InscriptionPatientForm, ProfilPatientForm
+
+        attendu = {
+            InscriptionPatientForm: {"first_name": "given-name", "last_name": "family-name", "email": "email", "telephone": "tel", "date_naissance": "bday", "password1": "new-password"},
+            ProfilPatientForm: {"telephone": "tel", "adresse": "street-address", "ville": "address-level2", "date_naissance": "bday"},
+            CompteForm: {"first_name": "given-name", "last_name": "family-name", "email": "email"},
+        }
+        for classe, champs in attendu.items():
+            form = classe()
+            for nom, valeur in champs.items():
+                with self.subTest(classe=classe.__name__, champ=nom):
+                    self.assertEqual(form.fields[nom].widget.attrs["autocomplete"], valeur)
+        self.assertEqual(FermetureCompteForm(user=User(username="u")).fields["mot_de_passe"].widget.attrs["autocomplete"], "current-password")
+
+
+class CommandeAuditTests(SimpleTestCase):
+    def test_audit_des_pages_publiques(self):
+        sortie = io.StringIO()
+        call_command("audit_accessibilite", stdout=sortie)
+        texte = sortie.getvalue()
+        for morceau in ("Contrastes (seuil WCAG AA", "texte principal sur le fond", "Structure des pages", "4 pages vérifiées, 0 avec un défaut ; 0 contraste(s) insuffisant(s)."):
+            self.assertIn(morceau, texte)

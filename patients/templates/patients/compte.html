@@ -1,0 +1,97 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Mon compte — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:profil' %}" class="link text-sm">← Mon profil</a>
+    <h1 class="page-title mt-2">Mon compte</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Votre identité, votre mot de passe et vos données. Vous décidez de ce que devient votre compte.</p>
+  </div>
+</header>
+
+{% include "patients/_profil_onglets.html" with actif="compte" %}
+
+<div class="mt-10">
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-identite">
+    <div class="lg:col-span-4">
+      <h2 id="titre-identite" class="section-title">Mon identité</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Votre nom et votre adresse e-mail. L'e-mail sert à retrouver votre compte si vous oubliez votre mot de passe.</p>
+    </div>
+    <form method="post" novalidate class="panel panel-pad lg:col-span-8">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="identite">
+      {% if identite.non_field_errors %}
+      <div role="alert" class="alert alert-danger mb-5">{% for e in identite.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+      {% endif %}
+      <div class="grid gap-5 sm:grid-cols-2">
+        {% for field in identite %}
+        <div class="{% if field.name == 'email' %}sm:col-span-2{% endif %}">{% include "core/_champ.html" %}</div>
+        {% endfor %}
+      </div>
+      <div class="mt-6 flex justify-end border-t border-gray-300/60 pt-5">
+        <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-mdp">
+    <div class="lg:col-span-4">
+      <h2 id="titre-mdp" class="section-title">Mot de passe</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Changez-le régulièrement, et jamais pour un mot de passe que vous utilisez ailleurs.</p>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <p class="text-sm">Pour le changer, il faut connaître le mot de passe actuel.</p>
+      <a href="{% url 'core:mot_de_passe' %}" class="abtn abtn-outline mt-4"><i aria-hidden="true" data-lucide="key-round" class="h-4 w-4"></i>Changer mon mot de passe</a>
+    </div>
+  </section>
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-donnees">
+    <div class="lg:col-span-4">
+      <h2 id="titre-donnees" class="section-title">Mes données</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Vous pouvez récupérer à tout moment tout ce que MediConnect garde sur vous.</p>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <p class="text-sm">Un fichier unique (JSON) avec votre identité, votre profil, votre dossier médical, vos allergies, vos mesures, vos consultations et vos demandes de rendez-vous. Votre mot de passe n'y figure jamais.</p>
+      <a href="{% url 'patients:compte_exporter' %}" class="abtn abtn-outline mt-4"><i aria-hidden="true" data-lucide="download" class="h-4 w-4"></i>Télécharger mes données</a>
+    </div>
+  </section>
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-fermer">
+    <div class="lg:col-span-4">
+      <h2 id="titre-fermer" class="section-title">Fermer mon compte</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Deux choix : mettre le compte en pause, ou tout effacer.</p>
+    </div>
+    <div class="space-y-6 lg:col-span-8">
+      {% if ferme_possible %}
+      <form method="post" novalidate class="panel panel-pad" aria-labelledby="titre-desactiver">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="desactiver">
+        <h3 id="titre-desactiver" class="item-name">Désactiver mon compte</h3>
+        <p class="muted mt-2 text-sm">Vous ne pourrez plus vous connecter et vos demandes de rendez-vous en attente sont annulées. Vos données sont conservées : un administrateur peut réactiver le compte si vous revenez.</p>
+        <div class="mt-4 max-w-sm">
+          {% for field in fermer %}{% include "core/_champ.html" %}{% endfor %}
+        </div>
+        <button type="submit" class="abtn abtn-outline mt-4">Désactiver mon compte</button>
+      </form>
+
+      <form method="post" novalidate class="panel panel-pad" aria-labelledby="titre-supprimer">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="supprimer">
+        <h3 id="titre-supprimer" class="item-name">Supprimer définitivement mon compte</h3>
+        <p class="alert alert-danger mt-3" role="note">Tout est effacé pour toujours : profil, dossier médical, allergies, mesures, consultations et demandes. Il n'y a aucun retour en arrière. Téléchargez d'abord vos données si vous voulez les garder.</p>
+        <div class="mt-4 grid max-w-xl gap-5 sm:grid-cols-2">
+          {% for field in supprimer %}{% include "core/_champ.html" %}{% endfor %}
+        </div>
+        <button type="submit" class="abtn abtn-danger mt-4"><i aria-hidden="true" data-lucide="trash-2" class="h-4 w-4"></i>Supprimer définitivement</button>
+      </form>
+      {% else %}
+      <p class="panel panel-pad muted text-sm">Ce compte appartient au personnel du site : il ne peut pas être fermé depuis l'espace patient.</p>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+{% endblock %}

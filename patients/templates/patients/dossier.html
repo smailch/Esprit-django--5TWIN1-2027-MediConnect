@@ -9,7 +9,7 @@
     <p class="muted mt-2 max-w-xl text-sm">L'essentiel que votre médecin lit avant la consultation. Plus il est à jour, mieux il vous soigne.</p>
   </div>
   <a href="{% url 'patients:profil' %}" class="abtn abtn-outline">
-    <i data-lucide="pencil" class="h-4 w-4"></i>Modifier mes informations
+    <i aria-hidden="true" data-lucide="pencil" class="h-4 w-4"></i>Modifier mes informations
   </a>
 </header>
 
@@ -33,7 +33,7 @@
       <h2 id="titre-analyse" class="section-title">Analyse automatique de mon dossier</h2>
       <span class="sev {% if analyse.vigilance == 'important' %}sev-severe{% elif analyse.vigilance == 'a_surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{% if analyse.vigilance == "important" %}Important{% elif analyse.vigilance == "a_surveiller" %}À surveiller{% else %}Calme{% endif %}</span>
     </div>
-    <a href="{% url 'patients:analyse_dossier' %}" class="abtn abtn-primary"><i data-lucide="sparkles" class="h-4 w-4"></i>Voir l'analyse</a>
+    <a href="{% url 'patients:analyse_dossier' %}" class="abtn abtn-primary"><i aria-hidden="true" data-lucide="sparkles" class="h-4 w-4"></i>Voir l'analyse</a>
   </div>
   <p class="muted mt-2 text-sm">{{ analyse.message }}{% if analyse.points %} {{ analyse.points|length }} remarque{{ analyse.points|length|pluralize }}.{% endif %}</p>
 </section>
@@ -89,6 +89,25 @@
   </section>
 
 </div>
+
+<section class="panel panel-pad mt-6" aria-labelledby="titre-consultations">
+  <div class="flex items-center justify-between gap-3">
+    <h2 id="titre-consultations" class="section-title">Historique des consultations{% if nb_consultations %} <span class="count">{{ nb_consultations }}</span>{% endif %}</h2>
+    {% if nb_consultations %}<a href="{% url 'patients:consultations' %}" class="link text-sm">Voir tout<span class="sr-only"> l'historique des consultations</span></a>{% endif %}
+  </div>
+  {% if consultations %}
+  <ul class="mt-4 space-y-3">
+    {% for c in consultations %}
+    <li class="text-sm">
+      <strong class="font-medium">{{ c.date|date:"d/m/Y" }} · {{ c.medecin_nom }}</strong>
+      <span class="muted block">{% if c.diagnostic %}{{ c.diagnostic }}{% else %}{{ c.resume|truncatechars:90 }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted mt-4 text-sm">Aucune consultation terminée pour l'instant. Après chaque consultation, son compte rendu apparaît ici.</p>
+  {% endif %}
+</section>
 
 <section class="panel panel-pad mt-6" aria-labelledby="titre-derniere">
   <h2 id="titre-derniere" class="section-title">Dernière demande de consultation</h2>

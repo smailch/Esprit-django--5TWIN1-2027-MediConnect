@@ -5,11 +5,12 @@
 {% block page %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Mes allergies</h1>
+    <a href="{% url 'patients:dossier' %}" class="link text-sm">← Mon dossier médical</a>
+    <h1 class="page-title mt-2">Mes allergies</h1>
     <p class="muted mt-2 max-w-xl text-sm">Le médecin les consulte avant votre rendez-vous. Elles l'aident à éviter un médicament ou un aliment dangereux pour vous.</p>
   </div>
   <a href="{% url 'patients:allergie_creer' %}" class="abtn abtn-primary">
-    <i data-lucide="plus" class="h-4 w-4"></i>Ajouter une allergie
+    <i aria-hidden="true" data-lucide="plus" class="h-4 w-4"></i>Ajouter une allergie
   </a>
 </header>
 

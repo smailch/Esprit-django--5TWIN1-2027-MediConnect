@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
 from django.db import transaction
 
-from core.forms import StyledFormMixin
+from core.forms import MESSAGE_EMAIL_UTILISE, StyledFormMixin, email_deja_utilise
 
 from .echelles import ECHELLES, NIVEAU_MAX, choix
 from .models import Allergie, DossierMedical, Mesure, Patient, Symptome
@@ -36,6 +36,16 @@ class InscriptionPatientForm(StyledFormMixin, UserCreationForm):
         self.fields["password1"].label = "Mot de passe"
         self.fields["password2"].label = "Confirmation du mot de passe"
         self._style_fields()
+        self._autocompleter(
+            username="username", first_name="given-name", last_name="family-name", email="email", telephone="tel",
+            date_naissance="bday", password1="new-password", password2="new-password",
+        )
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip()
+        if email_deja_utilise(email):
+            raise forms.ValidationError(MESSAGE_EMAIL_UTILISE)
+        return email
 
     @transaction.atomic
     def save(self, commit=True):
@@ -79,6 +89,7 @@ class ProfilPatientForm(StyledFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
+        self._autocompleter(date_naissance="bday", telephone="tel", adresse="street-address", ville="address-level2")
 
 
 class DossierMedicalForm(StyledFormMixin, forms.ModelForm):
@@ -231,3 +242,57 @@ class MesureForm(StyledFormMixin, forms.ModelForm):
         self.instance.patient = patient
         self.fields["mesure_le"].input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"]
         self._style_fields()
+
+
+class CompteForm(StyledFormMixin, forms.ModelForm):
+    """Identité du compte : prénom, nom et adresse e-mail (l'e-mail sert aussi à réinitialiser le mot de passe)."""
+
+    class Meta:
+        model = User
+        fields = ("first_name", "last_name", "email")
+        labels = {"first_name": "Prénom", "last_name": "Nom", "email": "Adresse e-mail"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for champ in self.fields.values():
+            champ.required = True
+        self._style_fields()
+        self._autocompleter(first_name="given-name", last_name="family-name", email="email")
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip()
+        if email_deja_utilise(email, exclure_pk=self.instance.pk):
+            raise forms.ValidationError(MESSAGE_EMAIL_UTILISE)
+        return email
+
+
+class FermetureCompteForm(StyledFormMixin, forms.Form):
+    """Désactiver son compte : on redemande le mot de passe, pour qu'une session laissée ouverte ne suffise pas."""
+
+    mot_de_passe = forms.CharField(label="Votre mot de passe", widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}))
+
+    def __init__(self, *args, user, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self._style_fields()
+        self._autocompleter(mot_de_passe="current-password")
+
+    def clean_mot_de_passe(self):
+        mot_de_passe = self.cleaned_data["mot_de_passe"]
+        if not self.user.check_password(mot_de_passe):
+            raise forms.ValidationError("Mot de passe incorrect.")
+        return mot_de_passe
+
+
+class SuppressionCompteForm(FermetureCompteForm):
+    """Supprimer définitivement : mot de passe, et le mot SUPPRIMER tapé en toutes lettres."""
+
+    MOT = "SUPPRIMER"
+
+    confirmation = forms.CharField(label="Pour confirmer, tapez SUPPRIMER")
+
+    def clean_confirmation(self):
+        confirmation = self.cleaned_data["confirmation"].strip()
+        if confirmation != self.MOT:
+            raise forms.ValidationError(f"Tapez exactement « {self.MOT} » pour confirmer.")
+        return confirmation

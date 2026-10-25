@@ -7,7 +7,7 @@ doivent pas déclencher d'appel externe) et « complet »."""
 from django.utils import timezone
 
 from . import analyse_dossier, dossier as synthese, ia_client, ia_dossier, ia_taches
-from .models import Allergie, DossierMedical, Mesure, Triage
+from .models import Allergie, Consultation, DossierMedical, Mesure, Triage
 
 AUCUN, CACHE, COMPLET = "aucun", "cache", "complet"
 
@@ -57,6 +57,18 @@ def _ressenti(a):
     return [f"{nom} {valeur}/5" for nom, valeur in notes if valeur is not None]
 
 
+def _consultations(patient):
+    """Les comptes rendus de consultation les plus récents du patient."""
+    recentes = sorted(Consultation.objects.filter(patient=patient), key=lambda c: c.date, reverse=True)[:ia_dossier.MAX_CONSULTATIONS]
+    return [
+        {
+            "date": c.date, "motif": c.motif, "resume": c.resume, "diagnostic": c.diagnostic,
+            "prescription": c.prescription, "recommandations": c.recommandations,
+        }
+        for c in recentes
+    ]
+
+
 def _demandes(patient):
     """Les dernières demandes de rendez-vous du patient, de la plus récente à la plus ancienne."""
     recentes = sorted(Triage.objects.filter(patient=patient), key=lambda t: t.cree_le, reverse=True)[:ia_dossier.MAX_DEMANDES]
@@ -92,7 +104,7 @@ def analyser_patient(patient, maintenant=None, ia=AUCUN):
     if lit:
         dossier_ia = ia_dossier.composer(
             age=patient.age, sexe=patient.sexe, groupe_sanguin=groupe_sanguin, antecedents=antecedents,
-            traitements=traitements, allergies=allergies, mesures=mesures, demandes=_demandes(patient),
+            traitements=traitements, allergies=allergies, mesures=mesures, demandes=_demandes(patient), consultations=_consultations(patient),
             manquants=manquants, maintenant=maintenant,
         )
         etat_ia.update(contenu_a_lire=dossier_ia.a_du_contenu, lu=dossier_ia.lu, envoye=dossier_ia.texte)

@@ -36,7 +36,7 @@
   </div>
   <p class="mt-3">{{ analyse.message }}</p>
   {% if analyse.vigilance != "calme" %}
-  <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary mt-4"><i data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous</a>
+  <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary mt-4"><i aria-hidden="true" data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous</a>
   {% endif %}
   <p class="muted mt-4 text-sm">En cas de douleur dans la poitrine, de difficulté à respirer ou de malaise, appelez immédiatement le 190, le 15 ou le 112.</p>
 </section>
@@ -140,7 +140,7 @@
       {% endif %}
       <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="link mt-3 inline-block text-sm">Désactiver ou en savoir plus</a>
       {% else %}
-      <p class="muted mt-3 text-sm">Désactivée. Activée, elle lit l'ensemble de votre dossier (profil, antécédents, traitements, allergies, mesures, demandes de rendez-vous) et le résume en langage simple.</p>
+      <p class="muted mt-3 text-sm">Désactivée. Activée, elle lit l'ensemble de votre dossier (profil, antécédents, traitements, allergies, mesures, consultations, demandes de rendez-vous) et le résume en langage simple.</p>
       <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="abtn abtn-outline mt-3">Découvrir et décider</a>
       {% endif %}
     </section>

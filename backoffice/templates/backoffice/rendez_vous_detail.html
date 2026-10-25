@@ -69,6 +69,9 @@
         {% if triage.drapeaux_rouges %}
         <div class="wide"><dt>Signes d'alerte</dt><dd>{{ triage.drapeaux_rouges|join:", " }}</dd></div>
         {% endif %}
+        {% if triage.modele_niveau %}
+        <div class="wide"><dt>Lecture du texte par le modèle <span class="muted">(modèle local, à confirmer)</span></dt><dd>Niveau estimé {{ triage.modele_niveau }} ({% widthratio triage.modele_confiance 1 100 %} % de confiance){% if triage.modele_mots %} · mots décisifs : {{ triage.modele_mots|join:", " }}{% endif %}{% if triage.modele_releve %} · <span class="sev sev-moderee">niveau relevé</span>{% endif %}</dd></div>
+        {% endif %}
         {% if triage.ia_signes %}
         <div class="wide"><dt>Repéré par l'IA dans le texte libre <span class="muted">(à confirmer)</span></dt><dd>{% for s in triage.ia_signes %}{{ s }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>
         {% elif triage.ia_statut == "non_consentie" %}
@@ -109,8 +112,28 @@
       <form method="post" novalidate class="mt-4 space-y-5">
         {% csrf_token %}
         {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+
+        <fieldset id="compte-rendu" class="space-y-5 border-t border-gray-300/60 pt-5">
+          <legend class="section-title">Compte rendu de la consultation</legend>
+          <p class="muted text-sm">Obligatoire quand le statut passe à « Terminé ». Il apparaît dans le dossier du patient.</p>
+          {% if compte_rendu.non_field_errors %}
+          <div role="alert" class="alert alert-danger">{% for e in compte_rendu.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+          {% endif %}
+          {% for field in compte_rendu %}{% include "core/_champ.html" %}{% endfor %}
+        </fieldset>
+
         <button type="submit" class="abtn abtn-primary">Enregistrer</button>
       </form>
+      <script>
+        (function () {
+          var statut = document.getElementById("{{ form.statut.id_for_label }}");
+          var bloc = document.getElementById("compte-rendu");
+          if (!statut || !bloc) return;
+          function maj() { bloc.hidden = statut.value !== "termine"; }  // sans JavaScript, la rubrique reste visible
+          statut.addEventListener("change", maj);
+          maj();
+        })();
+      </script>
     </section>
   </div>
 

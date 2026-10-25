@@ -1,0 +1,9 @@
+{% extends "core/auth_layout.html" %}
+
+{% block title %}Mot de passe changé — MediConnect{% endblock %}
+
+{% block page %}
+<h1 class="auth-title">Mot de passe changé</h1>
+<p class="mt-4 text-sm">Votre nouveau mot de passe est enregistré. Vous pouvez vous connecter.</p>
+<a href="{% url 'core:connexion' %}" class="abtn abtn-primary abtn-lg abtn-block mt-8">Se connecter</a>
+{% endblock %}

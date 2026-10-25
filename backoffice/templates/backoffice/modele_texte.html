@@ -1,0 +1,103 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Modèle de lecture du texte — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'backoffice:parametres' %}" class="link text-sm">← Paramètres</a>
+    <h1 class="page-title mt-2">Modèle de lecture du texte</h1>
+    <p class="muted mt-2 max-w-2xl text-sm">Un modèle d'apprentissage automatique installé sur le serveur lit le texte libre des patients et estime leur niveau d'urgence.</p>
+  </div>
+</header>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <div class="space-y-6 lg:col-span-7">
+    <section class="panel panel-pad" aria-labelledby="titre-principe">
+      <h2 id="titre-principe" class="section-title">Comment il fonctionne</h2>
+      <ul class="muted mt-3 list-disc space-y-2 pl-5 text-sm">
+        <li><strong class="font-medium text-gray-800">Il lit</strong> la description libre du patient (« Décrivez ce que vous ressentez ») et donne une probabilité pour chacun des cinq niveaux d'urgence.</li>
+        <li><strong class="font-medium text-gray-800">Il ne peut que relever</strong> l'urgence calculée par les règles, jamais la baisser, et seulement s'il est sûr à au moins <strong class="font-medium text-gray-800">{{ seuil }} %</strong> (réglable dans les <a class="link" href="{% url 'backoffice:parametres' %}">Paramètres</a>). Il ne décide jamais d'un cas vital, et il ne pose aucun diagnostic.</li>
+        <li><strong class="font-medium text-gray-800">Il est entraîné sur des données synthétiques</strong> : aucune donnée de vrais patients n'existe dans le projet. Des phrases de patients sont générées (avec fautes de frappe, négations, proches malades), et leur niveau est calculé par les règles du projet. C'est un prototype : il faudrait des données cliniques validées pour un usage réel.</li>
+        <li><strong class="font-medium text-gray-800">Il est léger</strong> : un modèle de quelques centaines de Ko (TF-IDF et régression logistique), sans carte graphique, et le texte du patient ne quitte jamais le serveur.</li>
+      </ul>
+    </section>
+
+    {% if jeux %}
+    <section class="panel panel-pad" aria-labelledby="titre-chiffres">
+      <h2 id="titre-chiffres" class="section-title">Ses résultats</h2>
+      <p class="muted mt-1 text-sm">Entraîné sur {{ evaluation.n_entrainement }} phrases générées (graine {{ evaluation.graine }}).</p>
+      {% for titre, e in jeux %}
+      <h3 class="item-name mt-6">{{ titre }} <span class="muted font-normal">· {{ e.n }} phrases</span></h3>
+      <dl class="stat-grid mt-3">
+        <div class="stat"><dt>Niveau exact</dt><dd>{% widthratio e.precision 1 100 %} %</dd></div>
+        <div class="stat"><dt>À un niveau près</dt><dd>{% widthratio e.a_un_niveau_pres 1 100 %} %</dd></div>
+        <div class="stat"><dt>Cas graves repérés</dt><dd>{% if e.graves_reperes is not None %}{% widthratio e.graves_reperes 1 100 %} %{% else %}—{% endif %}</dd></div>
+        <div class="stat"><dt>Graves pris pour bénins</dt><dd>{% if e.graves_pris_pour_benins is not None %}{% widthratio e.graves_pris_pour_benins 1 100 %} %{% else %}—{% endif %}</dd></div>
+        <div class="stat"><dt>Fausses alertes</dt><dd>{% if e.fausses_alertes is not None %}{% widthratio e.fausses_alertes 1 100 %} %{% else %}—{% endif %}</dd></div>
+        <div class="stat"><dt>Toujours la même réponse</dt><dd>{% widthratio e.reference_toujours_la_meme_reponse 1 100 %} %</dd></div>
+      </dl>
+      <div class="table-wrap mt-4">
+        <table class="matrice" aria-label="Matrice de confusion : niveau réel en lignes, niveau estimé en colonnes">
+          <thead><tr><th scope="col">Réel \ Estimé</th>{% for n in "12345" %}<th scope="col">{{ n }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for ligne in e.matrice %}{% with i=forloop.counter %}
+            <tr><th scope="row">Niveau {{ i }}</th>{% for v in ligne %}<td{% if forloop.counter == i %} class="diag"{% endif %}>{{ v }}</td>{% endfor %}</tr>
+            {% endwith %}{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+      <p class="muted mt-4 text-xs">« Cas graves » : niveaux 1 et 2 ; « fausses alertes » : cas bénins (niveaux 4 et 5) vus comme des urgences (niveaux 1 et 2). Les phrases écrites à la main servent de contrôle : elles ont été utilisées pour surveiller le modèle, ce n'est pas un test indépendant.</p>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-mots">
+      <h2 id="titre-mots" class="section-title">Les mots qui pèsent le plus</h2>
+      <dl class="dl mt-4">
+        {% for niveau, mots in evaluation.mots_par_niveau.items %}
+        <div class="wide"><dt>Niveau {{ niveau }}</dt><dd>{{ mots|join:" · " }}</dd></div>
+        {% endfor %}
+      </dl>
+    </section>
+    {% else %}
+    <p class="alert alert-warn" role="note">Le modèle n'a pas encore été entraîné : utilisez le bouton « Réentraîner », ou la commande <code>python manage.py entrainer_triage</code>.</p>
+    {% endif %}
+  </div>
+
+  <div class="space-y-6 lg:col-span-5">
+    <section class="panel panel-pad" aria-labelledby="titre-essai">
+      <h2 id="titre-essai" class="section-title">Essayer une phrase</h2>
+      <form method="get" class="mt-3">
+        <label for="texte" class="f-label">Texte d'un patient</label>
+        <textarea id="texte" name="texte" rows="3" maxlength="500" class="field" placeholder="Depuis ce matin quelque chose me serre la poitrine…">{{ texte }}</textarea>
+        <button type="submit" class="abtn abtn-primary mt-3">Lire ce texte</button>
+      </form>
+      {% if texte and not essai %}
+      <p class="muted mt-4 text-sm">Le modèle n'a pas pu lire ce texte (modèle indisponible).</p>
+      {% elif essai %}
+      <div class="mt-5">
+        <p class="text-sm">Niveau estimé : <span class="lv lv-{{ essai.niveau }}">{{ essai.niveau }}</span> <span class="muted">· {% widthratio essai.confiance 1 100 %} % de confiance</span></p>
+        <div class="mt-3 space-y-2">
+          {% for niveau, proba in essai_probas %}
+          <div class="barre-proba"><span>Niveau {{ niveau }}</span><div class="meter" aria-hidden="true"><span style="width: {% widthratio proba 1 100 %}%"></span></div><span>{% widthratio proba 1 100 %} %</span></div>
+          {% endfor %}
+        </div>
+        {% if essai.mots %}<p class="muted mt-3 text-sm">Mots décisifs : {{ essai.mots|join:", " }}.</p>{% endif %}
+        <p class="mt-3 text-sm">Si les règles donnaient le niveau 5, le niveau final serait <span class="lv lv-{{ essai_final }}">{{ essai_final }}</span>{% if essai_final != 5 %} (relevé par le modèle){% endif %}.</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-entrainement">
+      <h2 id="titre-entrainement" class="section-title">Réentraîner</h2>
+      <p class="muted mt-2 text-sm">Régénère les phrases, entraîne à nouveau le modèle et l'évalue (quelques secondes). À faire si le lexique a changé.</p>
+      <form method="post" class="mt-4">
+        {% csrf_token %}
+        <button type="submit" name="reentrainer" value="1" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="refresh-cw" class="h-4 w-4"></i>Réentraîner le modèle</button>
+      </form>
+    </section>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Allergie, DossierMedical, Mesure, Patient, Symptome, Triage
+from .models import Allergie, Consultation, DossierMedical, Mesure, Patient, Symptome, Triage
 
 
 class DossierMedicalInline(admin.StackedInline):
@@ -171,3 +171,13 @@ class MesureAdmin(admin.ModelAdmin):
     list_filter = ("type", "mesure_le")
     search_fields = ("patient__user__last_name", "patient__user__first_name")
     autocomplete_fields = ("patient",)
+
+
+@admin.register(Consultation)
+class ConsultationAdmin(admin.ModelAdmin):
+    list_display = ("date", "patient", "medecin_nom", "diagnostic")
+    list_select_related = ("patient__user",)
+    list_filter = ("date",)
+    search_fields = ("patient__user__last_name", "patient__user__first_name", "medecin_nom", "diagnostic")
+    autocomplete_fields = ("patient",)
+    readonly_fields = ("triage",)

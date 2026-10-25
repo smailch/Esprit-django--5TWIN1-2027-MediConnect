@@ -9,7 +9,7 @@
     <p class="muted mt-2 text-sm">Suivez ici vos demandes de rendez-vous.</p>
   </div>
   <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary">
-    <i data-lucide="calendar-plus" class="h-4 w-4"></i>Nouvelle demande
+    <i aria-hidden="true" data-lucide="calendar-plus" class="h-4 w-4"></i>Nouvelle demande
   </a>
 </header>
 
@@ -32,7 +32,7 @@
         </div>
 
         {% if t.peut_reserver %}
-        <p class="mt-4"><a href="{% url 'patients:creneaux' t.pk %}" class="abtn abtn-primary"><i data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir le jour et l'heure</a></p>
+        <p class="mt-4"><a href="{% url 'patients:creneaux' t.pk %}" class="abtn abtn-primary"><i aria-hidden="true" data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir le jour et l'heure</a></p>
         {% endif %}
         {% if t.statut == "en_consultation" %}
         <p class="mt-4 text-sm">Votre consultation est en cours.</p>

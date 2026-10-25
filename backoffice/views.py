@@ -1,15 +1,36 @@
+import csv
 from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
-from core.utils import objet_ou_404
-from patients import analyse_service, ia_client, medecins_test, suivi
-from patients.models import Allergie, DossierMedical, Mesure, Patient, ReglageTriage, Symptome, Triage
+from core.utils import objet_ou_404, proteger_tableur
+from ia import decision as decision_ia, modele as modele_ia
+from patients import analyse_service, compte as gestion_compte, ia_client, medecins_test, suivi
+from patients.models import (
+    Allergie,
+    Consultation,
+    DossierMedical,
+    Mesure,
+    Patient,
+    ReglageTriage,
+    Symptome,
+    Triage,
+)
 
-from .forms import FiltreRendezVousForm, MajRendezVousForm, ReglageTriageForm
+from .forms import (
+    ConsultationForm,
+    FiltreRendezVousForm,
+    FiltrePatientForm,
+    MajRendezVousForm,
+    ReglageTriageForm,
+    consultation_pour,
+)
 from .permissions import administrateur_requis
 from .stats import (
     LIBELLES_NIVEAU,
@@ -82,10 +103,17 @@ def rendez_vous(request):
 def rendez_vous_detail(request, pk):
     triage = objet_ou_404(Triage.objects.select_related("patient__user"), pk=pk)
     form = MajRendezVousForm(request.POST if request.method == "POST" else None, instance=triage)
+    compte_rendu = ConsultationForm(instance=consultation_pour(triage), prefix="cr")
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "La demande a été mise à jour.")
-        return redirect("backoffice:rendez_vous_detail", pk=triage.pk)
+        termine = form.cleaned_data["statut"] == Triage.Statut.TERMINE
+        if termine:  # un rendez-vous terminé a son compte rendu : c'est lui qui alimente le dossier du patient
+            compte_rendu = ConsultationForm(request.POST, instance=compte_rendu.instance, prefix="cr")
+        if not termine or compte_rendu.is_valid():
+            form.save()
+            if termine:
+                compte_rendu.save()
+            messages.success(request, "La demande a été mise à jour." + (" Le compte rendu est dans le dossier du patient." if termine else ""))
+            return redirect("backoffice:rendez_vous_detail", pk=triage.pk)
     place = None
     if triage.statut == Triage.Statut.EN_ATTENTE:
         du_medecin = list(Triage.objects.filter(medecin_id=triage.medecin_id, statut=Triage.Statut.EN_ATTENTE))
@@ -95,6 +123,7 @@ def rendez_vous_detail(request, pk):
     return render(request, "backoffice/rendez_vous_detail.html", {
         "triage": triage,
         "form": form,
+        "compte_rendu": compte_rendu,
         "place": place,
         "reglage": suivi.reglage_actuel(),
         "allergies_severes": Allergie.objects.filter(
@@ -103,27 +132,96 @@ def rendez_vous_detail(request, pk):
     })
 
 
+def _villes():
+    """Les villes des patients, sans doublon (majuscules ignorées), pour le filtre."""
+    vues = {}
+    for ville in Patient.objects.values_list("ville", flat=True):
+        ville = (ville or "").strip()
+        if ville:
+            vues.setdefault(ville.casefold(), ville)
+    return sorted(vues.values(), key=str.casefold)
+
+
+def _patients_filtres(request):
+    """(formulaire de filtre, patients filtrés) : le même filtre sert à la liste et à l'export."""
+    filtre = FiltrePatientForm(request.GET or None, villes=_villes())
+    liste = Patient.objects.select_related("user").order_by("-cree_le")
+    if filtre.is_valid():
+        liste = filtre.appliquer(liste)
+    return filtre, liste
+
+
 @administrateur_requis
 def patients(request):
-    q = request.GET.get("q", "").strip()
-    liste = Patient.objects.select_related("user").order_by("-cree_le")
-    if q:
-        liste = liste.filter(
-            Q(user__last_name__icontains=q)
-            | Q(user__first_name__icontains=q)
-            | Q(user__email__icontains=q)
-            | Q(telephone__icontains=q)
-            | Q(ville__icontains=q)
-        )
+    filtre, liste = _patients_filtres(request)
+    actifs = filtre.parametres()
     page = _page(request, liste)
     nombres = nombre_par_patient(Triage.objects.values_list("patient", flat=True))
     for p in page:
         p.nb_demandes = nombres.get(str(p.pk), 0)
     return render(request, "backoffice/patients.html", {
         "page": page,
-        "q": q,
-        "parametres": urlencode({"q": q}) if q else "",
+        "filtre": filtre,
+        "filtres_actifs": bool(actifs),
+        "parametres": urlencode(actifs),
     })
+
+
+@administrateur_requis
+def patients_exporter(request):
+    """Télécharge la liste des patients (selon les filtres en cours) au format CSV, lisible dans Excel."""
+    _, liste = _patients_filtres(request)
+    nombres = nombre_par_patient(Triage.objects.values_list("patient", flat=True))
+    reponse = HttpResponse(content_type="text/csv; charset=utf-8")
+    reponse["Content-Disposition"] = 'attachment; filename="patients-mediconnect.csv"'
+    reponse.write("\ufeff")  # signature UTF-8 : Excel affiche bien les accents
+    ecrivain = csv.writer(reponse, delimiter=";")
+    ecrivain.writerow(["Nom", "Prénom", "E-mail", "Téléphone", "Sexe", "Date de naissance", "Âge", "Ville", "Compte", "Inscrit le", "Demandes"])
+    for p in liste:
+        ecrivain.writerow([
+            proteger_tableur(p.user.last_name), proteger_tableur(p.user.first_name), proteger_tableur(p.user.email),
+            proteger_tableur(p.telephone), p.get_sexe_display(), p.date_naissance.strftime("%d/%m/%Y"), p.age,
+            proteger_tableur(p.ville), "actif" if p.user.is_active else "désactivé",
+            timezone.localtime(p.cree_le).strftime("%d/%m/%Y"), nombres.get(str(p.pk), 0),
+        ])
+    return reponse
+
+
+def _compte_modifiable(request, patient):
+    """Un compte du personnel ne se désactive pas depuis la liste des patients."""
+    if gestion_compte.peut_etre_ferme(patient.user):
+        return True
+    messages.error(request, "Ce compte appartient au personnel : il ne peut pas être désactivé ici.")
+    return False
+
+
+@administrateur_requis
+@require_POST
+def patient_desactiver(request, pk):
+    patient = objet_ou_404(Patient.objects.select_related("user"), pk=pk)
+    if _compte_modifiable(request, patient):
+        if not patient.user.is_active:
+            messages.info(request, "Ce compte est déjà désactivé.")
+        else:
+            annulees = gestion_compte.desactiver(patient.user)
+            messages.success(
+                request,
+                f"Le compte de {patient} est désactivé." + (f" {annulees} demande(s) en attente annulée(s)." if annulees else ""),
+            )
+    return redirect("backoffice:patient_detail", pk=patient.pk)
+
+
+@administrateur_requis
+@require_POST
+def patient_reactiver(request, pk):
+    patient = objet_ou_404(Patient.objects.select_related("user"), pk=pk)
+    if _compte_modifiable(request, patient):
+        if patient.user.is_active:
+            messages.info(request, "Ce compte est déjà actif.")
+        else:
+            gestion_compte.reactiver(patient.user)
+            messages.success(request, f"Le compte de {patient} est réactivé.")
+    return redirect("backoffice:patient_detail", pk=patient.pk)
 
 
 @administrateur_requis
@@ -136,6 +234,7 @@ def patient_detail(request, pk):
         "mesures": sorted(Mesure.objects.filter(patient=patient), key=lambda m: m.mesure_le, reverse=True)[:10],
         "analyse": analyse_service.analyser_patient(patient, ia=analyse_service.CACHE),
         "demandes": Triage.objects.filter(patient=patient).order_by("-cree_le"),
+        "consultations": sorted(Consultation.objects.filter(patient=patient), key=lambda c: c.date, reverse=True),
     })
 
 
@@ -202,3 +301,28 @@ def parametres(request):
         messages.success(request, "Les réglages de la file d'attente ont été enregistrés.")
         return redirect("backoffice:parametres")
     return render(request, "backoffice/parametres.html", {"form": form, "ia": ia_client.description()})
+
+
+@administrateur_requis
+def modele_texte(request):
+    """Le modèle qui lit le texte libre des patients : ses chiffres d'évaluation, les mots qui pèsent, un essai en direct,
+    et le réentraînement."""
+    if request.method == "POST" and "reentrainer" in request.POST:
+        entraine, evaluation = modele_ia.entrainer()
+        modele_ia.sauvegarder(entraine, evaluation)
+        modele_ia.installer(entraine)
+        messages.success(request, "Le modèle a été réentraîné et enregistré.")
+        return redirect("backoffice:modele_texte")
+    texte = request.GET.get("texte", "").strip()[:500]
+    seuil = ReglageTriage.actuel().seuil_modele
+    essai = modele_ia.predire(texte) if texte else None
+    evaluation = modele_ia.charger_evaluation()
+    return render(request, "backoffice/modele_texte.html", {
+        "evaluation": evaluation,
+        "jeux": [("Phrases générées (test)", evaluation["test_genere"]), ("Phrases écrites à la main (contrôle)", evaluation["test_a_la_main"])] if evaluation else [],
+        "texte": texte,
+        "essai": essai,
+        "essai_probas": sorted(((int(n), p) for n, p in essai["probas"].items())) if essai else [],
+        "essai_final": decision_ia.relever(5, essai, seuil / 100)[0] if essai else None,
+        "seuil": seuil,
+    })

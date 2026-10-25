@@ -2,7 +2,7 @@
 
 L'IA ne lit pas seulement quelques textes libres : elle reçoit TOUT ce que le médecin lit avant la consultation,
 c'est-à-dire le profil (sexe, âge, groupe sanguin), les antécédents, les traitements, les allergies, les mesures
-de santé et les dernières demandes de rendez-vous.
+de santé, les comptes rendus des consultations passées et les dernières demandes de rendez-vous.
 
 Ce qui n'est jamais envoyé : le nom, la date de naissance, le téléphone, l'adresse, la ville, l'e-mail et le contact
 d'urgence (rien de cela n'aide à lire un dossier médical). Les numéros, e-mails et liens écrits dans les textes libres
@@ -18,10 +18,12 @@ from . import ia_garde_fous as gf
 FENETRE_MESURES_JOURS = 180  # six mois de mesures
 MESURES_PAR_TYPE = 6  # les plus récentes de chaque type : assez pour voir une tendance
 MAX_DEMANDES = 5
+MAX_CONSULTATIONS = 5
 MAX_ALLERGIES = 20
 LONGUEUR_ALLERGIE = 120  # substance et réaction, chacune
 LONGUEUR_NOTE = 100
 LONGUEUR_TEXTE_DEMANDE = 300
+LONGUEUR_CONSULTATION = 300  # chaque champ d'un compte rendu
 LONGUEUR_ALLERGIES = 4000
 
 TYPES_ALLERGIE = {"medicament": "médicament", "aliment": "aliment", "environnement": "environnement", "autre": "autre"}
@@ -122,17 +124,34 @@ def _demandes(demandes):
     return lignes
 
 
-def composer(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, mesures, demandes, manquants, maintenant):
+def _consultations(consultations):
+    """Les comptes rendus récents, du plus récent au plus ancien. Jamais le nom du médecin."""
+    lignes = []
+    for c in sorted(consultations, key=lambda c: c["date"], reverse=True)[:MAX_CONSULTATIONS]:
+        morceaux = [_date(c["date"])]
+        for libelle, cle in (("motif", "motif"), ("compte rendu", "resume"), ("diagnostic", "diagnostic"),
+                             ("prescription", "prescription"), ("recommandations", "recommandations")):
+            texte = " ".join(gf.anonymiser(c.get(cle), LONGUEUR_CONSULTATION).split())
+            if texte:
+                morceaux.append(f"{libelle} : {texte}")
+        lignes.append("- " + " ; ".join(morceaux))
+    return lignes
+
+
+def composer(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, mesures, demandes, manquants, maintenant,
+             consultations=()):
     """Le dossier en texte. Mêmes données, même texte : c'est ce qui permet de réutiliser une réponse déjà obtenue.
 
     allergies : [{substance, type, gravite, reaction, decouverte_le, active}] ;
     mesures   : [{type, libelle, unite, valeur, valeur2, mesure_le, note}] ;
     demandes  : [{date, niveau, statut, symptomes, constantes, ressenti, texte}] (demandes de rendez-vous) ;
-    manquants : libellés des informations utiles non renseignées."""
+    manquants : libellés des informations utiles non renseignées ;
+    consultations : [{date, motif, resume, diagnostic, prescription, recommandations}] (comptes rendus de consultations)."""
     antecedents_texte, traitements_texte = gf.anonymiser(antecedents), gf.anonymiser(traitements)
     lignes_allergies, texte_allergies, severes = _allergies(allergies)
     lignes_mesures, nb_mesures, nb_types = _mesures(mesures, maintenant)
     lignes_demandes = _demandes(demandes)
+    lignes_consultations = _consultations(consultations)
 
     blocs = [f"PROFIL : {_profil(age, sexe, groupe_sanguin)}."]
     blocs.append(f"ANTÉCÉDENTS (écrits par le patient) : {antecedents_texte or 'non renseignés'}")
@@ -141,6 +160,10 @@ def composer(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, 
     blocs.append(
         f"MESURES DE SANTÉ (les {MESURES_PAR_TYPE} plus récentes de chaque type, sur six mois) :\n"
         + ("\n".join(lignes_mesures) if lignes_mesures else "aucune")
+    )
+    blocs.append(
+        f"CONSULTATIONS PASSÉES (comptes rendus, les {MAX_CONSULTATIONS} plus récentes) :\n"
+        + ("\n".join(lignes_consultations) if lignes_consultations else "aucune")
     )
     blocs.append(
         "DEMANDES DE RENDEZ-VOUS RÉCENTES (niveau d'urgence : 1 = vital, 5 = non urgent) :\n"
@@ -156,11 +179,12 @@ def composer(*, age, sexe, groupe_sanguin, antecedents, traitements, allergies, 
         ("Allergies", (_pluriel(len(lignes_allergies), "allergie") + (f", dont {_pluriel(severes, 'sévère')}" if severes else ""))
          if lignes_allergies else "aucune enregistrée", bool(lignes_allergies)),
         ("Mesures de santé", f"{_pluriel(nb_mesures, 'mesure')} ({_pluriel(nb_types, 'type')})" if nb_mesures else "aucune sur six mois", bool(nb_mesures)),
+        ("Consultations passées", _pluriel(len(lignes_consultations), "consultation") if lignes_consultations else "aucune", bool(lignes_consultations)),
         ("Demandes de rendez-vous", f"{_pluriel(len(lignes_demandes), 'demande')} récente{'s' if len(lignes_demandes) > 1 else ''}" if lignes_demandes else "aucune", bool(lignes_demandes)),
     ]
     return DossierIA(
         texte="\n".join(blocs),
         allergies=texte_allergies,
         lu=lu,
-        a_du_contenu=bool(antecedents_texte or traitements_texte or lignes_allergies or nb_mesures or lignes_demandes or groupe_sanguin),
+        a_du_contenu=bool(antecedents_texte or traitements_texte or lignes_allergies or nb_mesures or lignes_consultations or lignes_demandes or groupe_sanguin),
     )

@@ -2,24 +2,28 @@ import csv
 import datetime
 
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.utils import objet_ou_404
+from core.utils import objet_ou_404, proteger_tableur
+from ia import decision as decision_ia, modele as modele_ia
 
-from . import analyse_service, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, planning, suivi
+from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, planning, suivi
 from .forms import (
     AllergieForm,
+    CompteForm,
+    FermetureCompteForm,
     MesureForm,
     DossierMedicalForm,
     InscriptionPatientForm,
     ProfilPatientForm,
+    SuppressionCompteForm,
     SymptomesForm,
 )
 from .models import (
@@ -27,8 +31,10 @@ from .models import (
     Mesure,
     AutoEvaluation,
     ConstantesVitales,
+    Consultation,
     DossierMedical,
     Patient,
+    ReglageTriage,
     Symptome,
     SymptomeDeclare,
     Triage,
@@ -75,6 +81,62 @@ def profil(request):
         "patients/profil.html",
         {"patient": patient, "profil_form": profil_form, "dossier_form": dossier_form},
     )
+
+
+# --- Mon compte : identité, mot de passe, données, fermeture ----------------------------
+
+@login_required
+def compte(request):
+    """Identité du compte, accès au changement de mot de passe, export des données, désactivation et suppression."""
+    patient = _patient_connecte(request)
+    user = request.user
+    ferme_possible = gestion_compte.peut_etre_ferme(user)
+    identite = CompteForm(instance=user)
+    fermer = FermetureCompteForm(user=user, prefix="fermer")
+    supprimer = SuppressionCompteForm(user=user, prefix="supprimer")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "identite":
+            identite = CompteForm(request.POST, instance=user)
+            if identite.is_valid():
+                identite.save()
+                messages.success(request, "Votre identité a été mise à jour.")
+                return redirect("patients:compte")
+        elif action in ("desactiver", "supprimer") and not ferme_possible:
+            messages.error(request, "Ce compte appartient au personnel : il ne peut pas être fermé depuis l'espace patient.")
+            return redirect("patients:compte")
+        elif action == "desactiver":
+            fermer = FermetureCompteForm(request.POST, user=user, prefix="fermer")
+            if fermer.is_valid():
+                annulees = gestion_compte.desactiver(user)
+                logout(request)
+                messages.success(
+                    request,
+                    "Votre compte est désactivé." + (f" {annulees} demande(s) en attente ont été annulée(s)." if annulees else "")
+                    + " Pour le réactiver, contactez un administrateur.",
+                )
+                return redirect("home")
+        elif action == "supprimer":
+            supprimer = SuppressionCompteForm(request.POST, user=user, prefix="supprimer")
+            if supprimer.is_valid():
+                logout(request)
+                gestion_compte.supprimer(user)
+                messages.success(request, "Votre compte et toutes vos données ont été supprimés définitivement.")
+                return redirect("home")
+
+    return render(request, "patients/compte.html", {
+        "patient": patient, "identite": identite, "fermer": fermer, "supprimer": supprimer, "ferme_possible": ferme_possible,
+    })
+
+
+@login_required
+def compte_exporter(request):
+    """Télécharge toutes les données du patient au format JSON."""
+    patient = _patient_connecte(request)
+    reponse = JsonResponse(gestion_compte.donnees_patient(patient), json_dumps_params={"ensure_ascii": False, "indent": 2})
+    reponse["Content-Disposition"] = 'attachment; filename="mes-donnees-mediconnect.json"'
+    return reponse
 
 
 # --- Demande de rendez-vous : choix du médecin, symptômes, triage -----------
@@ -134,6 +196,7 @@ def declarer_symptomes(request, medecin_id):
         auto_evaluation = form.auto_evaluation()
         ia_statut, ia_signes = _symptomes_par_ia(patient, form.cleaned_data["texte_libre"], symptomes)
         resultat = evaluer(symptomes, constantes, auto_evaluation)
+        lecture, niveau, releve = _lecture_du_texte(form.cleaned_data["texte_libre"], resultat.niveau)
         triage = Triage.objects.create(
             patient=patient,
             medecin_id=medecin["id"],
@@ -147,14 +210,18 @@ def declarer_symptomes(request, medecin_id):
             auto_evaluation=AutoEvaluation(**auto_evaluation),
             texte_libre=form.cleaned_data["texte_libre"],
             score=resultat.score,
-            niveau=resultat.niveau,
-            explication=resultat.explication + (
+            niveau=niveau,
+            explication=resultat.explication + (decision_ia.phrase_explicative(lecture, niveau) if releve else "") + (
                 " L'IA a repéré dans votre texte : " + ", ".join(s.split(" — ")[0] for s in ia_signes) + " (à confirmer par le médecin)."
                 if ia_signes else ""
             ),
             drapeaux_rouges=resultat.drapeaux_rouges,
             ia_statut=ia_statut,
             ia_signes=ia_signes,
+            modele_niveau=lecture["niveau"] if lecture else None,
+            modele_confiance=lecture["confiance"] if lecture else None,
+            modele_mots=lecture["mots"] if lecture else [],
+            modele_releve=releve,
         )
         if planning.reservable(triage.statut, triage.niveau_effectif):
             return redirect("patients:creneaux", pk=triage.pk)  # étape 3 : choisir le jour et l'heure
@@ -163,6 +230,18 @@ def declarer_symptomes(request, medecin_id):
     return render(request, "patients/symptomes.html", {
         "form": form, "medecin": medecin, "ia": ia_client.description(), "consentement_ia": patient.consentement_ia,
     })
+
+
+def _lecture_du_texte(texte, niveau_regles):
+    """Avis du modèle local sur le texte libre : (lecture ou None, niveau final, niveau relevé ?).
+
+    Le modèle ne peut que RELEVER l'urgence, et seulement s'il est assez sûr de lui (seuil réglable). S'il est absent
+    ou en panne, le triage continue avec ses règles."""
+    lecture = modele_ia.predire(texte)
+    if lecture is None:
+        return None, niveau_regles, False
+    niveau, releve = decision_ia.relever(niveau_regles, lecture, ReglageTriage.actuel().seuil_modele / 100)
+    return lecture, niveau, releve
 
 
 def _symptomes_par_ia(patient, texte, symptomes):
@@ -222,8 +301,10 @@ def resultat(request, pk):
         du_medecin = list(Triage.objects.filter(medecin_id=triage.medecin_id, statut=Triage.Statut.EN_ATTENTE))
         suivi.annoter(du_medecin)
         triage = next((t for t in du_medecin if t.pk == triage.pk), triage)
+    consultation = Consultation.objects.filter(triage=triage).first() if triage.statut == Triage.Statut.TERMINE else None
     return render(request, "patients/resultat.html", {
         "triage": triage,
+        "consultation": consultation,
         "message": MESSAGES_NIVEAU.get(triage.niveau_effectif, ""),
         "propositions": _propositions(triage),
         "can_book": planning.reservable(triage.statut, triage.niveau_effectif),
@@ -484,11 +565,6 @@ def mesures(request):
     })
 
 
-def _protege_tableur(texte):
-    """Un texte qui commence par = + - @ serait exécuté comme une formule par un tableur."""
-    return "'" + texte if texte[:1] in ("=", "+", "-", "@") else texte
-
-
 @login_required
 def mesures_exporter(request):
     """Télécharge l'historique (selon les filtres en cours) au format CSV, lisible dans Excel."""
@@ -502,7 +578,7 @@ def mesures_exporter(request):
     for m in reversed(historique):
         ecrivain.writerow([
             m.get_type_display(), f"{m.valeur:g}", "" if m.valeur2 is None else f"{m.valeur2:g}", m.unite,
-            timezone.localtime(m.mesure_le).strftime("%d/%m/%Y %H:%M"), _protege_tableur(m.note),
+            timezone.localtime(m.mesure_le).strftime("%d/%m/%Y %H:%M"), proteger_tableur(m.note),
         ])
     return reponse
 
@@ -559,6 +635,7 @@ def dossier(request):
     mesures_recentes = synthese.derniere_mesure_par_type(Mesure.objects.filter(patient=patient))
     ordre_types = [code for code, _ in Mesure.Type.choices]
     mesures_recentes.sort(key=lambda m: ordre_types.index(m.type))
+    consultations = sorted(Consultation.objects.filter(patient=patient), key=lambda c: c.date, reverse=True)
     return render(request, "patients/dossier.html", {
         "patient": patient,
         "dossier": fiche,
@@ -568,7 +645,17 @@ def dossier(request):
         "derniere_demande": demandes[0] if demandes else None,
         "manquants": synthese.elements_manquants(patient, fiche),
         "analyse": analyse_service.analyser_patient(patient, ia=analyse_service.CACHE),
+        "consultations": consultations[:3],
+        "nb_consultations": len(consultations),
     })
+
+
+@login_required
+def consultations(request):
+    """Historique complet : le compte rendu de chaque consultation terminée, du plus récent au plus ancien."""
+    patient = _patient_connecte(request)
+    liste = sorted(Consultation.objects.filter(patient=patient), key=lambda c: c.date, reverse=True)
+    return render(request, "patients/consultations.html", {"consultations": liste})
 
 
 # Où mène le bouton d'action d'une remarque de l'analyse.

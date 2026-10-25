@@ -407,7 +407,7 @@ class MajRendezVousDepassementsTests(SimpleTestCase):
 
 class ReglageTriageFormTests(SimpleTestCase):
     DONNEES = {"delai_niveau_2": 30, "delai_niveau_3": 120, "delai_niveau_4": 480, "delai_niveau_5": 1440,
-               "plafond_depassements": 5, "seuil_risque": 75, "duree_consultation": 20, "facteur_garantie": 3}
+               "plafond_depassements": 5, "seuil_risque": 75, "duree_consultation": 20, "facteur_garantie": 3, "seuil_modele": 85}
 
     def test_formulaire_valide(self):
         self.assertTrue(ReglageTriageForm(self.DONNEES).is_valid())
@@ -585,3 +585,501 @@ class FilePagesBackofficeTests(SimpleTestCase):
         html = render_to_string("backoffice/symptomes.html", {"symptomes": []}, self.requete("symptomes"))
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('href="/backoffice/parametres/" class="nav-item" aria-current="page"', html)
+
+
+# --- Compte rendu de consultation, patients (filtres, export CSV, désactivation) ---------------------------------
+import csv  # noqa: E402
+import io  # noqa: E402
+
+from django.contrib.auth.models import AnonymousUser  # noqa: E402
+from django.db.models import Q  # noqa: E402
+from django.utils import timezone  # noqa: E402
+
+from core.utils import proteger_tableur  # noqa: E402
+from patients.models import Allergie, Consultation, Patient, SymptomeDeclare  # noqa: E402
+
+from .forms import ConsultationForm, FiltrePatientForm, _il_y_a_ans, consultation_pour  # noqa: E402
+
+AUJOURDHUI = datetime.date(2026, 10, 22)
+TUNIS_ = datetime.timezone(datetime.timedelta(hours=1))
+
+
+def un_patient_de_liste(prenom="Amel", nom="Zouari", actif=True, ville="Tunis", staff=False, **kw):
+    """Patient non enregistré, avec son compte (aucun accès à la base)."""
+    patient = Patient(pk=ObjectId_(), date_naissance=datetime.date(1990, 5, 4), sexe="F", telephone="20111222", ville=ville, **kw)
+    patient.user = User(username=prenom.lower(), first_name=prenom, last_name=nom, email=f"{prenom.lower()}@exemple.tn", is_active=actif, is_staff=staff)
+    patient.cree_le = datetime.datetime(2026, 9, 1, 9, 0, tzinfo=TUNIS_)
+    return patient
+
+
+class ListeFiltrable(list):
+    """Faux QuerySet : une liste qui note les filtres demandés."""
+
+    def __init__(self, *elements):
+        super().__init__(elements)
+        self.filtres = []
+
+    def filter(self, *args, **kwargs):
+        self.filtres.append((args, kwargs))
+        return self
+
+
+def requete_admin(adresse="/backoffice/patients/", methode="get", donnees=None, nom="patients"):
+    requete = getattr(RequestFactory(), methode)(adresse, donnees or {})
+    requete.user = utilisateur(role="admin", is_staff=True, first_name="Admin")
+    requete.resolver_match = SimpleNamespace(url_name=nom)
+    return requete
+
+
+class ConsultationFormulaireTests(SimpleTestCase):
+    DONNEES = {
+        "cr-date": "2026-10-20T09:30", "cr-motif": "Toux", "cr-resume": "Toux depuis trois jours.",
+        "cr-diagnostic": "Bronchite", "cr-prescription": "Amoxicilline", "cr-recommandations": "Repos",
+    }
+
+    def formulaire(self, **remplace):
+        donnees = {**self.DONNEES, **remplace}
+        return ConsultationForm(donnees, instance=Consultation(medecin_nom="Dr Sara Benali"), prefix="cr")
+
+    def test_valide(self):
+        form = self.formulaire()
+        self.assertTrue(form.is_valid(), form.errors)
+        date = form.cleaned_data["date"]
+        self.assertEqual((date.year, date.month, date.day, date.hour, date.minute), (2026, 10, 20, 9, 30))
+        self.assertIsNotNone(date.tzinfo)  # une heure saisie est une heure de Tunis, pas une heure « sans fuseau »
+
+    def test_le_compte_rendu_est_obligatoire_le_reste_facultatif(self):
+        self.assertIn("resume", self.formulaire(**{"cr-resume": ""}).errors)
+        form = self.formulaire(**{"cr-motif": "", "cr-diagnostic": "", "cr-prescription": "", "cr-recommandations": ""})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_la_date_ne_peut_pas_etre_dans_le_futur(self):
+        demain = (timezone.localtime() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        form = self.formulaire(**{"cr-date": demain})
+        self.assertFalse(form.is_valid())
+        self.assertIn("date", form.errors)
+
+    def test_champs_proposes_et_style(self):
+        form = ConsultationForm(prefix="cr")
+        self.assertEqual(list(form.fields), ["date", "motif", "resume", "diagnostic", "prescription", "recommandations"])
+        self.assertTrue(all(c.widget.attrs.get("class") == "field" for c in form.fields.values()))
+        self.assertEqual(form.fields["date"].widget.input_type, "datetime-local")
+
+
+class ConsultationPourTests(SimpleTestCase):
+    def triage(self):
+        t = Triage(patient=un_patient_de_liste(), medecin_id="m1", medecin_nom="Dr Sara Benali", medecin_specialite="Médecine générale",
+                   symptomes=[SymptomeDeclare(nom="Toux", poids=2), SymptomeDeclare(nom="Fièvre", poids=3)])
+        t.pk = ObjectId_()
+        return t
+
+    def test_le_compte_rendu_existant_est_repris(self):
+        existante = Consultation(medecin_nom="Dr X", resume="déjà là")
+        with mock.patch.object(Consultation.objects, "filter") as filtre:
+            filtre.return_value.first.return_value = existante
+            self.assertIs(consultation_pour(self.triage()), existante)
+
+    def test_sinon_un_compte_rendu_vierge_prerempli(self):
+        triage = self.triage()
+        with mock.patch.object(Consultation.objects, "filter") as filtre:
+            filtre.return_value.first.return_value = None
+            c = consultation_pour(triage)
+        self.assertEqual((c.patient, c.triage, c.medecin_nom, c.medecin_specialite), (triage.patient, triage, "Dr Sara Benali", "Médecine générale"))
+        self.assertEqual(c.motif, "Toux, Fièvre")  # le motif part des symptômes déclarés
+        self.assertIsNone(c.pk)
+
+
+class RendezVousDetailConsultationTests(SimpleTestCase):
+    def triage(self, statut="en_consultation"):
+        t = Triage(patient=un_patient_de_liste(), medecin_id="m1", medecin_nom="Dr Sara Benali", medecin_specialite="Médecine générale", niveau=3,
+                   statut=statut, explication="e", symptomes=[SymptomeDeclare(nom="Toux", poids=2)])
+        t.pk = ObjectId_()
+        t.cree_le = datetime.datetime(2026, 10, 20, 8, 0, tzinfo=TUNIS_)
+        return t
+
+    def appeler(self, triage, donnees=None):
+        requete = requete_admin(f"/backoffice/rendez-vous/{triage.pk}/", "post" if donnees is not None else "get", donnees, "rendez_vous_detail")
+        vierge = Consultation(patient=triage.patient, triage=triage, medecin_nom=triage.medecin_nom, motif="Toux")
+        espions = SimpleNamespace(triage_save=mock.Mock(), consultation_save=mock.Mock(), messages=mock.Mock())
+        with mock.patch.object(views, "objet_ou_404", return_value=triage), mock.patch.object(views, "consultation_pour", return_value=vierge), \
+                mock.patch.object(views, "messages", espions.messages), mock.patch.object(Triage, "save", espions.triage_save), \
+                mock.patch.object(Consultation, "save", espions.consultation_save), mock.patch.object(Triage, "enregistrer_depassements"), \
+                mock.patch.object(Allergie.objects, "filter", return_value=[]), mock.patch.object(views.suivi, "reglage_actuel", return_value=fa.DEFAUT):
+            reponse = views.rendez_vous_detail(requete, str(triage.pk))
+        return reponse, espions, vierge
+
+    def champs(self, **remplace):
+        valeurs = {"statut": "termine", "niveau_medecin": "", "cr-date": "2026-10-21T10:00", "cr-motif": "Toux", "cr-resume": "Toux depuis trois jours.",
+                   "cr-diagnostic": "Bronchite", "cr-prescription": "Amoxicilline", "cr-recommandations": "Repos"}
+        valeurs.update(remplace)
+        return valeurs
+
+    def test_la_page_propose_le_compte_rendu(self):
+        reponse, _, _ = self.appeler(self.triage())
+        html = reponse.content.decode()
+        for texte in ("Compte rendu de la consultation", 'id="compte-rendu"', 'name="cr-resume"', 'name="cr-prescription"', 'value="Toux"',
+                      "Obligatoire quand le statut passe à", "bloc.hidden = statut.value !== "):
+            self.assertIn(texte, html)
+
+    def test_terminer_un_rendez_vous_enregistre_le_compte_rendu(self):
+        reponse, espions, vierge = self.appeler(self.triage(), self.champs())
+        self.assertEqual(reponse.status_code, 302)
+        espions.triage_save.assert_called_once()
+        espions.consultation_save.assert_called_once()
+        self.assertEqual((vierge.resume, vierge.diagnostic, vierge.prescription, vierge.recommandations), ("Toux depuis trois jours.", "Bronchite", "Amoxicilline", "Repos"))
+        self.assertIn("compte rendu est dans le dossier du patient", espions.messages.success.call_args.args[1])
+
+    def test_sans_compte_rendu_on_ne_peut_pas_terminer(self):
+        reponse, espions, _ = self.appeler(self.triage(), self.champs(**{"cr-resume": ""}))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("Ce champ est obligatoire.", reponse.content.decode())
+        espions.triage_save.assert_not_called()  # le statut ne change pas tant que le compte rendu manque
+        espions.consultation_save.assert_not_called()
+
+    def test_un_autre_statut_ignore_le_compte_rendu(self):
+        for statut in ("annule", "en_attente", "en_consultation"):
+            with self.subTest(statut=statut):
+                reponse, espions, _ = self.appeler(self.triage(), self.champs(statut=statut, **{"cr-resume": ""}))
+                self.assertEqual(reponse.status_code, 302)
+                espions.triage_save.assert_called_once()
+                espions.consultation_save.assert_not_called()
+                self.assertNotIn("compte rendu est dans", espions.messages.success.call_args.args[1])
+
+
+class FiltrePatientFormulaireTests(SimpleTestCase):
+    def filtre(self, donnees=None, villes=("Sfax", "Tunis")):
+        return FiltrePatientForm(donnees, villes=villes)
+
+    def appliquer(self, donnees, **kw):
+        form = self.filtre(donnees)
+        self.assertTrue(form.is_valid(), form.errors)
+        liste = ListeFiltrable()
+        self.assertIs(form.appliquer(liste, AUJOURDHUI, **kw), liste)
+        return liste.filtres
+
+    def test_sans_filtre_rien_n_est_restreint(self):
+        self.assertEqual(self.appliquer({}), [])
+
+    def test_chaque_filtre(self):
+        cas = (
+            ({"sexe": "F"}, {"sexe": "F"}),
+            ({"ville": "Tunis"}, {"ville__iexact": "Tunis"}),
+            ({"compte": "actif"}, {"user__is_active": True}),
+            ({"compte": "desactive"}, {"user__is_active": False}),
+            ({"age_min": "30"}, {"date_naissance__lte": datetime.date(1996, 10, 22)}),  # 30 ans révolus ou plus : né le 22/10/1996 au plus tard
+            ({"age_max": "40"}, {"date_naissance__gt": datetime.date(1985, 10, 22)}),  # 40 ans au plus : pas encore 41 ans
+        )
+        for donnees, attendu in cas:
+            with self.subTest(donnees=donnees):
+                self.assertEqual(self.appliquer(donnees), [((), attendu)])
+
+    def test_la_recherche_porte_sur_cinq_champs(self):
+        filtres = self.appliquer({"q": "  amel "})
+        (args, kwargs), = filtres
+        self.assertEqual((len(args), kwargs, isinstance(args[0], Q), len(args[0].children)), (1, {}, True, 5))
+        self.assertIn(("user__last_name__icontains", "amel"), args[0].children)
+
+    def test_allergie_severe(self):
+        a, b = ObjectId_(), ObjectId_()
+        with mock.patch.object(Allergie.objects, "filter") as filtre:
+            filtre.return_value.values_list.return_value = [a, b, a]
+            filtres = self.appliquer({"allergie_severe": "on"})
+        filtre.assert_called_once_with(gravite="severe", active=True)  # une allergie disparue ne compte pas
+        self.assertEqual(filtres, [((), {"pk__in": {a, b}})])
+
+    def test_les_filtres_se_cumulent(self):
+        self.assertEqual(len(self.appliquer({"sexe": "H", "ville": "Sfax", "age_min": "18", "age_max": "65", "compte": "actif"})), 5)
+
+    def test_valeurs_refusees(self):
+        for donnees, champ in (
+            ({"age_min": "50", "age_max": "30"}, "age_max"),
+            ({"age_min": "-1"}, "age_min"),
+            ({"age_max": "200"}, "age_max"),
+            ({"age_min": "abc"}, "age_min"),
+            ({"sexe": "X"}, "sexe"),
+            ({"ville": "Atlantide"}, "ville"),
+            ({"compte": "fantome"}, "compte"),
+        ):
+            with self.subTest(donnees=donnees):
+                self.assertIn(champ, self.filtre(donnees).errors)
+
+    def test_les_villes_proposees_viennent_de_la_liste(self):
+        self.assertEqual(self.filtre().fields["ville"].choices, [("", "Toutes"), ("Sfax", "Sfax"), ("Tunis", "Tunis")])
+
+    def test_parametres_actifs_pour_la_pagination_et_l_export(self):
+        form = self.filtre({"q": " amel ", "sexe": "F", "age_min": "30", "allergie_severe": "on", "ville": "", "compte": ""})
+        self.assertEqual(form.parametres(), {"q": "amel", "sexe": "F", "age_min": "30", "allergie_severe": "on"})
+        self.assertEqual(self.filtre({}).parametres(), {})
+        self.assertEqual(self.filtre({"age_min": "50", "age_max": "30"}).parametres(), {})  # formulaire invalide : aucun filtre retenu
+
+    def test_il_y_a_n_ans(self):
+        self.assertEqual(_il_y_a_ans(datetime.date(2026, 10, 22), 30), datetime.date(1996, 10, 22))
+        self.assertEqual(_il_y_a_ans(datetime.date(2024, 2, 29), 1), datetime.date(2023, 2, 28))  # 29 février d'une année non bissextile
+        self.assertEqual(_il_y_a_ans(datetime.date(2024, 2, 29), 4), datetime.date(2020, 2, 29))
+
+
+class PatientsListeBackofficeTests(SimpleTestCase):
+    def appeler(self, vue, patients, donnees=None, nom="patients"):
+        liste = ListeFiltrable(*patients)
+        adresse = "/backoffice/patients/" + ("export/" if nom == "patients_exporter" else "")
+        requete = requete_admin(adresse, "get", donnees, nom)
+        with mock.patch.object(views, "_villes", return_value=["Sfax", "Tunis"]), mock.patch.object(Patient.objects, "select_related") as lien, \
+                mock.patch.object(Triage.objects, "values_list", return_value=[]):
+            lien.return_value.order_by.return_value = liste
+            reponse = vue(requete)
+        return reponse, liste
+
+    def test_adresses(self):
+        self.assertEqual(reverse("backoffice:patients_exporter"), "/backoffice/patients/export/")
+        self.assertIs(resolve("/backoffice/patients/export/").func, views.patients_exporter)  # pas pris pour la fiche d'un patient « export »
+        self.assertEqual(reverse("backoffice:patient_desactiver", args=["abc"]), "/backoffice/patients/abc/desactiver/")
+        self.assertEqual(reverse("backoffice:patient_reactiver", args=["abc"]), "/backoffice/patients/abc/reactiver/")
+        self.assertIs(resolve("/backoffice/patients/abc/").func, views.patient_detail)
+
+    def test_acces_reserve_aux_administrateurs(self):
+        for vue in (views.patients, views.patients_exporter, views.patient_desactiver, views.patient_reactiver):
+            with self.subTest(vue=vue.__name__):
+                requete = RequestFactory().post("/x/")
+                requete.user = utilisateur(role="patient")
+                with self.assertRaises(PermissionDenied):
+                    vue(requete, "abc") if "patient_" in vue.__name__ else vue(requete)
+                requete.user = AnonymousUser()
+                reponse = vue(requete, "abc") if "patient_" in vue.__name__ else vue(requete)
+                self.assertEqual(reponse.status_code, 302)
+
+    def test_la_liste_s_affiche_avec_ses_filtres(self):
+        reponse, liste = self.appeler(views.patients, [un_patient_de_liste(), un_patient_de_liste("Karim", "Jaziri", actif=False)])
+        html = reponse.content.decode()
+        for texte in ("Nom, e-mail, téléphone ou ville", "Âge minimum", "Âge maximum", "Avec une allergie sévère", 'name="sexe"', 'name="ville"',
+                      "Exporter en CSV", "Amel Zouari", "Karim Jaziri", "amel@exemple.tn", 'href="/backoffice/patients/export/"'):
+            self.assertIn(texte, html)
+        self.assertEqual(html.count("Désactivé</span>"), 1)  # seul le compte désactivé est signalé
+        self.assertEqual(liste.filtres, [])
+
+    def test_les_filtres_s_appliquent_et_suivent_l_export_et_la_pagination(self):
+        reponse, liste = self.appeler(views.patients, [un_patient_de_liste()], {"sexe": "F", "age_min": "30"})
+        self.assertEqual(len(liste.filtres), 2)
+        html = reponse.content.decode()
+        self.assertIn('href="/backoffice/patients/export/?sexe=F&amp;age_min=30"', html)
+        self.assertIn("Réinitialiser", html)
+
+    def test_aucun_resultat(self):
+        reponse, _ = self.appeler(views.patients, [], {"sexe": "H"})
+        self.assertIn("Aucun patient ne correspond à ces critères.", reponse.content.decode())
+        reponse, _ = self.appeler(views.patients, [])
+        self.assertIn("Aucun patient inscrit pour le moment.", reponse.content.decode())
+
+    def test_des_filtres_incoherents_sont_signales_sans_rien_filtrer(self):
+        reponse, liste = self.appeler(views.patients, [un_patient_de_liste()], {"age_min": "50", "age_max": "30"})
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("L&#x27;âge maximum doit être supérieur ou égal à l&#x27;âge minimum.", reponse.content.decode())
+        self.assertEqual(liste.filtres, [])
+
+    def test_export_csv(self):
+        amel = un_patient_de_liste()
+        piege = un_patient_de_liste("Karim", "=cmd|' /C calc'!A0", actif=False, ville="+Sfax")
+        reponse, liste = self.appeler(views.patients_exporter, [amel, piege], {"ville": "Tunis"}, "patients_exporter")
+        self.assertEqual(reponse["Content-Type"], "text/csv; charset=utf-8")
+        self.assertEqual(reponse["Content-Disposition"], 'attachment; filename="patients-mediconnect.csv"')
+        self.assertEqual(len(liste.filtres), 1)  # le même filtre que la liste
+        texte = reponse.content.decode("utf-8")
+        self.assertTrue(texte.startswith("\ufeff"))  # Excel affiche bien les accents
+        lignes = list(csv.reader(io.StringIO(texte.lstrip("\ufeff")), delimiter=";"))
+        self.assertEqual(lignes[0], ["Nom", "Prénom", "E-mail", "Téléphone", "Sexe", "Date de naissance", "Âge", "Ville", "Compte", "Inscrit le", "Demandes"])
+        self.assertEqual(lignes[1], ["Zouari", "Amel", "amel@exemple.tn", "20111222", "Femme", "04/05/1990", str(amel.age), "Tunis", "actif", "01/09/2026", "0"])
+        self.assertEqual((lignes[2][0], lignes[2][7], lignes[2][8]), ("'=cmd|' /C calc'!A0", "'+Sfax", "désactivé"))  # jamais exécuté comme une formule
+
+    def test_la_protection_des_formules_est_partagee(self):
+        for texte in ("=1+1", "+1", "-1", "@x"):
+            self.assertTrue(proteger_tableur(texte).startswith("'"))
+        self.assertEqual(proteger_tableur("Amel"), "Amel")
+        self.assertEqual(proteger_tableur(""), "")
+
+
+class DesactivationPatientBackofficeTests(SimpleTestCase):
+    def appeler(self, vue, patient, methode="post"):
+        requete = requete_admin(f"/backoffice/patients/{patient.pk}/x/", methode)
+        espions = SimpleNamespace(messages=mock.Mock(), desactiver=mock.Mock(return_value=3), reactiver=mock.Mock())
+        with mock.patch.object(views, "objet_ou_404", return_value=patient), mock.patch.object(views, "messages", espions.messages), \
+                mock.patch.object(views.gestion_compte, "desactiver", espions.desactiver), mock.patch.object(views.gestion_compte, "reactiver", espions.reactiver):
+            reponse = vue(requete, str(patient.pk))
+        return reponse, espions
+
+    def test_desactiver(self):
+        patient = un_patient_de_liste()
+        reponse, espions = self.appeler(views.patient_desactiver, patient)
+        espions.desactiver.assert_called_once_with(patient.user)
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, f"/backoffice/patients/{patient.pk}/"))
+        message = espions.messages.success.call_args.args[1]
+        self.assertIn("Amel Zouari", message)
+        self.assertIn("3 demande(s) en attente annulée(s)", message)
+
+    def test_deja_desactive(self):
+        reponse, espions = self.appeler(views.patient_desactiver, un_patient_de_liste(actif=False))
+        espions.desactiver.assert_not_called()
+        espions.messages.info.assert_called_once()
+
+    def test_un_compte_du_personnel_ne_se_desactive_pas_ici(self):
+        for vue in (views.patient_desactiver, views.patient_reactiver):
+            with self.subTest(vue=vue.__name__):
+                reponse, espions = self.appeler(vue, un_patient_de_liste(staff=True))
+                espions.messages.error.assert_called_once()
+                espions.desactiver.assert_not_called()
+                espions.reactiver.assert_not_called()
+
+    def test_reactiver(self):
+        patient = un_patient_de_liste(actif=False)
+        reponse, espions = self.appeler(views.patient_reactiver, patient)
+        espions.reactiver.assert_called_once_with(patient.user)
+        self.assertEqual(reponse.status_code, 302)
+        reponse, espions = self.appeler(views.patient_reactiver, un_patient_de_liste())
+        espions.reactiver.assert_not_called()  # déjà actif
+        espions.messages.info.assert_called_once()
+
+    def test_uniquement_en_post(self):
+        for vue in (views.patient_desactiver, views.patient_reactiver):
+            with self.subTest(vue=vue.__name__):
+                reponse, espions = self.appeler(vue, un_patient_de_liste(), "get")
+                self.assertEqual(reponse.status_code, 405)
+                espions.desactiver.assert_not_called()
+                espions.reactiver.assert_not_called()
+
+
+class PatientDetailBackofficeTests(SimpleTestCase):
+    def rendre(self, patient, consultations=()):
+        analyse = SimpleNamespace(vigilance="calme", resume="Femme de 36 ans.", profil_ia=[], importants=[], attentions=[], completude=100)
+        return render_to_string("backoffice/patient_detail.html", {
+            "patient": patient, "dossier": None, "allergies": [], "mesures": [], "analyse": analyse, "demandes": [], "consultations": list(consultations),
+        }, requete_admin(f"/backoffice/patients/{patient.pk}/", nom="patient_detail"))
+
+    def test_compte_actif_propose_la_desactivation(self):
+        patient = un_patient_de_liste()
+        html = self.rendre(patient)
+        self.assertIn("Actif</span>", html)
+        self.assertIn(f'action="/backoffice/patients/{patient.pk}/desactiver/"', html)
+        self.assertIn("Désactiver le compte", html)
+        self.assertNotIn("Réactiver le compte", html)
+
+    def test_compte_desactive_propose_la_reactivation(self):
+        patient = un_patient_de_liste(actif=False)
+        html = self.rendre(patient)
+        self.assertIn("Désactivé</span>", html)
+        self.assertIn(f'action="/backoffice/patients/{patient.pk}/reactiver/"', html)
+        self.assertNotIn("Désactiver le compte", html)
+
+    def test_compte_du_personnel(self):
+        html = self.rendre(un_patient_de_liste(staff=True))
+        self.assertIn("Compte du personnel", html)
+        self.assertNotIn("/desactiver/", html)
+
+    def test_consultations_passees(self):
+        patient = un_patient_de_liste()
+        c = Consultation(patient=patient, medecin_nom="Dr Sara Benali", date=datetime.datetime(2026, 10, 17, 9, 0, tzinfo=TUNIS_), diagnostic="Bronchite",
+                         resume="Toux et fièvre.", prescription="Amoxicilline 1 g", recommandations="Repos")
+        html = self.rendre(patient, [c])
+        for texte in ("Consultations passées", '<span class="count">1</span>', "17/10/2026 · Dr Sara Benali", "Bronchite", "Amoxicilline 1 g", "Repos"):
+            self.assertIn(texte, html)
+        self.assertIn("Aucune consultation enregistrée.", self.rendre(patient))
+
+
+# --- Page « Modèle de lecture du texte » ------------------------------------------------------------------------------
+from ia import modele as modele_ia  # noqa: E402
+
+
+def evaluation_factice():
+    jeu = {"n": 40, "precision": 0.9, "a_un_niveau_pres": 0.95, "graves_reperes": 1.0, "graves_pris_pour_benins": 0.0, "fausses_alertes": 0.05,
+           "reference_toujours_la_meme_reponse": 0.4, "repartition": {"1": 5, "2": 5, "3": 10, "4": 10, "5": 10},
+           "matrice": [[5, 0, 0, 0, 0], [0, 5, 0, 0, 0], [0, 1, 8, 1, 0], [0, 0, 1, 8, 1], [0, 0, 0, 1, 9]]}
+    return {"graine": 1, "n_entrainement": 6000, "repartition_entrainement": {}, "test_genere": jeu, "test_a_la_main": {**jeu, "n": 39},
+            "mots_par_niveau": {str(n): ["poitrine", "serre"] for n in range(1, 6)}}
+
+
+class ModeleTexteBackofficeTests(SimpleTestCase):
+    def appeler(self, donnees=None, evaluation="defaut", lecture=None, methode="get"):
+        evaluation = evaluation_factice() if evaluation == "defaut" else evaluation
+        requete = requete_admin("/backoffice/modele-texte/", methode, donnees, "modele_texte")
+        with mock.patch.object(modele_ia, "charger_evaluation", return_value=evaluation), mock.patch.object(modele_ia, "predire", return_value=lecture), \
+                mock.patch.object(views.ReglageTriage, "actuel", return_value=ReglageTriage(seuil_modele=85)):
+            return views.modele_texte(requete)
+
+    def test_adresse_et_acces(self):
+        self.assertEqual(reverse("backoffice:modele_texte"), "/backoffice/modele-texte/")
+        self.assertIs(resolve("/backoffice/modele-texte/").func, views.modele_texte)
+        requete = RequestFactory().get("/x/")
+        requete.user = utilisateur(role="patient")
+        with self.assertRaises(PermissionDenied):
+            views.modele_texte(requete)
+        requete.user = AnonymousUser()
+        self.assertEqual(views.modele_texte(requete).status_code, 302)
+
+    def test_la_page_montre_ses_chiffres_et_ses_limites(self):
+        html = self.appeler().content.decode()
+        for texte in ("Modèle de lecture du texte", "données synthétiques", "ne peut que relever", "<strong class=\"font-medium text-gray-800\">85 %</strong>",
+                      "Phrases générées (test)", "Phrases écrites à la main (contrôle)", "Niveau exact", "90 %", "Cas graves repérés", "100 %", "Fausses alertes", "5 %",
+                      "Matrice de confusion", "Les mots qui pèsent le plus", "poitrine · serre", "Réentraîner le modèle", "pas un test indépendant"):
+            self.assertIn(texte, html)
+        self.assertIn("Essayer une phrase", html)
+
+    def test_matrice_de_confusion_diagonale_mise_en_valeur(self):
+        html = self.appeler().content.decode()
+        self.assertEqual(html.count('class="diag"'), 10)  # 5 cases par jeu de test, deux jeux
+
+    def test_modele_pas_encore_entraine(self):
+        html = self.appeler(evaluation=None).content.decode()
+        self.assertIn("n'a pas encore été entraîné", html)
+        self.assertIn("entrainer_triage", html)
+        self.assertNotIn("Phrases générées (test)", html)
+
+    def test_essai_en_direct(self):
+        lecture = {"niveau": 2, "confiance": 0.93, "probas": {"1": 0.03, "2": 0.93, "3": 0.02, "4": 0.01, "5": 0.01}, "mots": ["poitrine", "serre"]}
+        html = self.appeler({"texte": "ça me serre la poitrine"}, lecture=lecture).content.decode()
+        for texte in ("ça me serre la poitrine", "93 % de confiance", "Mots décisifs : poitrine, serre", "le niveau final serait", "(relevé par le modèle)"):
+            self.assertIn(texte, html)
+        self.assertEqual(html.count('class="barre-proba"'), 5)
+
+    def test_essai_sans_relevement(self):
+        lecture = {"niveau": 5, "confiance": 0.9, "probas": {str(n): 0.2 for n in range(1, 6)}, "mots": []}
+        html = self.appeler({"texte": "un petit rhume"}, lecture=lecture).content.decode()
+        self.assertIn("le niveau final serait", html)
+        self.assertNotIn("relevé par le modèle", html)
+
+    def test_texte_d_essai_limite_et_echappe(self):
+        html = self.appeler({"texte": "<script>alert(1)</script>" + "x" * 900}).content.decode()
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertLessEqual(html.count("x" * 100), 5)  # tronqué à 500 caractères
+
+    def test_modele_indisponible_pour_l_essai(self):
+        self.assertIn("modèle indisponible", self.appeler({"texte": "j'ai mal"}, lecture=None).content.decode())
+
+    def test_reentrainement(self):
+        requete = requete_admin("/backoffice/modele-texte/", "post", {"reentrainer": "1"}, "modele_texte")
+        modele_factice = object()
+        with mock.patch.object(modele_ia, "entrainer", return_value=(modele_factice, evaluation_factice())) as entrainement, mock.patch.object(modele_ia, "sauvegarder") as sauvegarde, \
+                mock.patch.object(modele_ia, "installer") as installation, mock.patch.object(views, "messages") as messages:
+            reponse = views.modele_texte(requete)
+        entrainement.assert_called_once_with()
+        sauvegarde.assert_called_once_with(modele_factice, evaluation_factice())
+        installation.assert_called_once_with(modele_factice)  # le nouveau modèle sert tout de suite
+        messages.success.assert_called_once()
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, "/backoffice/modele-texte/"))
+
+    def test_lien_depuis_les_parametres(self):
+        gabarit = (RACINE / "backoffice" / "templates" / "backoffice" / "parametres.html").read_text(encoding="utf-8")
+        self.assertIn("{% url 'backoffice:modele_texte' %}", gabarit)
+
+    def test_le_seuil_est_reglable_dans_les_parametres(self):
+        form = ReglageTriageForm({**ReglageTriageFormTests.DONNEES, "seuil_modele": 49})
+        self.assertIn("seuil_modele", form.errors)
+        self.assertIn("seuil_modele", ReglageTriageForm({**ReglageTriageFormTests.DONNEES, "seuil_modele": 100}).errors)
+        self.assertTrue(ReglageTriageForm({**ReglageTriageFormTests.DONNEES, "seuil_modele": 70}).is_valid())
+
+    def test_la_fiche_du_rendez_vous_montre_la_lecture_du_texte(self):
+        triage = RendezVousDetailConsultationTests().triage()
+        triage.modele_niveau, triage.modele_confiance, triage.modele_mots, triage.modele_releve = 2, 0.93, ["poitrine", "serre"], True
+        html = RendezVousDetailConsultationTests().appeler(triage)[0].content.decode()
+        for texte in ("Lecture du texte par le modèle", "Niveau estimé 2 (93 % de confiance)", "mots décisifs : poitrine, serre", "niveau relevé"):
+            self.assertIn(texte, html)
+        sans = RendezVousDetailConsultationTests()
+        t2 = sans.triage()
+        self.assertNotIn("Lecture du texte par le modèle", sans.appeler(t2)[0].content.decode())

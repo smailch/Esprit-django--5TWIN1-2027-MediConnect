@@ -18,6 +18,7 @@
   </div>
   {% endif %}
   {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+  <p class="-mt-2 text-right text-sm"><a href="{% url 'core:reinitialisation' %}" class="text-accent underline underline-offset-2">Mot de passe oublié ?</a></p>
   <input type="hidden" name="next" value="{{ next }}">
 
   <button type="submit" class="abtn abtn-primary abtn-lg abtn-block">Se connecter</button>

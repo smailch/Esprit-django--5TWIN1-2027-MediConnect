@@ -1259,8 +1259,8 @@ class MesuresFiltresEtExportTests(SimpleTestCase):
     def test_export_protege_contre_les_formules(self):
         for note in ("=1+1", "+cmd", "-2", "@x"):
             with self.subTest(note=note):
-                self.assertTrue(vues_patients._protege_tableur(note).startswith("'"))
-        self.assertEqual(vues_patients._protege_tableur("à jeun"), "à jeun")
+                self.assertTrue(proteger_tableur(note).startswith("'"))
+        self.assertEqual(proteger_tableur("à jeun"), "à jeun")
         texte = self.exporter([une_mesure(note="=HYPERLINK(1)")]).content.decode("utf-8")
         self.assertIn(";'=HYPERLINK(1)", texte)
 
@@ -1509,7 +1509,7 @@ class DossierPageTests(SimpleTestCase):
 
     def test_page_pas_trop_chargee_quatre_blocs_et_deux_sections(self):
         html = self.page(manquants=["Groupe sanguin"], demande=None)
-        self.assertEqual(html.count('class="panel panel-pad'), 4 + 3)  # 4 blocs, analyse, dernière demande, à compléter
+        self.assertEqual(html.count('class="panel panel-pad'), 4 + 4)  # 4 blocs, analyse, consultations, dernière demande, à compléter
         self.assertEqual(html.count("<h1"), 1)
 
     def test_le_menu_a_quatre_entrees_dont_mon_dossier(self):
@@ -3394,6 +3394,7 @@ class IaAnalyseDossierTests(AvecFauxServeurIA):
         with mock.patch.object(DossierMedical.objects, "filter", return_value=faux), \
                 mock.patch.object(Allergie.objects, "filter", return_value=objets), \
                 mock.patch.object(Mesure.objects, "filter", return_value=[]), \
+                mock.patch.object(Consultation.objects, "filter", return_value=[]), \
                 mock.patch.object(Triage.objects, "filter", return_value=[]):
             return analyse_service.analyser_patient(patient, ia=ia)
 
@@ -3575,6 +3576,7 @@ class IaTriageEtConsentementTests(AvecFauxServeurIA):
 
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
                 mock.patch.object(vues_patients, "_symptomes_par_ia", side_effect=ajouter), \
+                mock.patch.object(vues_patients, "_lecture_du_texte", side_effect=lambda texte, niveau: (None, niveau, False)), \
                 mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
             vues_patients.declarer_symptomes(requete, "m1")
         donnees = creation.call_args.kwargs
@@ -3595,6 +3597,7 @@ class IaTriageEtConsentementTests(AvecFauxServeurIA):
         cree.pk = ObjectId()
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
                 mock.patch.object(vues_patients, "_symptomes_par_ia", return_value=("", [])), \
+                mock.patch.object(vues_patients, "_lecture_du_texte", side_effect=lambda texte, niveau: (None, niveau, False)), \
                 mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
             vues_patients.declarer_symptomes(requete, "m1")
         self.assertNotIn("IA", creation.call_args.kwargs["explication"])
@@ -3964,8 +3967,10 @@ class IaBandeauxAnalyseTests(AvecFauxServeurIA):
 # --- L'IA lit le dossier médical complet ------------------------------------------------------------------------
 from decimal import Decimal  # noqa: E402
 
+from core.utils import proteger_tableur  # noqa: E402
+
 from . import ia_dossier  # noqa: E402
-from .models import ConstantesVitales, SymptomeDeclare  # noqa: E402
+from .models import ConstantesVitales, Consultation, SymptomeDeclare  # noqa: E402
 
 
 def composer_ia(**kw):
@@ -4017,7 +4022,7 @@ class IaDossierTexteTests(SimpleTestCase):
         for attendu in ("PROFIL : homme, âge inconnu.", "ANTÉCÉDENTS (écrits par le patient) : non renseignés", "ALLERGIES :\naucune enregistrée"):
             self.assertIn(attendu, d.texte)
         self.assertNotIn("INFORMATIONS ABSENTES", d.texte)
-        self.assertEqual([renseignee for _, _, renseignee in d.lu], [True, False, False, False, False, False])  # le profil est toujours lu
+        self.assertEqual([renseignee for _, _, renseignee in d.lu], [True, False, False, False, False, False, False])  # le profil est toujours lu
 
     def test_un_seul_element_suffit_pour_avoir_du_contenu(self):
         for nom, kw in (("antécédents", {"antecedents": "Asthme"}), ("traitements", {"traitements": "Ventoline"}), ("groupe", {}),
@@ -4153,7 +4158,7 @@ class IaDossierCompletServiceTests(AvecFauxServeurIA):
         d.cree_le = MAINTENANT - datetime.timedelta(days=3)
         return d
 
-    def analyser(self, ia=analyse_service.COMPLET, fiche=None, allergies=None, mesures=None, demandes=None):
+    def analyser(self, ia=analyse_service.COMPLET, fiche=None, allergies=None, mesures=None, demandes=None, consultations=None):
         fiche = fiche or un_dossier(groupe_sanguin="B-", antecedents="Asthme depuis l'enfance", traitements_en_cours="Ventoline si besoin")
         allergies = allergies if allergies is not None else [Allergie(patient=self.patient, substance="Pénicilline", type="medicament", gravite="severe", reaction="éruption")]
         mesures = mesures if mesures is not None else [Mesure(patient=self.patient, type="tension", valeur=150, valeur2=95, mesure_le=MAINTENANT - datetime.timedelta(days=1), note="après le sport")]
@@ -4163,6 +4168,7 @@ class IaDossierCompletServiceTests(AvecFauxServeurIA):
         with mock.patch.object(DossierMedical.objects, "filter", return_value=faux), \
                 mock.patch.object(Allergie.objects, "filter", return_value=allergies), \
                 mock.patch.object(Mesure.objects, "filter", return_value=mesures), \
+                mock.patch.object(Consultation.objects, "filter", return_value=list(consultations or [])), \
                 mock.patch.object(Triage.objects, "filter", return_value=demandes):
             return analyse_service.analyser_patient(self.patient, maintenant=MAINTENANT, ia=ia)
 
@@ -4206,8 +4212,9 @@ class IaDossierCompletServiceTests(AvecFauxServeurIA):
     def test_ce_que_l_ia_a_lu_est_expose_au_patient(self):
         self.ia_repond()
         ia = self.analyser().ia
-        self.assertEqual([r for r, _, _ in ia["lu"]], ["Profil", "Antécédents", "Traitements en cours", "Allergies", "Mesures de santé", "Demandes de rendez-vous"])
-        self.assertTrue(all(renseignee for _, _, renseignee in ia["lu"]))
+        self.assertEqual([r for r, _, _ in ia["lu"]], ["Profil", "Antécédents", "Traitements en cours", "Allergies", "Mesures de santé",
+                                                      "Consultations passées", "Demandes de rendez-vous"])
+        self.assertEqual([renseignee for _, _, renseignee in ia["lu"]], [True, True, True, True, True, False, True])  # aucune consultation ici
         self.assertIn(ia["envoye"], self.requete_resume())  # exactement le texte qui est parti
 
     def test_une_allergie_inconnue_des_listes_est_rattachee_a_sa_famille(self):
@@ -4237,9 +4244,633 @@ class IaDossierCompletServiceTests(AvecFauxServeurIA):
         self.assertEqual(cache_seul.en_clair, complet.en_clair)
         self.assertEqual(cache_seul.ia["envoye"], complet.ia["envoye"])
 
+    def test_les_consultations_passees_sont_lues_sans_le_nom_du_medecin(self):
+        self.ia_repond()
+        consultation = une_consultation(self.patient, medecin_nom="Dr Confidentiel", diagnostic="Bronchite", prescription="Amoxicilline 1 g")
+        analyse = self.analyser(consultations=[consultation])
+        envoye = self.requete_resume()
+        for attendu in ("CONSULTATIONS PASSÉES", "diagnostic : Bronchite", "prescription : Amoxicilline 1 g", "Repos, boire beaucoup."):
+            self.assertIn(attendu, envoye)
+        self.assertNotIn("Dr Confidentiel", json.dumps([r["corps"] for r in self.requetes], ensure_ascii=False))
+        self.assertEqual({r: d for r, d, _ in analyse.ia["lu"]}["Consultations passées"], "1 consultation")
+
     def test_un_changement_du_dossier_declenche_une_nouvelle_lecture(self):
         self.ia_repond()
         self.analyser()
         avant = len(self.requetes)
         self.analyser(mesures=[Mesure(patient=self.patient, type="poids", valeur=70, mesure_le=MAINTENANT - datetime.timedelta(days=1))])
         self.assertGreater(len(self.requetes), avant)  # une nouvelle mesure : le résumé n'est plus le même
+
+
+# --- Compte du patient : identité, export, désactivation, suppression ---------------------------------------------
+from . import compte as gestion_compte  # noqa: E402
+from .forms import CompteForm, FermetureCompteForm, InscriptionPatientForm, SuppressionCompteForm  # noqa: E402
+
+Utilisateur = get_user_model()
+MOT_DE_PASSE = "Mdp-de-test-2026!"
+HACHAGE_RAPIDE = override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])  # les vrais hachages sont lents
+
+
+def un_utilisateur(**kw):
+    valeurs = dict(pk=ObjectId(), username="amel", first_name="Amel", last_name="Zouari", email="amel@exemple.tn", role="patient")
+    valeurs.update(kw)
+    utilisateur = Utilisateur(**valeurs)
+    utilisateur.set_password(MOT_DE_PASSE)
+    return utilisateur
+
+
+def un_patient_du_compte(utilisateur=None, **kw):
+    utilisateur = utilisateur or un_utilisateur()
+    patient = un_patient_complet(user=utilisateur, telephone="20111222", adresse="12 rue des Roses", ville="Tunis", **kw)
+    patient.cree_le = MAINTENANT - datetime.timedelta(days=100)
+    return patient
+
+
+def une_consultation(patient=None, **kw):
+    valeurs = dict(
+        patient=patient or un_patient(), medecin_nom="Dr Sara Benali", medecin_specialite="Médecine générale",
+        date=MAINTENANT - datetime.timedelta(days=5), motif="Toux", resume="Toux et fièvre depuis trois jours.",
+        diagnostic="Bronchite", prescription="Amoxicilline 1 g matin et soir", recommandations="Repos, boire beaucoup.",
+    )
+    valeurs.update(kw)
+    return Consultation(**valeurs)
+
+
+@HACHAGE_RAPIDE
+class CompteFormulairesTests(SimpleTestCase):
+    def test_tous_les_champs_de_l_identite_sont_obligatoires(self):
+        form = CompteForm({}, instance=Utilisateur())
+        self.assertFalse(form.is_valid())
+        self.assertEqual(set(form.errors), {"first_name", "last_name", "email"})
+
+    def test_adresse_deja_utilisee_refusee_en_excluant_son_propre_compte(self):
+        utilisateur = un_utilisateur()
+        with mock.patch("patients.forms.email_deja_utilise", return_value=True) as recherche:
+            form = CompteForm({"first_name": "Amel", "last_name": "Zouari", "email": "pris@exemple.tn"}, instance=utilisateur)
+            self.assertFalse(form.is_valid())
+        self.assertIn("Un compte existe déjà avec cette adresse e-mail.", form.errors["email"])
+        recherche.assert_called_once_with("pris@exemple.tn", exclure_pk=utilisateur.pk)
+
+    def test_adresse_libre_acceptee_et_nettoyee(self):
+        with mock.patch("patients.forms.email_deja_utilise", return_value=False):
+            form = CompteForm({"first_name": "Amel", "last_name": "Zouari", "email": "  nouvelle@exemple.tn "}, instance=un_utilisateur())
+            self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["email"], "nouvelle@exemple.tn")
+
+    def test_l_inscription_refuse_une_adresse_deja_utilisee(self):
+        form = InscriptionPatientForm()
+        form.cleaned_data = {"email": " amel@exemple.tn "}
+        with mock.patch("patients.forms.email_deja_utilise", return_value=True) as recherche:
+            with self.assertRaises(ValidationError):
+                form.clean_email()
+        recherche.assert_called_once_with("amel@exemple.tn")
+        with mock.patch("patients.forms.email_deja_utilise", return_value=False):
+            self.assertEqual(form.clean_email(), "amel@exemple.tn")
+
+    def test_fermer_son_compte_demande_le_mot_de_passe(self):
+        utilisateur = un_utilisateur()
+        self.assertFalse(FermetureCompteForm({"mot_de_passe": "faux"}, user=utilisateur).is_valid())
+        self.assertTrue(FermetureCompteForm({"mot_de_passe": MOT_DE_PASSE}, user=utilisateur).is_valid())
+
+    def test_la_suppression_demande_aussi_le_mot_supprimer_en_majuscules(self):
+        utilisateur = un_utilisateur()
+        for mot, attendu in (("SUPPRIMER", True), (" SUPPRIMER ", True), ("supprimer", False), ("", False), ("OUI", False)):
+            with self.subTest(mot=mot):
+                form = SuppressionCompteForm({"mot_de_passe": MOT_DE_PASSE, "confirmation": mot}, user=utilisateur)
+                self.assertEqual(form.is_valid(), attendu)
+        self.assertFalse(SuppressionCompteForm({"mot_de_passe": "faux", "confirmation": "SUPPRIMER"}, user=utilisateur).is_valid())
+
+
+class ConsultationModeleTests(SimpleTestCase):
+    def test_relations(self):
+        patient, triage = Consultation._meta.get_field("patient"), Consultation._meta.get_field("triage")
+        self.assertTrue(patient.many_to_one)
+        self.assertEqual(patient.remote_field.related_name, "consultations")
+        self.assertTrue(triage.one_to_one)  # un rendez-vous a au plus un compte rendu
+        self.assertEqual(triage.remote_field.related_name, "consultation")
+        self.assertFalse(triage.null)
+
+    def test_plus_recente_d_abord(self):
+        self.assertEqual(Consultation._meta.ordering, ["-date"])
+
+    def test_texte(self):
+        self.assertEqual(str(une_consultation(date=datetime.datetime(2026, 10, 17, 9, 0, tzinfo=TUNIS))), "Consultation du 17/10/2026 – Dr Sara Benali")
+
+    def test_une_consultation_ne_peut_pas_etre_dans_le_futur(self):
+        demain = timezone.now() + datetime.timedelta(days=1)
+        with self.assertRaises(ValidationError) as erreur:
+            une_consultation(date=demain).clean()
+        self.assertIn("date", erreur.exception.message_dict)
+        une_consultation(date=timezone.now() - datetime.timedelta(minutes=1)).clean()
+
+    def test_le_compte_rendu_est_obligatoire(self):
+        with self.assertRaises(ValidationError) as erreur:
+            une_consultation(resume="").full_clean(exclude=["patient", "triage"])
+        self.assertEqual(set(erreur.exception.message_dict), {"resume"})
+        une_consultation().full_clean(exclude=["patient", "triage"])
+
+    def test_administration(self):
+        self.assertTrue(admin.site.is_registered(Consultation))
+
+
+@HACHAGE_RAPIDE
+class ExportDonneesTests(SimpleTestCase):
+    def fabriquer(self):
+        utilisateur = un_utilisateur()
+        patient = un_patient_du_compte(utilisateur, contact_urgence_nom="Sami Trabelsi", contact_urgence_tel="20999000", consentement_ia=True)
+        patient.consentement_ia_le = MAINTENANT
+        dossier = un_dossier(groupe_sanguin="O+", antecedents="Asthme", traitements_en_cours="Ventoline")
+        allergie = Allergie(patient=patient, substance="Pénicilline", type="medicament", gravite="severe", reaction="éruption", decouverte_le=datetime.date(2015, 3, 1))
+        mesure = Mesure(patient=patient, type="tension", valeur=150, valeur2=95, mesure_le=MAINTENANT - datetime.timedelta(days=1), note="au repos")
+        consultation = une_consultation(patient)
+        demande = Triage(patient=patient, medecin_id="m1", medecin_nom="Dr Sara Benali", statut="termine", niveau=3, texte_libre="Toux sèche",
+                         symptomes=[SymptomeDeclare(nom="Toux", poids=2)], constantes=ConstantesVitales(temperature=Decimal("38.5")))
+        demande.cree_le, demande.creneau = MAINTENANT - datetime.timedelta(days=6), MAINTENANT - datetime.timedelta(days=5)
+        return utilisateur, patient, dossier, [allergie], [mesure], [consultation], [demande]
+
+    def export(self, **remplace):
+        utilisateur, patient, dossier, allergies, mesures, consultations, demandes = self.fabriquer()
+        valeurs = dict(user=utilisateur, patient=patient, dossier=dossier, allergies=allergies, mesures=mesures,
+                       consultations=consultations, demandes=demandes, maintenant=MAINTENANT)
+        valeurs.update(remplace)
+        return gestion_compte.construire_export(**valeurs)
+
+    def test_toutes_les_rubriques(self):
+        d = self.export()
+        self.assertEqual(list(d), ["exporte_le", "compte", "profil", "consentement_ia", "dossier_medical", "allergies", "mesures",
+                                   "consultations", "demandes_de_rendez_vous"])
+        self.assertTrue(d["exporte_le"].startswith("2026-10-22T10:00"))
+        self.assertEqual((d["compte"]["identifiant"], d["compte"]["prenom"], d["compte"]["nom"], d["compte"]["email"]), ("amel", "Amel", "Zouari", "amel@exemple.tn"))
+        self.assertEqual((d["profil"]["sexe"], d["profil"]["ville"], d["profil"]["contact_urgence"]), ("Femme", "Tunis", {"nom": "Sami Trabelsi", "telephone": "20999000"}))
+        self.assertEqual(d["dossier_medical"], {"groupe_sanguin": "O+", "antecedents": "Asthme", "traitements_en_cours": "Ventoline"})
+        self.assertEqual(d["allergies"][0], {"substance": "Pénicilline", "type": "Médicament", "gravite": "Sévère", "reaction": "éruption", "decouverte_le": "2015-03-01", "active": True})
+        self.assertEqual((d["mesures"][0]["type"], d["mesures"][0]["valeur"], d["mesures"][0]["valeur2"], d["mesures"][0]["unite"]), ("Tension artérielle", 150, 95, "mmHg"))
+        self.assertEqual((d["consultations"][0]["diagnostic"], d["consultations"][0]["prescription"]), ("Bronchite", "Amoxicilline 1 g matin et soir"))
+        demande = d["demandes_de_rendez_vous"][0]
+        self.assertEqual((demande["symptomes"], demande["niveau_urgence"], demande["temperature"], demande["statut"]), (["Toux"], 3, 38.5, "Terminé"))
+        self.assertEqual(d["consentement_ia"]["accepte"], True)
+
+    def test_le_resultat_est_du_json_sans_mot_de_passe(self):
+        utilisateur = un_utilisateur()
+        contenu = json.dumps(self.export(user=utilisateur), ensure_ascii=False)
+        self.assertNotIn(utilisateur.password, contenu)  # jamais le mot de passe, même chiffré
+        for mot in ("password", "mot_de_passe"):
+            self.assertNotIn(mot, contenu)
+
+    def test_dossier_absent_et_rien_a_exporter(self):
+        d = self.export(dossier=None, allergies=[], mesures=[], consultations=[], demandes=[])
+        self.assertEqual(d["dossier_medical"], {"groupe_sanguin": "", "antecedents": "", "traitements_en_cours": ""})
+        self.assertEqual((d["allergies"], d["mesures"], d["consultations"], d["demandes_de_rendez_vous"]), ([], [], [], []))
+        self.assertIsNone(d["consentement_ia"]["le"] if not d["consentement_ia"]["accepte"] else None)
+
+    def test_lecture_en_base_triee(self):
+        utilisateur, patient, dossier, _, _, _, _ = self.fabriquer()
+        a2, a1 = (Allergie(patient=patient, substance=s, type="autre", gravite="legere") for s in ("Pollen", "arachide"))
+        m_recente, m_ancienne = (Mesure(patient=patient, type="poids", valeur=70, mesure_le=MAINTENANT - datetime.timedelta(days=j)) for j in (1, 9))
+        c_recente, c_ancienne = une_consultation(patient, date=MAINTENANT - datetime.timedelta(days=1)), une_consultation(patient, date=MAINTENANT - datetime.timedelta(days=30), diagnostic="Angine")
+        with mock.patch.object(DossierMedical.objects, "filter") as f_dossier, mock.patch.object(Allergie.objects, "filter", return_value=[a2, a1]), \
+                mock.patch.object(Mesure.objects, "filter", return_value=[m_recente, m_ancienne]), \
+                mock.patch.object(Consultation.objects, "filter", return_value=[c_recente, c_ancienne]), mock.patch.object(Triage.objects, "filter", return_value=[]):
+            f_dossier.return_value.first.return_value = dossier
+            d = gestion_compte.donnees_patient(patient, MAINTENANT)
+        self.assertEqual([a["substance"] for a in d["allergies"]], ["arachide", "Pollen"])  # alphabétique, sans tenir compte des majuscules
+        self.assertEqual([m["valeur"] for m in d["mesures"]], [70, 70])
+        self.assertEqual([c["diagnostic"] for c in d["consultations"]], ["Angine", "Bronchite"])  # du plus ancien au plus récent
+        self.assertLess(d["mesures"][0]["date"], d["mesures"][1]["date"])
+
+
+@HACHAGE_RAPIDE
+class FermetureCompteLogiqueTests(SimpleTestCase):
+    def test_un_compte_du_personnel_ne_se_ferme_pas(self):
+        self.assertTrue(gestion_compte.peut_etre_ferme(un_utilisateur()))
+        for kw in ({"is_staff": True}, {"is_superuser": True}, {"role": "admin"}):
+            with self.subTest(**kw):
+                self.assertFalse(gestion_compte.peut_etre_ferme(un_utilisateur(**kw)))
+
+    def test_desactiver_annule_les_demandes_en_attente_et_bloque_la_connexion(self):
+        utilisateur, patient = un_utilisateur(), un_patient()
+        a1, a2 = (Triage(patient=patient, medecin_id="m1", statut="en_attente") for _ in range(2))
+        with mock.patch.object(gestion_compte, "_patient_de", return_value=patient), mock.patch.object(Triage, "save") as sauvegarde_triage, \
+                mock.patch.object(Utilisateur, "save") as sauvegarde_compte, mock.patch.object(Triage.objects, "filter", return_value=[a1, a2]) as filtre:
+            annulees = gestion_compte.desactiver(utilisateur)
+        self.assertEqual(annulees, 2)
+        self.assertEqual([a1.statut, a2.statut], ["annule", "annule"])  # elles ne bloquent plus ni la file ni un créneau
+        filtre.assert_called_once_with(patient=patient, statut="en_attente")  # une consultation en cours n'est pas touchée
+        self.assertEqual(sauvegarde_triage.call_count, 2)
+        self.assertFalse(utilisateur.is_active)
+        sauvegarde_compte.assert_called_once_with(update_fields=["is_active"])
+
+    def test_desactiver_un_compte_sans_patient(self):
+        utilisateur = un_utilisateur()
+        with mock.patch.object(gestion_compte, "_patient_de", return_value=None), mock.patch.object(Utilisateur, "save"):
+            self.assertEqual(gestion_compte.desactiver(utilisateur), 0)
+        self.assertFalse(utilisateur.is_active)
+
+    def test_reactiver(self):
+        utilisateur = un_utilisateur(is_active=False)
+        with mock.patch.object(Utilisateur, "save") as sauvegarde:
+            gestion_compte.reactiver(utilisateur)
+        self.assertTrue(utilisateur.is_active)
+        sauvegarde.assert_called_once_with(update_fields=["is_active"])
+
+    def test_supprimer_efface_tout_dans_le_bon_ordre(self):
+        utilisateur, patient = un_utilisateur(), un_patient()
+        ordre = []
+
+        def faux(nom):
+            objet = mock.Mock()
+            objet.delete.side_effect = lambda: ordre.append(nom)
+            return [objet]
+
+        with mock.patch.object(gestion_compte, "_patient_de", return_value=patient), \
+                mock.patch.object(Consultation.objects, "filter", return_value=faux("consultations")), \
+                mock.patch.object(Triage.objects, "filter", return_value=faux("demandes")), \
+                mock.patch.object(Mesure.objects, "filter", return_value=faux("mesures")), \
+                mock.patch.object(Allergie.objects, "filter", return_value=faux("allergies")), \
+                mock.patch.object(DossierMedical.objects, "filter", return_value=faux("dossier")), \
+                mock.patch.object(Patient, "delete", side_effect=lambda: ordre.append("patient")), \
+                mock.patch.object(Utilisateur, "delete", side_effect=lambda: ordre.append("compte")):
+            gestion_compte.supprimer(utilisateur)
+        self.assertEqual(ordre, ["consultations", "demandes", "mesures", "allergies", "dossier", "patient", "compte"])
+
+    def test_supprimer_un_compte_sans_patient(self):
+        with mock.patch.object(gestion_compte, "_patient_de", return_value=None), mock.patch.object(Utilisateur, "delete") as suppression:
+            gestion_compte.supprimer(un_utilisateur())
+        suppression.assert_called_once_with()
+
+
+@HACHAGE_RAPIDE
+class ComptePagesTests(SimpleTestCase):
+    def setUp(self):
+        self.utilisateur = un_utilisateur()
+        self.patient = un_patient_du_compte(self.utilisateur)
+
+    def requete(self, methode="get", donnees=None, nom="compte"):
+        requete = getattr(RequestFactory(), methode)("/patients/compte/", donnees or {})
+        requete.user = self.utilisateur
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def appeler(self, methode="get", donnees=None, email_pris=False):
+        """Appelle la vue ; renvoie (réponse, espions). Aucune base : tout ce qui écrit est remplacé."""
+        espions = SimpleNamespace(messages=mock.Mock(), logout=mock.Mock(), desactiver=mock.Mock(return_value=2), supprimer=mock.Mock(), parent=mock.Mock())
+        for nom in ("logout", "desactiver", "supprimer"):  # un parent commun garde l'ordre des appels
+            espions.parent.attach_mock(getattr(espions, nom), nom)
+        with mock.patch.object(vues_patients, "_patient_connecte", return_value=self.patient), \
+                mock.patch.object(vues_patients, "messages", espions.messages), mock.patch.object(vues_patients, "logout", espions.logout), \
+                mock.patch.object(vues_patients.gestion_compte, "desactiver", espions.desactiver), \
+                mock.patch.object(vues_patients.gestion_compte, "supprimer", espions.supprimer), \
+                mock.patch("patients.forms.email_deja_utilise", return_value=email_pris), mock.patch.object(Utilisateur, "save") as sauvegarde:
+            reponse = vues_patients.compte(self.requete(methode, donnees))
+        espions.sauvegarde = sauvegarde
+        return reponse, espions
+
+    def test_adresses_et_acces(self):
+        self.assertEqual(reverse("patients:compte"), "/patients/compte/")
+        self.assertEqual(reverse("patients:compte_exporter"), "/patients/compte/donnees/")
+        self.assertIs(resolve("/patients/compte/").func, vues_patients.compte)
+        for adresse in ("/patients/compte/", "/patients/compte/donnees/", "/patients/dossier/consultations/"):
+            with self.subTest(adresse=adresse):
+                reponse = self.client.get(adresse)
+                self.assertEqual(reponse.status_code, 302)
+                self.assertTrue(reponse["Location"].startswith("/comptes/connexion/"))
+
+    def test_la_page_s_affiche(self):
+        reponse, _ = self.appeler()
+        html = reponse.content.decode()
+        for texte in ("Mon identité", 'value="Amel"', 'value="amel@exemple.tn"', "Changer mon mot de passe", 'href="/comptes/mot-de-passe/"',
+                      "Télécharger mes données", 'href="/patients/compte/donnees/"', "Désactiver mon compte", "Supprimer définitivement",
+                      'name="action" value="identite"', 'name="action" value="desactiver"', 'name="action" value="supprimer"'):
+            self.assertIn(texte, html)
+        self.assertIn('href="/patients/profil/" class="nav-item" aria-current="page"', html)  # « Mon profil » reste le menu actif
+        self.assertEqual(html.count('aria-current="page"'), 2)  # le menu et l'onglet « Compte et sécurité »
+
+    def test_modifier_son_identite(self):
+        reponse, espions = self.appeler("post", {"action": "identite", "first_name": "Amal", "last_name": "Ben Zouari", "email": "amal@exemple.tn"})
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, "/patients/compte/"))
+        self.assertEqual((self.utilisateur.first_name, self.utilisateur.last_name, self.utilisateur.email), ("Amal", "Ben Zouari", "amal@exemple.tn"))
+        espions.sauvegarde.assert_called_once()
+        espions.messages.success.assert_called_once()
+
+    def test_adresse_deja_prise_la_page_explique(self):
+        reponse, espions = self.appeler("post", {"action": "identite", "first_name": "Amal", "last_name": "Z", "email": "pris@exemple.tn"}, email_pris=True)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("Un compte existe déjà avec cette adresse e-mail.", reponse.content.decode())
+        espions.sauvegarde.assert_not_called()
+
+    def test_desactiver_avec_un_mauvais_mot_de_passe(self):
+        reponse, espions = self.appeler("post", {"action": "desactiver", "fermer-mot_de_passe": "faux"})
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIn("Mot de passe incorrect.", reponse.content.decode())
+        espions.desactiver.assert_not_called()
+        espions.logout.assert_not_called()
+
+    def test_desactiver_deconnecte_et_ramene_a_l_accueil(self):
+        reponse, espions = self.appeler("post", {"action": "desactiver", "fermer-mot_de_passe": MOT_DE_PASSE})
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, "/"))
+        espions.desactiver.assert_called_once_with(self.utilisateur)
+        espions.logout.assert_called_once()
+        message = espions.messages.success.call_args.args[1]
+        self.assertIn("désactivé", message)
+        self.assertIn("2 demande(s) en attente", message)
+
+    def test_supprimer_demande_le_mot_de_passe_et_le_mot_supprimer(self):
+        for donnees in ({"supprimer-mot_de_passe": "faux", "supprimer-confirmation": "SUPPRIMER"},
+                        {"supprimer-mot_de_passe": MOT_DE_PASSE, "supprimer-confirmation": "oui"},
+                        {"supprimer-mot_de_passe": MOT_DE_PASSE}):
+            with self.subTest(donnees=donnees):
+                reponse, espions = self.appeler("post", {"action": "supprimer", **donnees})
+                self.assertEqual(reponse.status_code, 200)
+                espions.supprimer.assert_not_called()
+                espions.logout.assert_not_called()
+
+    def test_supprimer_efface_apres_la_deconnexion(self):
+        reponse, espions = self.appeler("post", {"action": "supprimer", "supprimer-mot_de_passe": MOT_DE_PASSE, "supprimer-confirmation": "SUPPRIMER"})
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, "/"))
+        espions.logout.assert_called_once()
+        espions.supprimer.assert_called_once_with(self.utilisateur)
+        self.assertEqual([appel[0] for appel in espions.parent.mock_calls], ["logout", "supprimer"])  # on se déconnecte d'abord
+        self.assertIn("supprimés définitivement", espions.messages.success.call_args.args[1])
+
+    def test_un_compte_du_personnel_ne_peut_pas_etre_ferme_ici(self):
+        self.utilisateur.is_staff = True
+        for action in ("desactiver", "supprimer"):
+            with self.subTest(action=action):
+                reponse, espions = self.appeler("post", {"action": action, f"{'fermer' if action == 'desactiver' else 'supprimer'}-mot_de_passe": MOT_DE_PASSE,
+                                                         "supprimer-confirmation": "SUPPRIMER"})
+                self.assertEqual((reponse.status_code, reponse["Location"]), (302, "/patients/compte/"))
+                espions.messages.error.assert_called_once()
+                espions.desactiver.assert_not_called()
+                espions.supprimer.assert_not_called()
+        reponse, _ = self.appeler()
+        html = reponse.content.decode()
+        self.assertIn("appartient au personnel", html)
+        self.assertNotIn("Supprimer définitivement", html)
+
+    def test_action_inconnue_ne_fait_rien(self):
+        reponse, espions = self.appeler("post", {"action": "pirate"})
+        self.assertEqual(reponse.status_code, 200)
+        espions.sauvegarde.assert_not_called()
+        espions.desactiver.assert_not_called()
+
+    def test_export_en_telechargement(self):
+        with mock.patch.object(vues_patients, "_patient_connecte", return_value=self.patient), \
+                mock.patch.object(vues_patients.gestion_compte, "donnees_patient", return_value={"compte": {"prenom": "Amélie"}}) as lecture:
+            reponse = vues_patients.compte_exporter(self.requete(nom="compte_exporter"))
+        lecture.assert_called_once_with(self.patient)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse["Content-Type"], "application/json")
+        self.assertEqual(reponse["Content-Disposition"], 'attachment; filename="mes-donnees-mediconnect.json"')
+        self.assertIn("Amélie".encode("utf-8"), reponse.content)  # accents lisibles, pas \u00e9
+        self.assertEqual(json.loads(reponse.content), {"compte": {"prenom": "Amélie"}})
+
+
+class ConsultationsPagesPatientTests(SimpleTestCase):
+    def requete(self, nom="consultations"):
+        requete = RequestFactory().get("/patients/dossier/consultations/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a", get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name=nom)
+        return requete
+
+    def test_l_historique_est_trie_du_plus_recent_au_plus_ancien(self):
+        ancienne = une_consultation(date=MAINTENANT - datetime.timedelta(days=60), diagnostic="Angine", medecin_nom="Dr Karim Jaziri")
+        recente = une_consultation(date=MAINTENANT - datetime.timedelta(days=2), diagnostic="Bronchite")
+        with mock.patch.object(vues_patients, "_patient_connecte", return_value=un_patient()), \
+                mock.patch.object(Consultation.objects, "filter", return_value=[ancienne, recente]):
+            html = vues_patients.consultations(self.requete()).content.decode()
+        self.assertLess(html.index("Bronchite"), html.index("Angine"))
+        for texte in ("Mes consultations", "Dr Sara Benali", "Médecine générale", "Toux et fièvre depuis trois jours.", "Amoxicilline 1 g matin et soir", "Repos, boire beaucoup."):
+            self.assertIn(texte, html)
+        self.assertIn('href="/patients/dossier/" class="nav-item" aria-current="page"', html)  # reste dans « Mon dossier »
+
+    def test_aucune_consultation(self):
+        with mock.patch.object(vues_patients, "_patient_connecte", return_value=un_patient()), mock.patch.object(Consultation.objects, "filter", return_value=[]):
+            html = vues_patients.consultations(self.requete()).content.decode()
+        self.assertIn("Aucune consultation terminée pour l", html)
+
+    def test_les_rubriques_vides_ne_sont_pas_affichees(self):
+        html = render_to_string("patients/_consultation.html", {"c": une_consultation(motif="", diagnostic="", prescription="", recommandations="")})
+        self.assertIn("Compte rendu", html)
+        for libelle in ("Motif", "Diagnostic", "Prescription", "Recommandations"):
+            self.assertNotIn(f"<dt>{libelle}</dt>", html)
+
+    def test_un_texte_de_consultation_est_echappe(self):
+        html = render_to_string("patients/_consultation.html", {"c": une_consultation(resume="<script>alert(1)</script>")})
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def dossier_html(self, **contexte):
+        valeurs = {"patient": un_patient_complet(), "dossier": un_dossier(), "allergies": [], "severes": [], "mesures": [], "derniere_demande": None,
+                   "manquants": [], "analyse": analyser_cas(), "consultations": [], "nb_consultations": 0}
+        valeurs.update(contexte)
+        return render_to_string("patients/dossier.html", valeurs, self.requete("dossier"))
+
+    def test_le_dossier_resume_les_dernieres_consultations(self):
+        a = une_consultation(diagnostic="Bronchite")
+        b = une_consultation(diagnostic="", resume="Contrôle de routine sans particularité, tout va bien pour cette fois-ci et pour la suite de l'année." * 2)
+        html = self.dossier_html(consultations=[a, b], nb_consultations=5)
+        self.assertIn("Historique des consultations", html)
+        self.assertIn('<span class="count">5</span>', html)
+        self.assertIn("Bronchite", html)
+        self.assertIn("Contrôle de routine", html)
+        self.assertNotIn("tout va bien pour cette fois-ci et pour la suite de l'année.Contrôle", html)  # le résumé est raccourci
+        self.assertIn('href="/patients/dossier/consultations/"', html)
+
+    def test_le_dossier_sans_consultation_l_explique(self):
+        html = self.dossier_html()
+        self.assertIn("Aucune consultation terminée pour l", html)
+        self.assertNotIn('href="/patients/dossier/consultations/"', html)
+
+    def test_la_page_de_resultat_montre_le_compte_rendu_d_une_consultation_terminee(self):
+        triage = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr Sara Benali", niveau=3, statut="termine", explication="e")
+        triage.pk = ObjectId()
+        contexte = {"triage": triage, "message": "m", "propositions": [], "can_book": False}
+        html = render_to_string("patients/resultat.html", {**contexte, "consultation": une_consultation()}, self.requete("resultat"))
+        self.assertIn("Compte rendu de la consultation", html)
+        self.assertIn("Bronchite", html)
+        sans = render_to_string("patients/resultat.html", {**contexte, "consultation": None}, self.requete("resultat"))
+        self.assertNotIn("Compte rendu de la consultation", sans)
+
+    def test_la_vue_resultat_cherche_le_compte_rendu_seulement_si_le_rendez_vous_est_termine(self):
+        for statut, attendu in (("termine", 1), ("annule", 0), ("en_consultation", 0)):
+            with self.subTest(statut=statut):
+                triage = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=3, statut=statut, explication="e")
+                triage.pk = ObjectId()
+                with mock.patch.object(vues_patients, "_patient_connecte", return_value=triage.patient), mock.patch.object(vues_patients, "objet_ou_404", return_value=triage), \
+                        mock.patch.object(vues_patients, "_propositions", return_value=[]), mock.patch.object(Consultation.objects, "filter") as recherche, \
+                        mock.patch.object(vues_patients, "render") as rendu:
+                    recherche.return_value.first.return_value = None
+                    vues_patients.resultat(self.requete("resultat"), triage.pk)
+                self.assertEqual(recherche.call_count, attendu)
+                self.assertIn("consultation", rendu.call_args.args[2])
+
+
+class OngletsProfilTests(SimpleTestCase):
+    def test_la_page_profil_propose_les_deux_onglets(self):
+        gabarit = (Path(__file__).resolve().parent / "templates" / "patients" / "profil.html").read_text(encoding="utf-8")
+        self.assertIn('{% include "patients/_profil_onglets.html" with actif="informations" %}', gabarit)
+        html = render_to_string("patients/_profil_onglets.html", {"actif": "compte"})
+        self.assertIn('href="/patients/profil/" class="abtn abtn-outline"', html)
+        self.assertIn('href="/patients/compte/" class="abtn abtn-primary" aria-current="page"', html)
+
+
+# --- L'IA lit aussi l'historique des consultations ---------------------------------------------------------------
+def consultation_ia(jours=5, **kw):
+    valeurs = {"date": MAINTENANT - datetime.timedelta(days=jours), "motif": "Toux", "resume": "Toux et fièvre depuis trois jours.",
+               "diagnostic": "Bronchite", "prescription": "Amoxicilline 1 g", "recommandations": "Repos"}
+    valeurs.update(kw)
+    return valeurs
+
+
+class IaConsultationsTests(SimpleTestCase):
+    def test_les_comptes_rendus_sont_dans_le_dossier_lu_par_l_ia(self):
+        d = composer_ia(consultations=[consultation_ia()])
+        self.assertIn("CONSULTATIONS PASSÉES (comptes rendus, les 5 plus récentes) :\n"
+                      "- 17/10/2026 ; motif : Toux ; compte rendu : Toux et fièvre depuis trois jours. ; diagnostic : Bronchite ; "
+                      "prescription : Amoxicilline 1 g ; recommandations : Repos", d.texte)
+        self.assertLess(d.texte.index("CONSULTATIONS PASSÉES"), d.texte.index("DEMANDES DE RENDEZ-VOUS"))
+
+    def test_sans_consultation(self):
+        self.assertIn("CONSULTATIONS PASSÉES (comptes rendus, les 5 plus récentes) :\naucune", composer_ia().texte)
+
+    def test_les_rubriques_vides_sont_omises(self):
+        d = composer_ia(consultations=[consultation_ia(motif="", diagnostic="", prescription="", recommandations="")])
+        self.assertIn("- 17/10/2026 ; compte rendu : Toux et fièvre depuis trois jours.\n", d.texte + "\n")
+        for mot in ("motif :", "diagnostic :", "prescription :", "recommandations :"):
+            self.assertNotIn(mot, d.texte.split("CONSULTATIONS PASSÉES")[1].split("DEMANDES")[0])
+
+    def test_les_cinq_plus_recentes_seulement(self):
+        consultations = [consultation_ia(jours=j, diagnostic=f"diagnostic-{j}") for j in (40, 3, 20, 1, 9, 30, 60)]
+        texte = composer_ia(consultations=consultations).texte
+        self.assertEqual(texte.count("diagnostic : diagnostic-"), ia_dossier.MAX_CONSULTATIONS)
+        self.assertLess(texte.index("diagnostic-1"), texte.index("diagnostic-3"))  # la plus récente d'abord
+        self.assertNotIn("diagnostic-40", texte)
+        self.assertNotIn("diagnostic-60", texte)
+
+    def test_numeros_et_adresses_retires_et_jamais_le_nom_du_medecin(self):
+        d = composer_ia(consultations=[consultation_ia(resume="Rappeler au 20 123 456 ou dr@clinique.tn", medecin_nom="Dr Confidentiel")])
+        for secret in ("20 123 456", "dr@clinique.tn", "Dr Confidentiel"):
+            self.assertNotIn(secret, d.texte)
+        self.assertIn("[numéro]", d.texte)
+
+    def test_ce_que_l_ia_a_lu(self):
+        d = composer_ia(groupe_sanguin="", consultations=[consultation_ia(), consultation_ia(jours=9)])
+        self.assertTrue(d.a_du_contenu)  # un dossier qui n'a que des consultations a quelque chose à lire
+        self.assertEqual({r: (detail, ok) for r, detail, ok in d.lu}["Consultations passées"], ("2 consultations", True))
+        self.assertEqual({r: (detail, ok) for r, detail, ok in composer_ia().lu}["Consultations passées"], ("aucune", False))
+
+    def test_le_service_lit_les_cinq_dernieres_consultations(self):
+        consultations = [une_consultation(date=MAINTENANT - datetime.timedelta(days=j), diagnostic=f"d{j}") for j in (30, 2, 11, 1, 8, 20, 40)]
+        with mock.patch.object(Consultation.objects, "filter", return_value=consultations):
+            lues = analyse_service._consultations(un_patient())
+        self.assertEqual([c["diagnostic"] for c in lues], ["d1", "d2", "d8", "d11", "d20"])
+        self.assertEqual(set(lues[0]), {"date", "motif", "resume", "diagnostic", "prescription", "recommandations"})  # pas de médecin
+
+
+# --- Le modèle local lit le texte libre pendant l'évaluation du triage ----------------------------------------------
+from ia import modele as modele_ia_tests  # noqa: E402
+from .models import ReglageTriage as ReglageTriageTests  # noqa: E402
+
+
+def lecture_ia(niveau=2, confiance=0.93, mots=("poitrine",)):
+    return {"niveau": niveau, "confiance": confiance, "probas": {str(n): 0.0 for n in range(1, 6)}, "mots": list(mots)}
+
+
+class LectureDuTexteTests(SimpleTestCase):
+    def appeler(self, lecture, niveau_regles, seuil=85):
+        reglage = ReglageTriageTests(seuil_modele=seuil)
+        with mock.patch.object(vues_patients.modele_ia, "predire", return_value=lecture), mock.patch.object(ReglageTriageTests, "actuel", return_value=reglage):
+            return vues_patients._lecture_du_texte("un texte", niveau_regles)
+
+    def test_le_modele_relevant_le_niveau(self):
+        lecture = lecture_ia(2, 0.93)
+        self.assertEqual(self.appeler(lecture, 5), (lecture, 2, True))
+
+    def test_le_modele_pas_assez_sur_ne_change_rien(self):
+        lecture = lecture_ia(2, 0.80)
+        self.assertEqual(self.appeler(lecture, 5), (lecture, 5, False))  # l'avis est gardé pour le médecin, le niveau reste celui des règles
+
+    def test_le_seuil_est_celui_du_reglage(self):
+        lecture = lecture_ia(2, 0.80)
+        self.assertEqual(self.appeler(lecture, 5, seuil=75)[1:], (2, True))
+        self.assertEqual(self.appeler(lecture, 5, seuil=90)[1:], (5, False))
+
+    def test_jamais_de_baisse_et_jamais_le_niveau_vital(self):
+        self.assertEqual(self.appeler(lecture_ia(5, 0.99), 2)[1:], (2, False))
+        self.assertEqual(self.appeler(lecture_ia(1, 0.99), 4)[1:], (2, True))
+
+    def test_sans_avis_du_modele(self):
+        self.assertEqual(self.appeler(None, 4), (None, 4, False))
+
+
+class DemandeAvecLectureDuTexteTests(SimpleTestCase):
+    def envoyer(self, texte, lecture, niveau_regles=5):
+        requete = RequestFactory().post("/patients/medecins/m1/symptomes/", {})
+        requete.user = SimpleNamespace(is_authenticated=True, patient=un_patient())
+        formulaire = mock.Mock()
+        formulaire.is_valid.return_value = True
+        formulaire.cleaned_data = {"symptomes": [], "texte_libre": texte}
+        formulaire.constantes.return_value = {}
+        formulaire.auto_evaluation.return_value = {"douleur": 0, "fievre": 0, "respiration": 0, "etat_general": 0}
+        cree = Triage(niveau=2, statut="en_attente")
+        cree.pk = ObjectId()
+        with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), mock.patch.object(vues_patients, "_symptomes_par_ia", return_value=("", [])), \
+                mock.patch.object(vues_patients.modele_ia, "predire", return_value=lecture), \
+                mock.patch.object(ReglageTriageTests, "actuel", return_value=ReglageTriageTests(seuil_modele=85)), \
+                mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
+            vues_patients.declarer_symptomes(requete, "m1")
+        return creation.call_args.kwargs
+
+    def test_le_niveau_est_relevé_et_expliqué(self):
+        donnees = self.envoyer("Ça me serre la poitrine", lecture_ia(2, 0.93, ("poitrine", "serre")))
+        self.assertEqual(donnees["niveau"], 2)
+        self.assertTrue(donnees["modele_releve"])
+        self.assertEqual((donnees["modele_niveau"], donnees["modele_confiance"], donnees["modele_mots"]), (2, 0.93, ["poitrine", "serre"]))
+        for morceau in ("Niveau 5", "Le modèle de lecture du texte a estimé un niveau 2", "93 % de confiance", "relevé à 2", "à confirmer par le médecin"):
+            self.assertIn(morceau, donnees["explication"])  # l'explication des règles est conservée, puis complétée
+
+    def test_avis_non_retenu_il_est_quand_meme_enregistre_pour_le_medecin(self):
+        donnees = self.envoyer("un peu mal à la tête", lecture_ia(2, 0.60))
+        self.assertEqual((donnees["niveau"], donnees["modele_releve"], donnees["modele_niveau"]), (5, False, 2))
+        self.assertNotIn("Le modèle de lecture", donnees["explication"])
+
+    def test_sans_texte_rien_n_est_enregistre(self):
+        donnees = self.envoyer("", None)
+        self.assertEqual((donnees["niveau"], donnees["modele_releve"], donnees["modele_niveau"], donnees["modele_confiance"], donnees["modele_mots"]), (5, False, None, None, []))
+
+    def test_le_modele_en_panne_ne_bloque_pas_le_triage(self):
+        donnees = self.envoyer("j'ai mal", None)
+        self.assertEqual(donnees["niveau"], 5)
+
+
+class ChampsDuModeleTests(SimpleTestCase):
+    def test_champs_du_triage(self):
+        for nom, type_ in (("modele_niveau", "PositiveSmallIntegerField"), ("modele_confiance", "FloatField"), ("modele_mots", "ArrayField"), ("modele_releve", "BooleanField")):
+            with self.subTest(nom=nom):
+                self.assertEqual(Triage._meta.get_field(nom).__class__.__name__, type_)
+        self.assertFalse(Triage._meta.get_field("modele_releve").default)
+        self.assertTrue(Triage._meta.get_field("modele_niveau").null)
+
+    def test_seuil_reglable(self):
+        champ = ReglageTriageTests._meta.get_field("seuil_modele")
+        self.assertEqual(champ.default, 85)
+        self.assertEqual([v.limit_value for v in champ.validators], [50, 99])
+        self.assertEqual(ReglageTriageTests().seuil_modele, 85)
+
+    def test_pages(self):
+        contexte = {"message": "m", "propositions": [], "can_book": False}
+        requete = RequestFactory().get("/x/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a", get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name="resultat")
+        t = Triage(patient=un_patient(), medecin_id="m1", medecin_nom="Dr X", niveau=2, statut="en_attente", explication="e", modele_releve=True, modele_mots=["poitrine", "serre"])
+        t.pk = ObjectId()
+        html = render_to_string("patients/resultat.html", {**contexte, "triage": t}, requete)
+        self.assertIn("Lecture de votre texte", html)
+        self.assertIn("mots repérés : poitrine, serre", html)
+        t.modele_releve = False
+        self.assertNotIn("Lecture de votre texte", render_to_string("patients/resultat.html", {**contexte, "triage": t}, requete))
+
+    def test_page_des_symptomes_previent_le_patient(self):
+        gabarit = (Path(__file__).resolve().parent / "templates" / "patients" / "symptomes.html").read_text(encoding="utf-8")
+        self.assertIn("Un modèle installé sur le serveur de MediConnect lit aussi votre texte", gabarit)
+        self.assertIn("Rien ne sort du serveur.", gabarit)

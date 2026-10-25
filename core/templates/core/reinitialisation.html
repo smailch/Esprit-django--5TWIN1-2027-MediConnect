@@ -1,0 +1,27 @@
+{% extends "core/auth_layout.html" %}
+
+{% block title %}Mot de passe oublié — MediConnect{% endblock %}
+
+{% block auth_link %}
+<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>
+{% endblock %}
+
+{% block page %}
+<h1 class="auth-title">Mot de passe oublié</h1>
+<p class="muted mt-2 text-sm">Indiquez l'adresse e-mail de votre compte : nous vous enverrons un lien pour choisir un nouveau mot de passe.</p>
+
+<form method="post" novalidate class="mt-8 space-y-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+  {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+  <button type="submit" class="abtn abtn-primary abtn-lg abtn-block">Envoyer le lien</button>
+</form>
+
+<p class="muted mt-6 text-center text-sm">
+  <a href="{% url 'core:connexion' %}" class="text-accent underline underline-offset-2">Retour à la connexion</a>
+</p>
+{% endblock %}

@@ -11,3 +11,8 @@ def objet_ou_404(source, **filtres):
         return get_object_or_404(source, **filtres)
     except ValidationError:
         raise Http404("Identifiant invalide.")
+
+
+def proteger_tableur(texte):
+    """Un texte qui commence par = + - @ serait exécuté comme une formule par un tableur : on le précède d'une apostrophe."""
+    return "'" + texte if texte[:1] in ("=", "+", "-", "@") else texte

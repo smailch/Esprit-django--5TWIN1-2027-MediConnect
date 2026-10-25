@@ -10,7 +10,7 @@
 <div class="auth">
   <section class="auth-brand" aria-label="Présentation de MediConnect">
     <a href="{% url 'home' %}" class="brand">
-      <span class="brand-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+      <span class="brand-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
       <span class="brand-name">MediConnect</span>
     </a>
 
@@ -29,10 +29,11 @@
     <p class="muted text-sm">Urgence vitale ? Appelez le 190, le 15 ou le 112.</p>
   </section>
 
-  <main id="contenu" class="auth-pane">
+  <div class="auth-pane">
+  <main id="contenu" class="auth-main">
     <div class="auth-top">
       <a href="{% url 'home' %}" class="brand auth-brand-mobile">
-        <span class="brand-mark"><i data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="brand-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
         <span class="brand-name">MediConnect</span>
       </a>
       {% block auth_link %}{% endblock %}
@@ -49,6 +50,10 @@
       {% block page %}{% endblock %}
     </div>
   </main>
+  <footer class="auth-footer">
+    {% include "core/_pied.html" %}
+  </footer>
+  </div>
 </div>
 {% endblock %}
 

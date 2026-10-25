@@ -6,11 +6,12 @@
 {% block page %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Mes mesures de santé</h1>
+    <a href="{% url 'patients:dossier' %}" class="link text-sm">← Mon dossier médical</a>
+    <h1 class="page-title mt-2">Mes mesures de santé</h1>
     <p class="muted mt-2 max-w-xl text-sm">Notez votre poids, votre tension, votre glycémie, votre température, votre pouls ou votre saturation. Le médecin suit ainsi votre évolution.</p>
   </div>
   <a href="{% url 'patients:mesure_creer' %}" class="abtn abtn-primary">
-    <i data-lucide="plus" class="h-4 w-4"></i>Ajouter une mesure
+    <i aria-hidden="true" data-lucide="plus" class="h-4 w-4"></i>Ajouter une mesure
   </a>
 </header>
 
@@ -37,7 +38,7 @@
     <h2 id="titre-historique" class="section-title">Historique <span class="count">{{ total }}</span></h2>
     {% if total %}
     <a href="{% url 'patients:mesures_exporter' %}?type={{ type_choisi }}&amp;periode={{ periode }}" class="abtn abtn-outline">
-      <i data-lucide="download" class="h-4 w-4"></i>Télécharger (CSV)
+      <i aria-hidden="true" data-lucide="download" class="h-4 w-4"></i>Télécharger (CSV)
     </a>
     {% endif %}
   </div>
