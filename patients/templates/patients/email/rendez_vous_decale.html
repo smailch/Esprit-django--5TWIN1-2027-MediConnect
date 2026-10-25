@@ -1,0 +1,28 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}{% if a_l_heure %}Votre rendez-vous retrouve son heure{% else %}Votre rendez-vous est retardé{% endif %}{% endblock %}
+{% block preheader %}{% if a_l_heure %}Bonne nouvelle : rendez-vous à {{ creneau|time:"H:i" }} comme prévu.{% else %}Nouvelle heure prévue : vers {{ prevue|time:"H:i" }} au lieu de {{ creneau|time:"H:i" }}.{% endif %}{% endblock %}
+{% block titre %}{% if a_l_heure %}Bonne nouvelle : votre rendez-vous retrouve son heure{% else %}Le médecin a pris un peu de retard{% endif %}{% endblock %}
+{% block corps %}
+{% if a_l_heure %}
+<p style="margin:0 0 16px;">Le retard est rattrapé : votre rendez-vous avec {{ triage.medecin_nom }} aura lieu à l'heure fixée.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F0FDF4;border-left:4px solid #16A34A;border-radius:6px;">
+  <tr><td style="padding:14px 18px;font-size:15px;">
+    <span style="color:#475569;">{{ creneau|date:"l j F Y"|capfirst }}</span><br>
+    <span style="font-size:20px;font-weight:700;color:#15803D;">{{ creneau|time:"H:i" }}</span>
+  </td></tr>
+</table>
+{% else %}
+<p style="margin:0 0 16px;">Votre rendez-vous avec {{ triage.medecin_nom }} est décalé. Nous sommes désolés pour ce désagrément : votre place est conservée, vous n'avez rien à faire.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FFFBEB;border-left:4px solid #D97706;border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Date</td><td style="padding:3px 0;">{{ creneau|date:"l j F Y"|capfirst }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Heure fixée</td><td style="padding:3px 0;color:#64748B;text-decoration:line-through;">{{ creneau|time:"H:i" }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Heure prévue</td><td style="padding:3px 0;font-size:20px;font-weight:700;color:#B45309;">vers {{ prevue|time:"H:i" }}</td></tr>
+    </table>
+    <p style="margin:8px 0 0;font-size:13px;color:#475569;">Soit environ {{ retard }} minutes de retard.</p>
+  </td></tr>
+</table>
+<p style="margin:18px 0 0;color:#334155;">Cette heure est une <strong>estimation</strong> : si elle change encore, nous vous écrirons de nouveau.</p>
+{% endif %}
+{% endblock %}

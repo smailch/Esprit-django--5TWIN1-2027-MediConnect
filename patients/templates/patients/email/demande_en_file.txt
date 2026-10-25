@@ -1,0 +1,20 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+Votre demande est bien enregistrée. Vous n'avez pas d'heure fixée : vous passez dans l'ordre de la file de {{ triage.medecin_nom }}.
+
+  Médecin : {{ triage.medecin_nom }}{% if triage.medecin_specialite %} ({{ triage.medecin_specialite }}){% endif %}
+  Votre place : {{ place.0 }}{% if place.0 == 1 %}re{% else %}e{% endif %} sur {{ place.1 }}
+  Prise en charge : vers {{ prevue|time:"H:i" }} ({{ prevue|date:"l j F" }}, estimation)
+
+Comment ça marche :
+- L'heure est une estimation : l'ordre de passage dépend de l'urgence médicale de chaque demande, elle peut donc bouger.
+- Nous vous écrirons de nouveau si elle change beaucoup. Vous pouvez aussi suivre votre place à tout moment :
+  {{ lien }}{% if peut_choisir %}
+- Vous préférez une heure précise ? Vous pouvez encore choisir un créneau depuis votre demande.{% endif %}
+
+VOTRE ÉTAT S'AGGRAVE ? N'attendez pas cet e-mail : contactez immédiatement les urgences (SAMU : 190).
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

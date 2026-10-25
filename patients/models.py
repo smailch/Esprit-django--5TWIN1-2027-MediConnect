@@ -411,6 +411,9 @@ class Triage(models.Model):
     # Au-delà du plafond (voir ReglageTriage), la demande ne peut plus être dépassée.
     nb_depassements = models.PositiveSmallIntegerField(default=0)
 
+    # Dernière heure prévue annoncée au patient par e-mail pour son rendez-vous fixé (vide : l'heure fixée n'a pas bougé).
+    heure_annoncee = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["niveau", "cree_le"]
         indexes = [models.Index(fields=["medecin_id", "statut"])]

@@ -1,0 +1,21 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+{% if a_l_heure %}Bonne nouvelle : le retard est rattrapé, votre rendez-vous avec {{ triage.medecin_nom }} aura lieu à l'heure fixée.
+
+  Date : {{ creneau|date:"l j F Y" }}
+  Heure : {{ creneau|time:"H:i" }}
+{% else %}Le médecin a pris un peu de retard : votre rendez-vous avec {{ triage.medecin_nom }} est décalé. Nous sommes désolés pour ce désagrément, votre place est conservée et vous n'avez rien à faire.
+
+  Date : {{ creneau|date:"l j F Y" }}
+  Heure fixée : {{ creneau|time:"H:i" }}
+  Heure prévue : vers {{ prevue|time:"H:i" }} (environ {{ retard }} minutes de retard)
+
+Cette heure est une estimation : si elle change encore, nous vous écrirons de nouveau.
+{% endif %}
+Suivre votre rendez-vous :
+{{ lien }}
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

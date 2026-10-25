@@ -1,0 +1,19 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Votre heure estimée a changé{% endblock %}
+{% block preheader %}Nouvelle estimation : vers {{ prevue|time:"H:i" }} ({{ prevue|date:"l j F"|lower }}).{% endblock %}
+{% block titre %}{% if plus_tot %}Bonne nouvelle : votre tour approche{% else %}Votre heure estimée a changé{% endif %}{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">{% if plus_tot %}La file avance plus vite que prévu.{% else %}D'autres demandes ont dû passer avant la vôtre.{% endif %} Votre place est conservée, vous n'avez rien à faire.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{% if plus_tot %}#F0FDF4{% else %}#FFFBEB{% endif %};border-left:4px solid {% if plus_tot %}#16A34A{% else %}#D97706{% endif %};border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Médecin</td><td style="padding:3px 0;">{{ triage.medecin_nom }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Avant</td><td style="padding:3px 0;color:#64748B;text-decoration:line-through;">vers {{ annoncee|time:"H:i" }} ({{ annoncee|date:"l j F"|lower }})</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Maintenant</td><td style="padding:3px 0;font-size:20px;font-weight:700;color:{% if plus_tot %}#15803D{% else %}#B45309{% endif %};">vers {{ prevue|time:"H:i" }} <span style="font-size:14px;font-weight:400;color:#475569;">({{ prevue|date:"l j F"|lower }})</span></td></tr>
+    </table>
+  </td></tr>
+</table>
+<p style="margin:18px 0 0;color:#334155;">Cette heure reste une <strong>estimation</strong> : nous vous écrirons de nouveau si elle change beaucoup.</p>
+<p style="margin:14px 0 0;padding:12px 14px;background:#FEF2F2;border-radius:6px;font-size:14px;color:#7F1D1D;"><strong>Votre état s'aggrave ?</strong> Contactez immédiatement les urgences (SAMU : 190).</p>
+{% endblock %}
+{% block bouton_texte %}Suivre ma demande{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}{% if modifie %}Votre rendez-vous a été modifié{% else %}Votre rendez-vous est confirmé{% endif %}{% endblock %}
+{% block preheader %}{{ creneau|date:"l j F"|capfirst }} à {{ creneau|time:"H:i" }} avec {{ triage.medecin_nom }}.{% endblock %}
+{% block titre %}{% if modifie %}Votre rendez-vous a changé d'heure{% else %}Votre rendez-vous est confirmé{% endif %}{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">{% if modifie %}Nous avons bien enregistré votre nouvelle heure. Voici le récapitulatif.{% else %}C'est noté, votre créneau est réservé. Voici le récapitulatif.{% endif %}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F0FBFD;border-left:4px solid #0E7490;border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Médecin</td><td style="padding:3px 0;font-weight:700;">{{ triage.medecin_nom }}{% if triage.medecin_specialite %}<span style="font-weight:400;color:#475569;"> · {{ triage.medecin_specialite }}</span>{% endif %}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Date</td><td style="padding:3px 0;font-weight:700;">{{ creneau|date:"l j F Y"|capfirst }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Heure</td><td style="padding:3px 0;font-weight:700;">{{ creneau|time:"H:i" }}</td></tr>
+    </table>
+  </td></tr>
+</table>
+<p style="margin:20px 0 6px;font-weight:700;">Bon à savoir</p>
+<ul style="margin:0;padding-left:20px;color:#334155;">
+  <li style="margin:4px 0;">Arrivez quelques minutes avant l'heure prévue.</li>
+  <li style="margin:4px 0;">Si le médecin prend du retard, nous vous écrirons avec la nouvelle heure prévue.</li>
+  <li style="margin:4px 0;">Un empêchement ? Vous pouvez changer ou annuler ce rendez-vous depuis votre espace.</li>
+</ul>
+{% endblock %}

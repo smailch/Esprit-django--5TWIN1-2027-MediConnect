@@ -64,6 +64,7 @@ class ReinitialisationView(PasswordResetView):
     template_name = "core/reinitialisation.html"
     form_class = DemandeReinitialisationForm
     email_template_name = "core/email/reinitialisation.txt"
+    html_email_template_name = "core/email/reinitialisation.html"
     subject_template_name = "core/email/reinitialisation_objet.txt"
     success_url = reverse_lazy("core:reinitialisation_envoyee")
 
