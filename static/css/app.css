@@ -36,7 +36,7 @@
 /* ---- Cadre : menu latéral (ordinateur) / onglets en bas (mobile) ---------- */
 .app-shell { display: block; }
 .app-main { min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; }
-.app-content { flex: 1; padding: 1.25rem 1.25rem 7rem; width: 100%; max-width: 78rem; margin: 0 auto; }
+.app-content { flex: 1; padding: 1.25rem 1.25rem 2rem; width: 100%; max-width: 78rem; margin: 0 auto; }
 
 .rail {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
@@ -415,3 +415,19 @@
 .ia-lu li > .muted { text-align: right; }
 .ia-lu-vide { opacity: 0.65; }
 .ia-envoye { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; margin: 0; padding: 0.75rem; border-radius: 0.5rem; background: rgb(127 127 127 / 0.1); font: 0.75rem/1.5 ui-monospace, Consolas, monospace; }
+
+/* ---- Modèle de lecture du texte ---------------------------------------------------------------------- */
+.matrice { border-collapse: collapse; font-size: 0.85rem; }
+.matrice th, .matrice td { padding: 0.35rem 0.7rem; text-align: center; border: 1px solid var(--a-line); }
+.matrice thead th { color: var(--a-muted); font-weight: 400; }
+.matrice .diag { background: rgba(45, 212, 191, 0.15); font-weight: 600; }
+.barre-proba { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+.barre-proba > span:first-child { width: 4.5rem; }
+.barre-proba .meter { flex: 1; margin-top: 0; }
+
+/* ---- Pied de page ------------------------------------------------------------------------------ */
+.app-footer, .auth-footer { padding: 1.25rem 1.25rem 5.5rem; border-top: 1px solid var(--a-line); font-size: 0.8rem; color: var(--a-muted); }
+.app-footer p, .auth-footer p { margin: 0.2rem 0; max-width: 60rem; }
+.app-footer strong, .auth-footer strong { color: var(--a-text); font-weight: 500; }
+.auth-main { flex: 1; }
+@media (min-width: 1024px) { .app-footer { padding: 1.25rem 3rem; } .auth-footer { padding: 1.25rem 3rem; } }

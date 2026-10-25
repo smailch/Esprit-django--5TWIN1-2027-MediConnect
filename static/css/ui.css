@@ -244,3 +244,8 @@
 @media (forced-colors: active) {
   .btn, .glass, .chip, .field, .choice { border: 1px solid ButtonText; }
 }
+
+/* ---- Focus clavier visible sur tous les liens et boutons (accueil compris) ------------------------- */
+a:focus-visible, button:focus-visible, summary:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--cyan-text); outline-offset: 3px; border-radius: 4px;
+}
