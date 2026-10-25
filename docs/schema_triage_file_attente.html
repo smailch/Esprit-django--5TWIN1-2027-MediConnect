@@ -21,8 +21,10 @@ h1 { margin: 0; font-size: 18pt; color: #0E7490; } .sous { color: #475569; margi
 .g { flex: 0 0 4.4mm; height: 4.4mm; border-radius: 50%; background: #155E75; color: #fff; text-align: center; font-weight: 700; font-size: 7.6pt; line-height: 4.4mm; }
 .etats { display: flex; gap: 1.4mm; margin-top: 1mm; } .etat { flex: 1; text-align: center; border-radius: 1.4mm; padding: 1mm 0; color: #fff; font-weight: 700; font-size: 8.4pt; }
 .tab { width: 100%; border-collapse: collapse; font-size: 8.4pt; } .tab td { padding: .5mm 1mm; border-bottom: .3mm solid #BAE6FD; } .tab td:last-child { text-align: right; font-weight: 700; } .tab .r { color: #B91C1C; } .tab .u { background: #FEE2E2; }
+
+.att td:first-child { white-space: nowrap; } .att td:nth-child(2), .att td:nth-child(3) { text-align: left; font-weight: 400; } .att .ent td { font-weight: 700; color: #155E75; border-bottom: .5mm solid #0E7490; } .att td:last-child { font-weight: 700; color: #155E75; }
 .c { font-size: 8.4pt; } .c ol { margin: .4mm 0; padding-left: 4mm; } .c li { margin: .3mm 0; }
-</style></head><body><div class='page'><div class='cadre' style='zoom:.96'>
+</style></head><body><div class='page'><div class='cadre' style='zoom:.88'>
 <h1>Le triage et la file d'attente</h1>
 <div class='sous'>Du moment où le patient décrit ses symptômes jusqu'à son tour chez le médecin. MediConnect · module Gestion patient</div>
 
@@ -41,7 +43,15 @@ h1 { margin: 0; font-size: 18pt; color: #0E7490; } .sous { color: #475569; margi
 
 <div class='bandeau b2'>2 · LA FILE D'ATTENTE : DANS QUEL ORDRE PASSE-T-ON ?</div>
 <div class='rang'>
-  <div class='bloc'><h3>Un délai cible par niveau</h3><p class='petit'>en minutes de <b>présence du médecin</b> (pas de « retard » la nuit)</p><div class='dl'><span class='lv' style='background:#EA580C'>2</span> <b>Très urgent</b><span>30 min</span></div><div class='dl'><span class='lv' style='background:#CA8A04'>3</span> <b>Urgent</b><span>2 h</span></div><div class='dl'><span class='lv' style='background:#0E7490'>4</span> <b>Standard</b><span>8 h</span></div><div class='dl'><span class='lv' style='background:#15803D'>5</span> <b>Non urgent</b><span>1 jour de présence</span></div><p class='petit'>Échéance = heure de la demande + délai.</p></div>
+  <div class='bloc' style='flex:1.25'><h3>Combien de temps au maximum ?</h3><p class='petit'>en heures de <b>présence du médecin</b> (valeurs par défaut, réglables)</p>
+<table class='tab att'><tr class='ent'><td>Cas</td><td>Délai visé</td><td>Passe en tête au plus tard</td></tr>
+<tr><td><span class='lv' style='background:#B91C1C'>1</span> Vital</td><td>immédiat</td><td>dès que le médecin est libre</td></tr>
+<tr><td><span class='lv' style='background:#EA580C'>2</span> Très urgent</td><td>30 min</td><td>1 h 30</td></tr>
+<tr><td><span class='lv' style='background:#CA8A04'>3</span> Urgent</td><td>2 h</td><td>6 h</td></tr>
+<tr><td><span class='lv' style='background:#0E7490'>4</span> Standard</td><td>8 h</td><td>24 h (1 jour)</td></tr>
+<tr><td><span class='lv' style='background:#15803D'>5</span> Non urgent</td><td>24 h</td><td>72 h (3 jours)</td></tr>
+<tr><td>Rendez-vous fixé</td><td colspan='2'>à son heure (+ retard si une urgence passe)</td></tr></table>
+<p class='petit'>Au plus tard = 3 × le délai visé : le patient passe alors devant tous, sauf un cas vital.</p></div>
   <div class='fl'>›</div>
   <div class='bloc'><h3>Tri par groupes, puis par échéance</h3><ul class='groupes'>
     <li><span class='g'>0</span><span><b>Cas vital</b> (niveau 1)</span></li>
