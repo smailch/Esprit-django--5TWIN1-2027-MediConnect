@@ -54,14 +54,17 @@
 
   <div class="flex flex-wrap gap-3 pt-2">
     <button type="submit" class="abtn abtn-primary abtn-lg">Réserver ce créneau</button>
-    <a href="{% url 'patients:resultat' triage.pk %}" class="abtn abtn-ghost abtn-lg">Passer : rester dans la file</a>
+    <button type="submit" formaction="{% url 'patients:rester_dans_la_file' triage.pk %}" formnovalidate class="abtn abtn-ghost abtn-lg">Passer : rester dans la file</button>
   </div>
 </form>
 {% else %}
 <div class="panel panel-pad mt-8 max-w-2xl text-center">
   <p class="text-sm">Aucun créneau disponible pour le moment chez {{ triage.medecin_nom }}.</p>
   <p class="muted mt-1 text-sm">Votre demande reste dans la file : le médecin vous recevra dans l'ordre d'arrivée.</p>
-  <a href="{% url 'patients:resultat' triage.pk %}" class="abtn abtn-primary mt-4">Retour à ma demande</a>
+  <form method="post" action="{% url 'patients:rester_dans_la_file' triage.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="abtn abtn-primary mt-4">Continuer dans la file</button>
+  </form>
 </div>
 {% endif %}
 {% endblock %}

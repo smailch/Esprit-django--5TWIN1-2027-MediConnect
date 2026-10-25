@@ -704,7 +704,8 @@ class RendezVousDetailConsultationTests(SimpleTestCase):
         with mock.patch.object(views, "objet_ou_404", return_value=triage), mock.patch.object(views, "consultation_pour", return_value=vierge), \
                 mock.patch.object(views, "messages", espions.messages), mock.patch.object(Triage, "save", espions.triage_save), \
                 mock.patch.object(Consultation, "save", espions.consultation_save), mock.patch.object(Triage, "enregistrer_depassements"), \
-                mock.patch.object(Allergie.objects, "filter", return_value=[]), mock.patch.object(views.suivi, "reglage_actuel", return_value=fa.DEFAUT):
+                mock.patch.object(Allergie.objects, "filter", return_value=[]), mock.patch.object(views.suivi, "reglage_actuel", return_value=fa.DEFAUT), \
+                mock.patch.object(views.suivi, "prevenir_des_changements"):
             reponse = views.rendez_vous_detail(requete, str(triage.pk))
         return reponse, espions, vierge
 

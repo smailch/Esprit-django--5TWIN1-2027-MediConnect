@@ -223,13 +223,29 @@ def declarer_symptomes(request, medecin_id):
             modele_mots=lecture["mots"] if lecture else [],
             modele_releve=releve,
         )
+        _prevenir_des_changements(request, triage.medecin_id)  # une urgence peut retarder les rendez-vous fixés
         if planning.reservable(triage.statut, triage.niveau_effectif):
             return redirect("patients:creneaux", pk=triage.pk)  # étape 3 : choisir le jour et l'heure
-        return redirect("patients:resultat", pk=triage.pk)  # cas prioritaire : pas de créneau à choisir
+        _confirmer_la_file(request, triage)  # cas prioritaire : pas de créneau à choisir, sa place est dans la file
+        return redirect("patients:resultat", pk=triage.pk)
 
     return render(request, "patients/symptomes.html", {
         "form": form, "medecin": medecin, "ia": ia_client.description(), "consentement_ia": patient.consentement_ia,
     })
+
+
+def _prevenir_des_changements(request, *medecin_ids):
+    """Après un événement qui bouge l'agenda d'un médecin : prévient les patients dont l'heure prévue a changé."""
+    def lien(triage):
+        return request.build_absolute_uri(reverse("patients:resultat", args=[triage.pk]))
+
+    for medecin_id in set(medecin_ids):
+        suivi.prevenir_des_changements(medecin_id, lien)
+
+
+def _confirmer_la_file(request, triage):
+    """Le patient reste dans la file : un e-mail lui donne sa place et son heure estimée (une seule fois)."""
+    suivi.confirmer_la_file(triage, lambda t: request.build_absolute_uri(reverse("patients:resultat", args=[t.pk])))
 
 
 def _lecture_du_texte(texte, niveau_regles):
@@ -319,7 +335,8 @@ def annuler(request, pk):
     if triage.statut == Triage.Statut.EN_ATTENTE:
         triage.statut = Triage.Statut.ANNULE
         triage.save(update_fields=["statut"])
-        notifications.rendez_vous_annule(triage)
+        notifications.rendez_vous_annule(triage, request.build_absolute_uri(reverse("patients:medecins")))
+        _prevenir_des_changements(request, triage.medecin_id)  # les rendez-vous suivants peuvent avancer
         messages.success(request, "Votre demande a été annulée.")
     return redirect("patients:resultat", pk=triage.pk)
 
@@ -335,10 +352,12 @@ def transferer(request, pk, medecin_id):
     if choisi is None:
         messages.error(request, "Ce médecin n'est plus proposé pour votre demande.")
         return redirect("patients:resultat", pk=triage.pk)
+    ancien_medecin = triage.medecin_id
     triage.medecin_id = choisi["id"]
     triage.medecin_nom = choisi["nom"]
     triage.medecin_specialite = choisi["specialite"]
     triage.save(update_fields=["medecin_id", "medecin_nom", "medecin_specialite"])
+    _prevenir_des_changements(request, ancien_medecin, triage.medecin_id)
     messages.success(request, f"Votre demande a été transmise à {choisi['nom']}.")
     return redirect("patients:resultat", pk=triage.pk)
 
@@ -370,7 +389,8 @@ def creneaux(request, pk):
         else:
             ancien = triage.creneau
             triage.creneau = choix
-            triage.save(update_fields=["creneau"])
+            triage.heure_annoncee = None  # nouvelle heure fixée : plus rien d'annoncé
+            triage.save(update_fields=["creneau", "heure_annoncee"])
             # Second verrou : si un autre patient a réservé le même créneau à la même seconde, on annule.
             if choix in Triage.creneaux_pris(triage.medecin_id, exclure_pk=triage.pk):
                 triage.creneau = ancien
@@ -405,8 +425,21 @@ def creneau_retirer(request, pk):
     triage = objet_ou_404(Triage, pk=pk, patient=patient)
     if triage.creneau and triage.statut == Triage.Statut.EN_ATTENTE:
         triage.creneau = None
-        triage.save(update_fields=["creneau"])
+        triage.heure_annoncee = None
+        triage.save(update_fields=["creneau", "heure_annoncee"])
         messages.success(request, "Votre créneau a été libéré. Vous restez dans la file du médecin.")
+        _confirmer_la_file(request, triage)
+    return redirect("patients:resultat", pk=triage.pk)
+
+
+@login_required
+@require_POST
+def rester_dans_la_file(request, pk):
+    """« Passer » à l'étape du créneau : le patient choisit de rester dans la file du médecin."""
+    patient = _patient_connecte(request)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
+    if triage.statut == Triage.Statut.EN_ATTENTE and not triage.creneau:
+        _confirmer_la_file(request, triage)
     return redirect("patients:resultat", pk=triage.pk)
 
 

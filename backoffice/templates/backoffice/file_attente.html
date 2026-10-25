@@ -79,7 +79,7 @@
   <ul class="mt-2">
     {% for t in s.planning %}
     <li class="item-row">
-      <span><strong class="font-medium">{{ t.creneau|date:"D j M, H:i" }}</strong> · <a class="link" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a> <span class="muted">· niveau {{ t.niveau_effectif }}</span></span>
+      <span><strong class="font-medium">{{ t.creneau|date:"D j M, H:i" }}</strong>{% if t.retard_min >= 5 %} <span class="muted">→ prévu {{ t.heure_prevue|date:"H:i" }}</span>{% endif %} · <a class="link" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a> <span class="muted">· niveau {{ t.niveau_effectif }}</span></span>
       <span class="sev {{ t.delai.etat|classe_etat }}">{{ t.delai.libelle }}</span>
     </li>
     {% endfor %}

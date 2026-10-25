@@ -95,6 +95,7 @@
       <dl class="dl mt-4">
         {% if triage.creneau %}
         <div class="wide"><dt>Rendez-vous fixé</dt><dd>{{ triage.creneau|date:"l j F Y à H:i" }}</dd></div>
+        {% if triage.heure_prevue %}<div class="wide"><dt>Heure prévue</dt><dd>{{ triage.heure_prevue|date:"H:i" }}{% if triage.retard_min >= 5 %} · retard d'environ {{ triage.retard_min }} min{% else %} · à l'heure{% endif %}</dd></div>{% endif %}
         {% else %}
         <div><dt>Échéance</dt><dd>{{ triage.delai.echeance|date:"D j M, H:i" }}</dd></div>
         <div><dt>Délai cible du niveau {{ triage.niveau_effectif }}</dt><dd>{{ triage.delai.cible_min|duree }}</dd></div>

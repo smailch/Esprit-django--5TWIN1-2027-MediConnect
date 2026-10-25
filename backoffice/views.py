@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -112,7 +113,11 @@ def rendez_vous_detail(request, pk):
         if not termine or compte_rendu.is_valid():
             form.save()
             if annule_maintenant:
-                notifications.rendez_vous_annule(triage)
+                notifications.rendez_vous_annule(triage, request.build_absolute_uri(reverse("patients:medecins")))
+            if "statut" in form.changed_data or "niveau_medecin" in form.changed_data:  # l'agenda du médecin a pu bouger
+                suivi.prevenir_des_changements(
+                    triage.medecin_id, lambda t: request.build_absolute_uri(reverse("patients:resultat", args=[t.pk]))
+                )
             if termine:
                 compte_rendu.save()
             messages.success(request, "La demande a été mise à jour." + (" Le compte rendu est dans le dossier du patient." if termine else ""))

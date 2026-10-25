@@ -11,7 +11,8 @@
   </p>
 
   {% if t.creneau %}
-    {% if d.etat == "en_retard" %}<p class="alert alert-danger mt-3" role="alert">L'heure de votre rendez-vous est passée. Le médecin va vous recevoir dès que possible.</p>{% endif %}
+    {% if d.etat == "en_retard" %}<p class="alert alert-danger mt-3" role="alert">L'heure de votre rendez-vous est passée. Le médecin va vous recevoir dès que possible{% if t.heure_prevue %}, vers {{ t.heure_prevue|date:"H:i" }}{% endif %}.</p>
+    {% elif t.retard_min >= 5 %}<p class="alert alert-warn mt-3" role="status">Le médecin a du retard : votre rendez-vous est prévu vers <strong>{{ t.heure_prevue|date:"H:i" }}</strong> au lieu de {{ t.creneau|date:"H:i" }} (environ {{ t.retard_min }} minutes). Cette heure est une estimation, elle peut encore changer.</p>{% endif %}
   {% elif d.etat == "immediat" %}
     <p class="muted mt-3 text-sm">Pas de rendez-vous à fixer : un cas vital est pris en charge en tête de file, avant tous les autres patients.</p>
     {% if t.prise_en_charge_estimee %}

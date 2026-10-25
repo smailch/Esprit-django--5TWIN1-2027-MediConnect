@@ -1848,7 +1848,9 @@ class ParcoursCreneauTests(SimpleTestCase):
         cree.pk = ObjectId()
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
                 mock.patch.object(vues_patients, "evaluer", return_value=resultat), \
-                mock.patch.object(Triage.objects, "create", return_value=cree):
+                mock.patch.object(Triage.objects, "create", return_value=cree), \
+                mock.patch.object(vues_patients.suivi, "prevenir_des_changements"), \
+                mock.patch.object(vues_patients.suivi, "confirmer_la_file"):
             reponse = vues_patients.declarer_symptomes(requete, "m1")
         return reponse, cree
 
@@ -3577,7 +3579,9 @@ class IaTriageEtConsentementTests(AvecFauxServeurIA):
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
                 mock.patch.object(vues_patients, "_symptomes_par_ia", side_effect=ajouter), \
                 mock.patch.object(vues_patients, "_lecture_du_texte", side_effect=lambda texte, niveau: (None, niveau, False)), \
-                mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
+                mock.patch.object(Triage.objects, "create", return_value=cree) as creation, \
+                mock.patch.object(vues_patients.suivi, "prevenir_des_changements"), \
+                mock.patch.object(vues_patients.suivi, "confirmer_la_file"):
             vues_patients.declarer_symptomes(requete, "m1")
         donnees = creation.call_args.kwargs
         self.assertEqual((donnees["ia_statut"], donnees["ia_signes"]), ("ok", ["Douleur thoracique — « serre la poitrine »"]))
@@ -3598,7 +3602,9 @@ class IaTriageEtConsentementTests(AvecFauxServeurIA):
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
                 mock.patch.object(vues_patients, "_symptomes_par_ia", return_value=("", [])), \
                 mock.patch.object(vues_patients, "_lecture_du_texte", side_effect=lambda texte, niveau: (None, niveau, False)), \
-                mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
+                mock.patch.object(Triage.objects, "create", return_value=cree) as creation, \
+                mock.patch.object(vues_patients.suivi, "prevenir_des_changements"), \
+                mock.patch.object(vues_patients.suivi, "confirmer_la_file"):
             vues_patients.declarer_symptomes(requete, "m1")
         self.assertNotIn("IA", creation.call_args.kwargs["explication"])
         self.assertEqual(creation.call_args.kwargs["ia_signes"], [])
@@ -4817,7 +4823,9 @@ class DemandeAvecLectureDuTexteTests(SimpleTestCase):
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), mock.patch.object(vues_patients, "_symptomes_par_ia", return_value=("", [])), \
                 mock.patch.object(vues_patients.modele_ia, "predire", return_value=lecture), \
                 mock.patch.object(ReglageTriageTests, "actuel", return_value=ReglageTriageTests(seuil_modele=85)), \
-                mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
+                mock.patch.object(Triage.objects, "create", return_value=cree) as creation, \
+                mock.patch.object(vues_patients.suivi, "prevenir_des_changements"), \
+                mock.patch.object(vues_patients.suivi, "confirmer_la_file"):
             vues_patients.declarer_symptomes(requete, "m1")
         return creation.call_args.kwargs
 
@@ -4889,6 +4897,7 @@ from . import notifications  # noqa: E402
 def _demande(email="amel@example.com", creneau=True, **champs):
     utilisateur = SimpleNamespace(email=email, first_name="Amel", last_name="Ben Hassine", get_username=lambda: "amel",
                                   get_full_name=lambda: "Amel Ben Hassine")
+    champs.setdefault("heure_annoncee", None)
     heure = _tz.make_aware(_dt.datetime(2026, 11, 3, 10, 30)) if creneau else None
     return SimpleNamespace(pk="abc123", patient=SimpleNamespace(user=utilisateur), medecin_nom="Dr Sara Benali",
                            medecin_specialite="Médecine générale", creneau=heure, niveau=4,
@@ -4920,8 +4929,8 @@ class EmailsDeRendezVousTests(SimpleTestCase):
         self.assertIn("annulé", _mail.outbox[0].subject)
         self.assertIn("3 novembre 2026", _mail.outbox[0].body)
 
-    def test_pas_d_email_sans_heure_fixee(self):
-        """Une simple estimation (file d'attente) ne déclenche jamais de message."""
+    def test_pas_de_confirmation_ni_d_annulation_sans_heure_fixee_ni_file_annoncee(self):
+        """Sans heure fixée, pas de confirmation de rendez-vous ; pas d'annulation si le patient n'avait pas été prévenu."""
         self.assertFalse(notifications.rendez_vous_fixe(_demande(creneau=False), "http://testserver/x/"))
         self.assertFalse(notifications.rendez_vous_annule(_demande(creneau=False)))
         self.assertEqual(_mail.outbox, [])
@@ -4931,7 +4940,7 @@ class EmailsDeRendezVousTests(SimpleTestCase):
         self.assertEqual(_mail.outbox, [])
 
     def test_une_panne_d_envoi_ne_bloque_pas_le_rendez_vous(self):
-        with _mock.patch.object(notifications, "send_mail", side_effect=OSError("serveur injoignable")):
+        with _mock.patch.object(notifications.EmailMultiAlternatives, "send", side_effect=OSError("serveur injoignable")):
             with self.assertLogs(notifications.journal, level="ERROR"):
                 self.assertFalse(notifications.rendez_vous_fixe(_demande(), "http://testserver/x/"))
 
@@ -4942,3 +4951,272 @@ class EmailsDeRendezVousTests(SimpleTestCase):
         self.assertNotIn("notifications.", source.split("def creneau_retirer(")[1].split("def file_medecin_test")[0])
         admin_vues = (Path(__file__).resolve().parent.parent / "backoffice" / "views.py").read_text(encoding="utf-8")
         self.assertIn("notifications.rendez_vous_annule(", admin_vues.split("def rendez_vous_detail(")[1].split("def _villes")[0])
+
+
+# --- Agenda prévisionnel : l'heure prévue de chaque patient --------------------------------------------------------
+import zoneinfo as _zi  # noqa: E402
+
+from . import agenda as _agenda  # noqa: E402
+
+_TUNIS = _zi.ZoneInfo("Africa/Tunis")
+_LUNDI_MATIN = {0: [(8, 13)]}
+
+
+def _h(heure, minute=0, jour=2):
+    return _dt.datetime(2026, 11, jour, heure, minute, tzinfo=_TUNIS)  # le 2 novembre 2026 est un lundi
+
+
+def _prevues(maintenant, elements, duree=20, horaires=_LUNDI_MATIN):
+    resultat = _agenda.heures_prevues(maintenant, elements, duree, horaires, _TUNIS)
+    return {k: v.strftime("%H:%M") for k, v in resultat.items()}
+
+
+class AgendaPrevisionnelTests(SimpleTestCase):
+    E = _agenda.Element
+
+    def rdv(self):
+        return [self.E("amel", _h(10)), self.E("sami", _h(10, 30)), self.E("lina", _h(11))]
+
+    def test_sans_urgence_chacun_garde_son_heure(self):
+        self.assertEqual(_prevues(_h(9, 45), self.rdv()), {"amel": "10:00", "sami": "10:30", "lina": "11:00"})
+
+    def test_une_urgence_decale_le_rendez_vous_suivant(self):
+        prevues = _prevues(_h(9, 45), [self.E("urgence", prioritaire=True)] + self.rdv())
+        self.assertEqual(prevues["urgence"], "09:45")
+        self.assertEqual(prevues["amel"], "10:05")
+
+    def test_le_retard_se_transmet_aux_rendez_vous_suivants_quand_il_n_y_a_pas_de_marge(self):
+        """Consultations de 30 minutes, rendez-vous toutes les 30 minutes : aucune marge, tout le monde glisse."""
+        prevues = _prevues(_h(9, 45), [self.E("urgence", prioritaire=True)] + self.rdv(), duree=30)
+        self.assertEqual((prevues["amel"], prevues["sami"], prevues["lina"]), ("10:15", "10:45", "11:15"))
+
+    def test_le_retard_s_efface_quand_l_agenda_a_un_trou(self):
+        elements = [self.E("urgence", prioritaire=True), self.E("amel", _h(10)), self.E("lina", _h(11, 30))]
+        prevues = _prevues(_h(9, 45), elements)
+        self.assertEqual((prevues["amel"], prevues["lina"]), ("10:05", "11:30"))
+
+    def test_un_niveau_3_ne_decale_jamais_un_rendez_vous_il_prend_les_trous(self):
+        elements = [self.E("niveau3"), self.E("amel", _h(10))]
+        self.assertEqual(_prevues(_h(9, 30), elements), {"niveau3": "09:30", "amel": "10:00"})  # tient avant 10 h
+        self.assertEqual(_prevues(_h(9, 45), elements), {"amel": "10:00", "niveau3": "10:20"})  # ne tient pas : après
+
+    def test_une_demande_protegee_decale_un_rendez_vous(self):
+        prevues = _prevues(_h(9, 45), [self.E("protegee", prioritaire=True), self.E("amel", _h(10))])
+        self.assertEqual((prevues["protegee"], prevues["amel"]), ("09:45", "10:05"))
+
+    def test_la_file_garde_son_ordre(self):
+        elements = [self.E("a"), self.E("b"), self.E("c")]
+        self.assertEqual(_prevues(_h(8), elements), {"a": "08:00", "b": "08:20", "c": "08:40"})
+
+    def test_un_rendez_vous_n_est_jamais_prevu_avant_son_heure(self):
+        self.assertEqual(_prevues(_h(8), [self.E("amel", _h(10))]), {"amel": "10:00"})
+
+    def test_un_rendez_vous_depasse_est_prevu_maintenant(self):
+        self.assertEqual(_prevues(_h(11), [self.E("en_retard", _h(10))]), {"en_retard": "11:00"})
+
+    def test_hors_des_heures_de_presence_on_attend_l_ouverture(self):
+        self.assertEqual(_prevues(_h(22), [self.E("f")]), {"f": "08:00"})
+
+    def test_tout_le_monde_recoit_une_heure(self):
+        elements = [self.E("u", prioritaire=True), self.E("f1"), self.E("f2"), *self.rdv()]
+        self.assertEqual(set(_prevues(_h(9, 45), elements)), {"u", "f1", "f2", "amel", "sami", "lina"})
+
+    def test_retard_en_minutes(self):
+        self.assertEqual(_agenda.retard_minutes(_h(10), _h(10, 15)), 15)
+        self.assertEqual(_agenda.retard_minutes(_h(10), _h(9, 50)), 0)
+
+    def test_on_ne_reprevient_que_si_l_heure_bouge_assez(self):
+        creneau, maintenant = _h(10), _h(9)
+        self.assertFalse(_agenda.changement_a_annoncer(creneau, None, _h(10, 5), maintenant))
+        self.assertTrue(_agenda.changement_a_annoncer(creneau, None, _h(10, 10), maintenant))
+        self.assertFalse(_agenda.changement_a_annoncer(creneau, _h(10, 15), _h(10, 20), maintenant))  # déjà annoncé 10 h 15
+        self.assertTrue(_agenda.changement_a_annoncer(creneau, _h(10, 15), _h(10, 30), maintenant))
+        self.assertTrue(_agenda.changement_a_annoncer(creneau, _h(10, 30), _h(10), maintenant))  # retour à l'heure
+        self.assertFalse(_agenda.changement_a_annoncer(_h(8), None, _h(9), maintenant))  # rendez-vous déjà dépassé
+
+
+class EmailChangementDHeureTests(SimpleTestCase):
+    def test_retard_annonce_heure_fixee_et_heure_prevue(self):
+        self.assertTrue(notifications.rendez_vous_decale(_demande(), _tz.make_aware(_dt.datetime(2026, 11, 3, 10, 50)), "http://testserver/x/"))
+        message = _mail.outbox[0]
+        self.assertIn("retardé", message.subject)
+        for attendu in ("10:30", "10:50", "20 minutes", "estimation", "Dr Sara Benali"):
+            self.assertIn(attendu, message.body)
+
+    def test_retour_a_l_heure_est_annonce_comme_une_bonne_nouvelle(self):
+        notifications.rendez_vous_decale(_demande(), _tz.make_aware(_dt.datetime(2026, 11, 3, 10, 32)), "http://testserver/x/")
+        self.assertIn("retrouve son heure", _mail.outbox[0].subject)
+        self.assertIn("Bonne nouvelle", _mail.outbox[0].body)
+
+    def test_le_message_ne_dit_ni_pourquoi_ni_rien_de_medical(self):
+        notifications.rendez_vous_decale(_demande(), _tz.make_aware(_dt.datetime(2026, 11, 3, 11, 0)), "http://testserver/x/")
+        corps = _mail.outbox[0].subject + _mail.outbox[0].body
+        for interdit in ("urgence", "poitrine", "Score", "niveau", "symptôme"):
+            self.assertNotIn(interdit, corps)
+
+    def test_les_evenements_declenchent_la_verification(self):
+        racine = Path(__file__).resolve().parent
+        vues = (racine / "views.py").read_text(encoding="utf-8")
+        self.assertIn("_prevenir_des_changements(request, triage.medecin_id)", vues.split("def declarer_symptomes(")[1].split("def _prevenir_des_changements")[0])
+        self.assertIn("_prevenir_des_changements(request", vues.split("def annuler(")[1].split("def transferer")[0])
+        self.assertIn("_prevenir_des_changements(request, ancien_medecin", vues.split("def transferer(")[1].split("def creneaux")[0])
+        admin = (racine.parent / "backoffice" / "views.py").read_text(encoding="utf-8")
+        self.assertIn("suivi.prevenir_des_changements(", admin.split("def rendez_vous_detail(")[1].split("def _villes")[0])
+
+    def test_changer_ou_retirer_le_creneau_efface_l_heure_annoncee(self):
+        vues = (Path(__file__).resolve().parent / "views.py").read_text(encoding="utf-8")
+        self.assertIn("triage.heure_annoncee = None", vues.split("def creneaux(")[1].split("def _demandes_actives")[0])
+        self.assertIn("triage.heure_annoncee = None", vues.split("def creneau_retirer(")[1].split("def file_medecin_test")[0])
+
+
+# --- E-mails en HTML (gabarit commun) -----------------------------------------------------------------------------
+
+
+def _html_du_message(message):
+    return next(contenu for contenu, type_mime in message.alternatives if type_mime == "text/html")
+
+
+class EmailsHtmlTests(SimpleTestCase):
+    def envoyer_tous(self):
+        heure = _tz.make_aware(_dt.datetime(2026, 11, 3, 10, 50))
+        notifications.rendez_vous_fixe(_demande(), "http://testserver/p/")
+        notifications.rendez_vous_fixe(_demande(), "http://testserver/p/", modifie=True)
+        notifications.rendez_vous_annule(_demande(), "http://testserver/nouvelle/")
+        notifications.rendez_vous_decale(_demande(), heure, "http://testserver/p/")
+        notifications.rendez_vous_decale(_demande(), _tz.make_aware(_dt.datetime(2026, 11, 3, 10, 31)), "http://testserver/p/")
+        return _mail.outbox
+
+    def test_chaque_message_a_une_version_texte_et_une_version_html(self):
+        messages = self.envoyer_tous()
+        self.assertEqual(len(messages), 5)
+        for message in messages:
+            self.assertTrue(message.body.strip())
+            self.assertIn("<html", _html_du_message(message))
+
+    def test_le_html_donne_les_memes_informations_que_le_texte(self):
+        confirme = self.envoyer_tous()[0]
+        html = _html_du_message(confirme)
+        for attendu in ("Dr Sara Benali", "Médecine générale", "Mardi 3 novembre 2026", "10:30", "http://testserver/p/", "Voir mon rendez-vous", "Bonjour Amel Ben Hassine"):
+            self.assertIn(attendu, html)
+
+    def test_chaque_variante_a_son_titre(self):
+        messages = self.envoyer_tous()
+        titres = [_html_du_message(m).split("<h1")[1].split("</h1>")[0].split(">", 1)[1] for m in messages]
+        self.assertEqual(titres, ["Votre rendez-vous est confirmé", "Votre rendez-vous a changé d'heure", "Votre rendez-vous est annulé",
+                                  "Le médecin a pris un peu de retard", "Bonne nouvelle : votre rendez-vous retrouve son heure"])
+        self.assertIn("vers 10:50", _html_du_message(messages[3]))
+        self.assertIn("Faire une nouvelle demande", _html_du_message(messages[2]))
+
+    def test_le_nom_du_patient_est_protege_contre_l_injection_de_html(self):
+        demande = _demande()
+        demande.patient.user.get_full_name = lambda: "<script>alert(1)</script>"
+        notifications.rendez_vous_fixe(demande, "http://testserver/p/")
+        html = _html_du_message(_mail.outbox[0])
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_aucune_ressource_externe_et_aucune_donnee_medicale(self):
+        for message in self.envoyer_tous():
+            html = _html_du_message(message)
+            for interdit in ("<img", "<script", "<link", "@import", "url(", "poitrine", "Score", "urgence", "niveau", "symptôme"):
+                self.assertNotIn(interdit, html, message.subject)
+            self.assertIn('lang="fr"', html)
+            self.assertIn("aucune information médicale", html)
+
+    def test_pas_de_bouton_sans_lien(self):
+        notifications.rendez_vous_annule(_demande())
+        html = _html_du_message(_mail.outbox[0])
+        self.assertNotIn("Faire une nouvelle demande", html)
+
+    def test_l_e_mail_du_mot_de_passe_a_aussi_une_version_html(self):
+        racine = Path(__file__).resolve().parent.parent / "core"
+        vues = (racine / "views.py").read_text(encoding="utf-8")
+        self.assertIn('html_email_template_name = "core/email/reinitialisation.html"', vues)
+        modele = (racine / "templates" / "core" / "email" / "reinitialisation.html").read_text(encoding="utf-8")
+        for attendu in ("deux heures", "Changer mon mot de passe", "Ignorez simplement ce message", "reinitialisation_confirmation"):
+            self.assertIn(attendu, modele)
+
+
+class EmailsHtmlFormeTests(SimpleTestCase):
+    def test_aucun_commentaire_de_gabarit_ne_fuite_dans_le_message(self):
+        notifications.rendez_vous_fixe(_demande(), "http://testserver/p/")
+        notifications.rendez_vous_decale(_demande(), _tz.make_aware(_dt.datetime(2026, 11, 3, 11, 0)), "http://testserver/p/")
+        for message in _mail.outbox:
+            html = _html_du_message(message)
+            self.assertTrue(html.lstrip().lower().startswith("<!doctype html>"))
+            for reste in ("{#", "#}", "{%", "%}", "{{", "}}", "Gabarit commun"):
+                self.assertNotIn(reste, html)
+                self.assertNotIn(reste, message.body)
+
+
+# --- E-mails pour les patients de la file -------------------------------------------------------------------------
+from . import agenda as _ag  # noqa: E402,F811
+
+
+class EmailsDeLaFileTests(SimpleTestCase):
+    PREVUE = _tz.make_aware(_dt.datetime(2026, 11, 3, 11, 25))
+
+    def test_confirmation_de_file_donne_place_et_heure_estimee(self):
+        self.assertTrue(notifications.demande_en_file(_demande(creneau=False), self.PREVUE, (3, 5), "http://testserver/p/", peut_choisir=True))
+        message = _mail.outbox[0]
+        self.assertIn("enregistrée", message.subject)
+        for texte in (message.body, _html_du_message(message)):
+            for attendu in ("3e sur 5", "11:25", "estimation", "190", "Dr Sara Benali", "http://testserver/p/", "créneau"):
+                self.assertIn(attendu, texte)
+
+    def test_la_premiere_place_s_ecrit_1re(self):
+        notifications.demande_en_file(_demande(creneau=False), self.PREVUE, (1, 1), "http://testserver/p/")
+        self.assertIn("1re sur 1", _mail.outbox[0].body)
+        self.assertNotIn("choisir un créneau", _mail.outbox[0].body)  # pas proposé quand il n'est pas possible
+
+    def test_aucune_donnee_medicale_dans_les_messages_de_file(self):
+        notifications.demande_en_file(_demande(creneau=False), self.PREVUE, (1, 2), "http://testserver/p/")
+        notifications.estimation_modifiee(_demande(creneau=False), self.PREVUE, self.PREVUE + _dt.timedelta(hours=1), "http://testserver/p/")
+        for message in _mail.outbox:
+            for texte in (message.subject + message.body, _html_du_message(message)):
+                for interdit in ("poitrine", "Score", "vital", "niveau", "symptôme", "<img", "<script"):
+                    self.assertNotIn(interdit, texte)
+
+    def test_estimation_modifiee_plus_tard_et_plus_tot(self):
+        notifications.estimation_modifiee(_demande(creneau=False), self.PREVUE, self.PREVUE + _dt.timedelta(hours=2), "http://testserver/p/")
+        notifications.estimation_modifiee(_demande(creneau=False), self.PREVUE, self.PREVUE - _dt.timedelta(hours=1), "http://testserver/p/")
+        tard, tot = _mail.outbox
+        self.assertIn("Votre heure estimée a changé", _html_du_message(tard))
+        self.assertIn("13:25", tard.body)
+        self.assertIn("Bonne nouvelle", _html_du_message(tot))
+        self.assertIn("10:25", tot.body)
+
+    def test_seuil_pour_reprevenir_un_patient_de_la_file(self):
+        base = self.PREVUE
+        self.assertFalse(_ag.changement_file_a_annoncer(None, base))  # pas encore prévenu : rien à corriger
+        self.assertFalse(_ag.changement_file_a_annoncer(base, base + _dt.timedelta(minutes=29)))
+        self.assertTrue(_ag.changement_file_a_annoncer(base, base + _dt.timedelta(minutes=30)))
+        self.assertTrue(_ag.changement_file_a_annoncer(base, base - _dt.timedelta(minutes=45)))
+
+    def test_annulation_d_une_demande_de_la_file_seulement_si_le_patient_avait_ete_prevenu(self):
+        self.assertFalse(notifications.rendez_vous_annule(_demande(creneau=False)))
+        self.assertTrue(notifications.rendez_vous_annule(_demande(creneau=False, heure_annoncee=self.PREVUE), "http://testserver/nouvelle/"))
+        message = _mail.outbox[0]
+        self.assertIn("Votre demande est annulée", message.subject)
+        self.assertIn("file d'attente", message.body)
+        self.assertNotIn("Heure", _html_du_message(message).split("<h1")[1].split("</table>")[0])
+
+    def test_les_vues_confirment_la_file_quand_le_patient_y_reste(self):
+        vues = (Path(__file__).resolve().parent / "views.py").read_text(encoding="utf-8")
+        self.assertIn("_confirmer_la_file(request, triage)", vues.split("def declarer_symptomes(")[1].split("def _prevenir_des_changements")[0])
+        self.assertIn("_confirmer_la_file(request, triage)", vues.split("def creneau_retirer(")[1].split("def rester_dans_la_file")[0])
+        passer = vues.split("def rester_dans_la_file(")[1].split("def file_medecin_test")[0]
+        self.assertIn("_confirmer_la_file(request, triage)", passer)
+        self.assertIn("@require_POST", vues.split("def rester_dans_la_file(")[0][-80:])
+        gabarit = (Path(__file__).resolve().parent / "templates" / "patients" / "creneaux.html").read_text(encoding="utf-8")
+        self.assertIn("patients:rester_dans_la_file", gabarit)
+        self.assertNotIn('href="{% url \'patients:resultat\' triage.pk %}" class="abtn abtn-ghost', gabarit)
+
+    def test_l_adresse_de_la_page_existe(self):
+        from django.urls import reverse
+        self.assertEqual(reverse("patients:rester_dans_la_file", args=["abc"]), "/patients/triage/abc/file/")
+
+    def test_la_verification_des_changements_traite_aussi_la_file(self):
+        source = (Path(__file__).resolve().parent / "suivi.py").read_text(encoding="utf-8")
+        self.assertIn("notifications.estimation_modifiee(", source)
+        self.assertIn("agenda.changement_file_a_annoncer(", source)
