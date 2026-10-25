@@ -5,6 +5,7 @@ from unittest import mock
 from bson import ObjectId
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
+from django.core import mail
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory, SimpleTestCase
 from django.urls import resolve, reverse
@@ -15,7 +16,7 @@ from core.views import ConnexionView
 from patients import ia_client
 from patients.models import ConstantesVitales, Patient
 
-from . import alertes, ia_soin, views, views_patient
+from . import alertes, ia_soin, notifications, views, views_patient
 from .forms import AnnulationForm, CompteRenduForm, DemandeSoinForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, TypeSoin
 
@@ -768,3 +769,80 @@ class EspacePatientTests(SimpleTestCase):
             requete.return_value.filter.return_value = [tunis, tous_soins, non_valide]
             self.assertEqual(views_patient.infirmiers_disponibles(une_intervention(ville="tunis")), [tunis, tous_soins])
             self.assertEqual(views_patient.infirmiers_disponibles(une_intervention(type_soin=TypeSoin.PERFUSION)), [tous_soins])
+
+
+# --- E-mails ---------------------------------------------------------------------------------------------
+
+
+class NotificationsTests(SimpleTestCase):
+    """Le lanceur de tests remplace l'envoi réel par une boîte en mémoire (mail.outbox)."""
+
+    LIEN = "https://mediconnect.exemple/infirmiers/soins/1/"
+    MEDICAL = ("Injection", "injection", "Lovenox", "essouffl", "hospitalis", "38,4")
+
+    def setUp(self):
+        mail.outbox = []
+        self.it = une_intervention(
+            description="Lovenox chaque matin", statut="acceptee", infirmier=un_infirmier(),
+            date_prevue=timezone.make_aware(datetime.datetime(2026, 11, 2, 9, 30)),
+            compte_rendu="Injection faite, patiente essoufflée, T 38,4", motif_annulation="Patiente hospitalisée",
+            realisee_le=timezone.make_aware(datetime.datetime(2026, 11, 2, 9, 45)),
+        )
+        self.it.patient.user.email = "amel@exemple.tn"
+        self.it.infirmier.user.email = "sami@exemple.tn"
+
+    def verifier(self, envoye, destinataire, objet):
+        self.assertTrue(envoye)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, [destinataire])
+        self.assertEqual(message.subject, f"{objet} — MediConnect")
+        html = message.alternatives[0][0]
+        self.assertEqual(message.alternatives[0][1], "text/html")
+        for contenu in (message.body, html):
+            self.assertIn(self.LIEN, contenu)
+            for mot in self.MEDICAL:
+                self.assertNotIn(mot, contenu)
+        return message
+
+    def test_passage_accepte(self):
+        message = self.verifier(notifications.passage_fixe(self.it, self.LIEN), "amel@exemple.tn", "Un infirmier a accepté votre demande")
+        self.assertIn("Sami Ben Ali", message.body)
+        self.assertIn("21000000", message.body)
+        self.assertIn("09:30", message.body)
+
+    def test_passage_deplace(self):
+        ancien = timezone.make_aware(datetime.datetime(2026, 11, 1, 14, 0))
+        message = self.verifier(notifications.passage_fixe(self.it, self.LIEN, ancien=ancien), "amel@exemple.tn", "Le passage de l'infirmier a changé d'heure")
+        self.assertIn("14:00", message.body)
+        self.assertIn("09:30", message.body)
+
+    def test_desistement(self):
+        infirmier, ancien = self.it.infirmier, self.it.date_prevue
+        self.it.infirmier, self.it.date_prevue = None, None
+        message = self.verifier(notifications.passage_libere(self.it, self.LIEN, infirmier, ancien), "amel@exemple.tn", "Votre demande est de nouveau proposée")
+        self.assertIn("Sami Ben Ali", message.body)
+
+    def test_annulation_par_l_infirmier_sans_le_motif(self):
+        self.verifier(notifications.passage_annule(self.it, self.LIEN), "amel@exemple.tn", "Le passage de l'infirmier est annulé")
+
+    def test_compte_rendu_sans_son_contenu(self):
+        self.verifier(notifications.compte_rendu_disponible(self.it, self.LIEN), "amel@exemple.tn", "Le compte rendu de votre soin est disponible")
+
+    def test_annulation_par_le_patient_envoyee_a_l_infirmier(self):
+        message = self.verifier(notifications.annule_par_le_patient(self.it, self.LIEN), "sami@exemple.tn", "Un passage a été annulé")
+        self.assertNotIn("Amel", message.body.split(",", 1)[1])  # seul l'infirmier est salué ; le patient n'est pas nommé
+
+    def test_rien_sans_adresse_ou_sans_passage(self):
+        self.it.patient.user.email = ""
+        self.assertFalse(notifications.passage_fixe(self.it, self.LIEN))
+        self.it.patient.user.email = "amel@exemple.tn"
+        self.it.date_prevue = None
+        self.assertFalse(notifications.passage_fixe(self.it, self.LIEN))
+        self.assertFalse(notifications.annule_par_le_patient(self.it, self.LIEN))
+        self.assertEqual(mail.outbox, [])
+
+    def test_une_panne_d_envoi_ne_leve_pas_d_erreur(self):
+        with mock.patch("infirmiers.notifications.EmailMultiAlternatives.send", side_effect=ConnectionRefusedError):
+            with self.assertLogs("infirmiers.notifications", level="ERROR"):
+                self.assertFalse(notifications.passage_fixe(self.it, self.LIEN))

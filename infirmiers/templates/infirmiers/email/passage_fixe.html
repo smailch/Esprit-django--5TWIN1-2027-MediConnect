@@ -1,0 +1,14 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}{% if ancien %}Le passage de l'infirmier a changé d'heure{% else %}Un infirmier a accepté votre demande{% endif %}{% endblock %}
+{% block preheader %}{{ infirmier }} passera chez vous {{ intervention.date_prevue|date:"l j F"|capfirst }} à {{ intervention.date_prevue|time:"H:i" }}.{% endblock %}
+{% block titre %}{% if ancien %}Le passage de l'infirmier a changé d'heure{% else %}Un infirmier a accepté votre demande{% endif %}{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">{% if ancien %}Votre infirmier a déplacé son passage, initialement prévu le {{ ancien|date:"l j F à H:i" }}. Voici la nouvelle heure.{% else %}Bonne nouvelle : votre demande de soin à domicile a été acceptée. Voici le récapitulatif.{% endif %}</p>
+{% include "infirmiers/email/_passage.html" with nom=infirmier telephone=infirmier.telephone quand=intervention.date_prevue %}
+<p style="margin:20px 0 6px;font-weight:700;">Bon à savoir</p>
+<ul style="margin:0;padding-left:20px;color:#334155;">
+  <li style="margin:4px 0;">Préparez votre ordonnance et le matériel éventuel.</li>
+  <li style="margin:4px 0;">Un empêchement ? Prévenez l'infirmier ou annulez le passage depuis votre espace.</li>
+</ul>
+{% endblock %}
+{% block bouton_texte %}Voir ma demande{% endblock %}

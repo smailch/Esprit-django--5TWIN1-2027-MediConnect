@@ -7,11 +7,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from core.utils import objet_ou_404
 from patients.models import Patient
 
+from . import notifications
 from .forms import AnnulationForm, DemandeSoinForm
 from .models import Infirmier, InterventionDomicile
 
@@ -123,6 +125,10 @@ def soin_annuler(request, pk):
             form.add_error(None, " ".join(erreur.messages))
         else:
             demande.save()
-            messages.success(request, "Le passage de l'infirmier est annulé.")
+            lien = request.build_absolute_uri(reverse("infirmiers:intervention", args=[demande.pk]))
+            if notifications.annule_par_le_patient(demande, lien):
+                messages.success(request, "Le passage de l'infirmier est annulé : il a été prévenu par e-mail.")
+            else:
+                messages.success(request, "Le passage de l'infirmier est annulé.")
             return redirect("infirmiers:soin", pk=pk)
     return render(request, "infirmiers/patient/soin_annuler.html", {"demande": demande, "form": form})

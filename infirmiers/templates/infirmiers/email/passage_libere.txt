@@ -1,0 +1,12 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+{{ ancien_infirmier }} ne pourra finalement pas venir. Le passage prévu le {{ ancien|date:"l j F Y à H:i" }} n'aura donc pas lieu.
+
+Votre demande n'est pas perdue : elle est de nouveau proposée aux infirmiers de votre ville. Nous vous écrirons dès que l'un d'eux l'aura acceptée.
+
+Suivre votre demande : {{ lien }}
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

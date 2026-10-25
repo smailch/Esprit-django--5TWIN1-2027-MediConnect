@@ -7,13 +7,14 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 from patients.models import Mesure
 
-from . import ia_soin
+from . import ia_soin, notifications
 from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, NiveauAlerte, TypeSoin
 
@@ -39,6 +40,11 @@ def _intervention(request, infirmier, pk):
 
 def _message_erreur(erreur):
     return " ".join(erreur.messages)
+
+
+def lien_patient(request, intervention):
+    """Adresse complète de la demande dans l'espace patient (pour les e-mails)."""
+    return request.build_absolute_uri(reverse("infirmiers:soin", args=[intervention.pk]))
 
 
 def inscription(request):
@@ -178,6 +184,7 @@ def accepter(request, pk):
         if not prises:
             messages.error(request, "Un autre infirmier vient d'accepter cette demande.")
             return redirect("infirmiers:demandes")
+        notifications.passage_fixe(intervention, lien_patient(request, intervention))
         messages.success(request, f"Demande acceptée : passage prévu le {timezone.localtime(intervention.date_prevue):%d/%m/%Y à %H:%M}.")
         return redirect("infirmiers:intervention", pk=pk)
     return render(request, "infirmiers/intervention.html", {"intervention": intervention, "infirmier": infirmier, "est_la_mienne": False, "form": form})
@@ -199,12 +206,15 @@ def replanifier(request, pk):
         return redirect("infirmiers:intervention", pk=pk)
     form = PassageForm(request.POST if request.method == "POST" else None, intervention=intervention)
     if request.method == "POST" and form.is_valid():
+        ancien = intervention.date_prevue
         try:
             intervention.replanifier(form.cleaned_data["date_prevue"])
         except ValidationError as erreur:
             form.add_error(None, _message_erreur(erreur))
         else:
             intervention.save()
+            if intervention.date_prevue != ancien:
+                notifications.passage_fixe(intervention, lien_patient(request, intervention), ancien=ancien)
             messages.success(request, "Le passage a été déplacé.")
             return redirect("infirmiers:intervention", pk=pk)
     return render(request, "infirmiers/replanifier.html", {"intervention": intervention, "form": form})
@@ -281,6 +291,7 @@ def terminer(request, pk):
                 form.add_error(None, _message_erreur(erreur))
             else:
                 intervention.save()
+                notifications.compte_rendu_disponible(intervention, lien_patient(request, intervention))
                 if analyse.niveau == NiveauAlerte.SIGNALER:
                     messages.warning(request, "Compte rendu enregistré. Des signes d'alerte sont à signaler au médecin.")
                 else:
@@ -309,6 +320,8 @@ def annuler(request, pk):
             form.add_error(None, _message_erreur(erreur))
         else:
             intervention.save()
+            if intervention.date_prevue is not None:  # le patient attendait un passage
+                notifications.passage_annule(intervention, lien_patient(request, intervention))
             messages.success(request, "L'intervention a été annulée.")
             return redirect("infirmiers:planning")
     return render(request, "infirmiers/annuler.html", {"intervention": intervention, "form": form})
@@ -317,13 +330,15 @@ def annuler(request, pk):
 @login_required
 @require_POST
 def liberer(request, pk):
-    _, intervention = _mon_intervention(request, pk)
+    infirmier, intervention = _mon_intervention(request, pk)
+    ancien = intervention.date_prevue
     try:
         intervention.liberer()
     except ValidationError as erreur:
         messages.error(request, _message_erreur(erreur))
         return redirect("infirmiers:intervention", pk=pk)
     intervention.save()
+    notifications.passage_libere(intervention, lien_patient(request, intervention), infirmier, ancien)
     messages.success(request, "Vous vous êtes désisté : la demande est de nouveau proposée aux infirmiers de la zone.")
     return redirect("infirmiers:planning")
 
