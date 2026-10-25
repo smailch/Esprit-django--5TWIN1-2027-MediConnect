@@ -1,0 +1,70 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Soins à domicile — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Soins à domicile</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Injection, pansement, prise de sang… Un infirmier de votre ville accepte votre demande et vient chez vous.</p>
+  </div>
+  <a href="{% url 'infirmiers:soin_demander' %}" class="abtn abtn-primary">
+    <i aria-hidden="true" data-lucide="plus" class="h-4 w-4"></i>Demander un soin
+  </a>
+</header>
+
+<div class="mt-10 grid gap-10 lg:grid-cols-12 lg:items-start">
+  <section class="lg:col-span-8" aria-labelledby="titre-en-cours">
+    <h2 id="titre-en-cours" class="section-title">En cours <span class="count">{{ en_cours|length }}</span></h2>
+    {% if en_cours %}
+    <ul class="panel mt-4">
+      {% for i in en_cours %}
+      <li class="item-row">
+        <div>
+          <p class="item-name"><a href="{% url 'infirmiers:soin' i.pk %}" class="link">{{ i.get_type_soin_display }}</a></p>
+          <p class="muted mt-1 text-sm">
+            {% if i.statut == 'acceptee' %}
+              Passage de {{ i.infirmier }} le {{ i.date_prevue|date:"l j F à H:i" }}
+            {% else %}
+              Souhaité le {{ i.date_souhaitee|date:"l j F" }}{% if i.moment != 'indifferent' %} ({{ i.get_moment_display|lower }}){% endif %} · {{ i.ville }}
+            {% endif %}
+          </p>
+        </div>
+        {% include "infirmiers/_statut.html" %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="panel panel-pad mt-4 text-center">
+      <p class="muted text-sm">Vous n'avez aucune demande de soin en cours.</p>
+      <a href="{% url 'infirmiers:soin_demander' %}" class="abtn abtn-primary mt-4">Demander un soin</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="space-y-10 lg:col-span-4">
+    <section aria-labelledby="titre-historique">
+      <h2 id="titre-historique" class="section-title">Historique <span class="count">{{ closes|length }}</span></h2>
+      {% if closes %}
+      <ul class="panel mt-4 divide-y divide-gray-300/60">
+        {% for i in closes %}
+        <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <div>
+            <p class="text-sm font-medium"><a href="{% url 'infirmiers:soin' i.pk %}" class="link">{{ i.get_type_soin_display }}</a></p>
+            <p class="muted text-xs">{% firstof i.realisee_le|date:"d/m/Y" i.annulee_le|date:"d/m/Y" %} · {{ i.get_statut_display }}</p>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="panel panel-pad muted mt-4 text-sm">Aucun soin terminé pour l'instant.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-urgence">
+      <h2 id="titre-urgence" class="section-title">Urgence vitale ?</h2>
+      <p class="muted mt-2 text-sm">Appelez le 190, le 15 ou le 112. Un soin à domicile ne remplace pas les secours.</p>
+    </section>
+  </aside>
+</div>
+{% endblock %}

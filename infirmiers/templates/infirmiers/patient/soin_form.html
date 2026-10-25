@@ -1,0 +1,40 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}{% if demande %}Modifier ma demande de soin{% else %}Demander un soin à domicile{% endif %} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% if demande %}{% url 'infirmiers:soin' demande.pk %}{% else %}{% url 'infirmiers:soins' %}{% endif %}" class="link text-sm">← {% if demande %}Ma demande{% else %}Soins à domicile{% endif %}</a>
+    <h1 class="page-title mt-2">{% if demande %}Modifier ma demande{% else %}Demander un soin à domicile{% endif %}</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Votre nom, votre adresse exacte et votre téléphone ne sont communiqués qu'à l'infirmier qui accepte la demande.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="mt-8 max-w-3xl space-y-8">
+  {% csrf_token %}
+  {% include "infirmiers/_erreurs.html" %}
+
+  <section class="panel panel-pad space-y-5" aria-labelledby="titre-soin">
+    <h2 id="titre-soin" class="section-title">Le soin</h2>
+    {% with field=form.type_soin %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.description %}{% include "core/_champ.html" %}{% endwith %}
+    {% if form.consultation.field.queryset.exists %}{% with field=form.consultation %}{% include "core/_champ.html" %}{% endwith %}{% endif %}
+  </section>
+
+  <section class="panel panel-pad" aria-labelledby="titre-quand">
+    <h2 id="titre-quand" class="section-title">Quand et où</h2>
+    <div class="mt-5 grid gap-5 sm:grid-cols-2">
+      {% with field=form.date_souhaitee %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.moment %}{% include "core/_champ.html" %}{% endwith %}
+      <div class="sm:col-span-2">{% with field=form.adresse %}{% include "core/_champ.html" %}{% endwith %}</div>
+      <div class="sm:col-span-2">{% with field=form.ville %}{% include "core/_champ.html" %}{% endwith %}</div>
+    </div>
+  </section>
+
+  <div class="flex flex-wrap gap-3">
+    <button type="submit" class="abtn abtn-primary abtn-lg">{% if demande %}Enregistrer{% else %}Envoyer la demande{% endif %}</button>
+    <a href="{% if demande %}{% url 'infirmiers:soin' demande.pk %}{% else %}{% url 'infirmiers:soins' %}{% endif %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+{% endblock %}

@@ -7,9 +7,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.forms import MESSAGE_EMAIL_UTILISE, StyledFormMixin, email_deja_utilise
-from patients.models import ConstantesVitales
+from patients.models import ConstantesVitales, Consultation
 
-from .models import Infirmier, TypeSoin
+from .models import Infirmier, InterventionDomicile, TypeSoin
 
 User = get_user_model()
 
@@ -231,3 +231,45 @@ class AnnulationForm(StyledFormMixin, forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
+
+
+class DemandeSoinForm(StyledFormMixin, forms.ModelForm):
+    """Demande de soin à domicile faite par le patient (création, ou modification tant qu'elle n'est pas acceptée)."""
+
+    class Meta:
+        model = InterventionDomicile
+        fields = ("type_soin", "description", "consultation", "date_souhaitee", "moment", "adresse", "ville")
+        labels = {
+            "type_soin": "Soin demandé",
+            "description": "Précisions pour l'infirmier",
+            "consultation": "Prescrit lors de la consultation",
+            "date_souhaitee": "Date souhaitée",
+            "moment": "Moment de la journée",
+            "adresse": "Adresse du soin",
+            "ville": "Ville",
+        }
+        help_texts = {
+            "description": "Ex. injection d'anticoagulant chaque matin, pansement de la jambe gauche, ordonnance à disposition.",
+            "consultation": "Facultatif : la consultation où le médecin a prescrit ce soin.",
+            "ville": "Les infirmiers qui se déplacent dans cette ville recevront votre demande.",
+        }
+        widgets = {"date_souhaitee": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")}
+
+    def __init__(self, *args, patient, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.patient = patient
+        consultation = self.fields["consultation"]
+        consultation.queryset = Consultation.objects.filter(patient=patient)
+        consultation.empty_label = "Aucune"
+        if self.instance._state.adding and not self.is_bound:
+            self.initial.setdefault("adresse", patient.adresse)
+            self.initial.setdefault("ville", patient.ville)
+        self.fields["date_souhaitee"].widget.attrs["min"] = timezone.localdate().isoformat()
+        self._style_fields()
+        self._autocompleter(adresse="street-address", ville="address-level2")
+
+    def clean_date_souhaitee(self):
+        date = self.cleaned_data["date_souhaitee"]
+        if date < timezone.localdate():
+            raise forms.ValidationError("La date souhaitée ne peut pas être dans le passé.")
+        return date

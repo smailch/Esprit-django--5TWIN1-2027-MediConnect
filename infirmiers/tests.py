@@ -15,8 +15,8 @@ from core.views import ConnexionView
 from patients import ia_client
 from patients.models import ConstantesVitales, Patient
 
-from . import alertes, ia_soin, views
-from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
+from . import alertes, ia_soin, views, views_patient
+from .forms import AnnulationForm, CompteRenduForm, DemandeSoinForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, TypeSoin
 
 
@@ -679,3 +679,92 @@ class TerminerAvecAnalyseTests(SansBaseMixin, SimpleTestCase):
         it.accepter(un_infirmier(), plus_tard())
         it.terminer("Fait.")
         self.assertEqual((it.niveau_alerte, it.signes_alerte, it.releves()), ("", [], {}))
+
+
+# --- Espace patient : demandes de soins à domicile -----------------------------------------------------
+
+
+class DemandeSoinFormTests(SimpleTestCase):
+    def setUp(self):
+        self.patient = Patient(pk=ObjectId(), user=User(username="amel"), adresse="7 rue de Rome", ville="La Marsa")
+        # Aucun accès à la base : l'unicité n'est pas en jeu et la consultation reste vide.
+        p = mock.patch.object(DemandeSoinForm, "validate_unique", lambda form: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def donnees(self, **kw):
+        valeurs = {
+            "type_soin": "injection", "description": "", "date_souhaitee": (timezone.localdate() + datetime.timedelta(days=1)).isoformat(),
+            "moment": "matin", "adresse": "7 rue de Rome", "ville": "La Marsa",
+        }
+        valeurs.update(kw)
+        return valeurs
+
+    def test_adresse_et_ville_du_patient_proposees(self):
+        form = DemandeSoinForm(patient=self.patient)
+        self.assertEqual((form.initial["adresse"], form.initial["ville"]), ("7 rue de Rome", "La Marsa"))
+        self.assertEqual(form.fields["date_souhaitee"].widget.attrs["min"], timezone.localdate().isoformat())
+
+    def test_la_demande_appartient_au_patient(self):
+        form = DemandeSoinForm(self.donnees(), patient=self.patient)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIs(form.instance.patient, self.patient)
+        self.assertEqual(form.instance.statut, "demandee")
+
+    def test_date_passee_refusee(self):
+        form = DemandeSoinForm(self.donnees(date_souhaitee=(timezone.localdate() - datetime.timedelta(days=1)).isoformat()), patient=self.patient)
+        self.assertFalse(form.is_valid())
+        self.assertIn("date_souhaitee", form.errors)
+
+    def test_champs_obligatoires(self):
+        form = DemandeSoinForm(self.donnees(type_soin="", adresse="", ville=""), patient=self.patient)
+        self.assertFalse(form.is_valid())
+        self.assertTrue({"type_soin", "adresse", "ville"} <= set(form.errors))
+
+    def test_le_patient_ne_choisit_ni_infirmier_ni_statut(self):
+        self.assertFalse({"infirmier", "statut", "date_prevue", "compte_rendu"} & set(DemandeSoinForm.base_fields))
+
+
+class EspacePatientTests(SimpleTestCase):
+    VUES = ("soins", "soin_demander", "soin", "soin_modifier", "soin_supprimer", "soin_annuler")
+
+    def appeler(self, nom, user):
+        requete = RequestFactory().get("/infirmiers/soins/")
+        requete.user = user
+        args = () if nom in ("soins", "soin_demander") else ("x",)
+        return getattr(views_patient, nom)(requete, *args)
+
+    def test_adresses(self):
+        pk = str(ObjectId())
+        cas = {
+            "/infirmiers/soins/": "soins",
+            "/infirmiers/soins/nouveau/": "soin_demander",
+            f"/infirmiers/soins/{pk}/": "soin",
+            f"/infirmiers/soins/{pk}/modifier/": "soin_modifier",
+            f"/infirmiers/soins/{pk}/supprimer/": "soin_supprimer",
+            f"/infirmiers/soins/{pk}/annuler/": "soin_annuler",
+        }
+        for url, nom in cas.items():
+            with self.subTest(url=url):
+                self.assertEqual(resolve(url).view_name, f"infirmiers:{nom}")
+
+    def test_anonyme_renvoye_vers_la_connexion(self):
+        for nom in self.VUES:
+            with self.subTest(vue=nom):
+                self.assertEqual(self.appeler(nom, AnonymousUser()).status_code, 302)
+
+    def test_reserve_aux_patients(self):
+        infirmier = User(username="sami", role="infirmier")  # jamais enregistré : aucun profil patient
+        for nom in self.VUES:
+            with self.subTest(vue=nom):
+                with self.assertRaises(PermissionDenied):
+                    self.appeler(nom, infirmier)
+
+    def test_infirmiers_disponibles(self):
+        tunis = un_infirmier(ville="Tunis", zones=[], soins=[TypeSoin.INJECTION])
+        tous_soins = un_infirmier(ville="La Marsa", zones=["Tunis"], soins=[])
+        non_valide = un_infirmier(valide=False)
+        with mock.patch.object(Infirmier.objects, "select_related") as requete:
+            requete.return_value.filter.return_value = [tunis, tous_soins, non_valide]
+            self.assertEqual(views_patient.infirmiers_disponibles(une_intervention(ville="tunis")), [tunis, tous_soins])
+            self.assertEqual(views_patient.infirmiers_disponibles(une_intervention(type_soin=TypeSoin.PERFUSION)), [tous_soins])
