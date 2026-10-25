@@ -1,0 +1,62 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — Schéma du triage et de la file d'attente</title><style>
+@page { size: A4 landscape; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 10pt; line-height: 1.38; }
+.page { width: 297mm; height: 209mm; padding: 9mm 11mm; background: #fff; overflow: hidden; }
+h1 { margin: 0; font-size: 21pt; color: #0E7490; } .sous { color: #475569; margin: 1mm 0 4mm; font-size: 10.5pt; }
+.bandeau { font-weight: 700; letter-spacing: .08em; font-size: 9.6pt; color: #fff; padding: 1.4mm 3.4mm; border-radius: 2mm; display: inline-block; margin: 2.5mm 0 2.5mm; }
+.b1 { background: #0E7490; } .b2 { background: #155E75; }
+.rang { display: flex; align-items: stretch; gap: 2.2mm; }
+.bloc { flex: 1; border: 1.4px solid #0E7490; border-radius: 2.5mm; padding: 2mm 2.4mm; background: #F8FEFF; min-width: 0; }
+.bloc h3 { margin: 0 0 1.4mm; font-size: 10.6pt; color: #0E7490; } .bloc p { margin: .8mm 0; }
+.bloc.ia { border-color: #7C3AED; background: #FAF5FF; } .bloc.ia h3 { color: #6D28D9; }
+.bloc.ok { border-color: #16A34A; background: #F0FDF4; } .bloc.ok h3 { color: #15803D; }
+.bloc.al { border-color: #DC2626; background: #FEF2F2; } .bloc.al h3 { color: #B91C1C; }
+.bloc.ja { border-color: #D97706; background: #FFFBEB; } .bloc.ja h3 { color: #B45309; }
+.fl { flex: 0 0 auto; align-self: center; font-size: 15pt; color: #0E7490; font-weight: 700; }
+.lv { display: inline-block; min-width: 5mm; text-align: center; color: #fff; font-weight: 700; border-radius: 1.2mm; padding: 0 1.2mm; font-size: 8.2pt; }
+.dl { display: flex; align-items: center; gap: 1.6mm; margin: .6mm 0; } .dl > span:last-child { margin-left: auto; font-weight: 700; color: #155E75; }
+.petit { font-size: 8.4pt; color: #475569; } .niv { display: flex; flex-direction: column; justify-content: center; gap: .7mm; }
+.niv div { display: flex; align-items: center; gap: 1.6mm; }
+.groupes { list-style: none; margin: 0; padding: 0; } .groupes li { display: flex; gap: 1.6mm; margin: .7mm 0; align-items: flex-start; }
+.g { flex: 0 0 4.4mm; height: 4.4mm; border-radius: 50%; background: #155E75; color: #fff; text-align: center; font-weight: 700; font-size: 7.6pt; line-height: 4.4mm; }
+.etats { display: flex; gap: 1.4mm; margin-top: 1mm; } .etat { flex: 1; text-align: center; border-radius: 1.4mm; padding: 1mm 0; color: #fff; font-weight: 700; font-size: 8.4pt; }
+.pied { margin-top: 3.4mm; display: flex; gap: 3mm; } .pied > div { flex: 1; border-radius: 2mm; padding: 2mm 2.6mm; font-size: 9.2pt; }
+</style></head><body><div class='page'>
+<h1>Le triage et la file d'attente</h1>
+<div class='sous'>Du moment où le patient décrit ses symptômes jusqu'à son tour chez le médecin. MediConnect · module Gestion patient</div>
+
+<div class='bandeau b1'>1 · LE TRIAGE : QUEL NIVEAU D'URGENCE ?</div>
+<div class='rang'>
+  <div class='bloc'><h3>Le patient décrit</h3><p>• symptômes cochés (catalogue)<br>• constantes (température…)<br>• 4 échelles de 0 à 5 : douleur, fièvre, respiration, état général<br>• <b>texte libre</b> : « décrivez ce que vous ressentez »</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>① Règles pondérées</h3><p><i>Pas d'IA : calcul prévisible</i></p><p>Points = symptômes + constantes + échelles</p><p style='font-size:9.2pt'>≥ 20 points → <span class='lv' style='background:#EA580C'>2</span><br>≥ 12 points → <span class='lv' style='background:#CA8A04'>3</span><br>≥ 5 points → <span class='lv' style='background:#0E7490'>4</span><br>moins → <span class='lv' style='background:#15803D'>5</span></p><p>Un <b>signe d'alerte</b> impose un niveau minimal : le plus urgent l'emporte.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc ia'><h3>② Modèle de lecture du texte</h3><p><i>Apprentissage automatique, sur le serveur</i></p><p>Lit le texte libre, estime un niveau et sa confiance.</p><p><b>Relève</b> le niveau si confiance ≥ <b>85 %</b>.<br>Jamais de baisse. Jamais le niveau vital.</p></div>
+  <div class='fl'>+</div>
+  <div class='bloc ia'><h3>③ IA Groq <span class='petit'>(facultative)</span></h3><p><i>Si le patient l'a accepté</i></p><p>Repère dans le texte des symptômes non cochés, avec citation vérifiée. Ne décide jamais d'un niveau.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc ok niv'><h3>Niveau final</h3><div><span class='lv' style='background:#B91C1C'>1</span> <b>Vital</b></div><div><span class='lv' style='background:#EA580C'>2</span> <b>Très urgent</b></div><div><span class='lv' style='background:#CA8A04'>3</span> <b>Urgent</b></div><div><span class='lv' style='background:#0E7490'>4</span> <b>Standard</b></div><div><span class='lv' style='background:#15803D'>5</span> <b>Non urgent</b></div><p class='petit'>Le médecin peut requalifier.</p></div>
+</div>
+
+<div class='bandeau b2'>2 · LA FILE D'ATTENTE : DANS QUEL ORDRE PASSE-T-ON ?</div>
+<div class='rang'>
+  <div class='bloc'><h3>Un délai cible par niveau</h3><p class='petit'>en minutes de <b>présence du médecin</b> (pas de « retard » la nuit)</p><div class='dl'><span class='lv' style='background:#EA580C'>2</span> <b>Très urgent</b><span>30 min</span></div><div class='dl'><span class='lv' style='background:#CA8A04'>3</span> <b>Urgent</b><span>2 h</span></div><div class='dl'><span class='lv' style='background:#0E7490'>4</span> <b>Standard</b><span>8 h</span></div><div class='dl'><span class='lv' style='background:#15803D'>5</span> <b>Non urgent</b><span>1 jour de présence</span></div><p class='petit'>Échéance = heure de la demande + délai.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>Tri par groupes, puis par échéance</h3><ul class='groupes'>
+    <li><span class='g'>0</span><span><b>Cas vital</b> (niveau 1)</span></li>
+    <li><span class='g'>1</span><span><b>Garantie</b> : demande protégée qui a attendu ≥ 3 × son délai</span></li>
+    <li><span class='g'>2</span><span><b>Niveaux 2 et 3</b> (urgents)</span></li>
+    <li><span class='g'>3</span><span><b>Demandes protégées</b> de niveau 4 et 5</span></li>
+    <li><span class='g'>4</span><span>Toutes les autres : les plus anciennes d'abord</span></li></ul></div>
+  <div class='fl'>›</div>
+  <div class='bloc ja'><h3>Personne n'attend sans fin</h3><p>Chaque fois qu'une demande plus récente passe devant, un <b>dépassement</b> est compté.</p><p>Après <b>5 dépassements</b>, la demande est <b>protégée</b> : seuls les niveaux 1 à 3 peuvent encore passer devant elle.</p><p>Après 3 × son délai, elle passe même devant les urgents (sauf le vital).</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>Ce que voit le patient</h3><div class='etats'><div class='etat' style='background:#15803D'>Dans les temps</div><div class='etat' style='background:#CA8A04'>À risque<br><span style='font-weight:400'>≥ 75 % du délai</span></div><div class='etat' style='background:#B91C1C'>En retard</div></div><p>Sa place dans la file, l'heure estimée de prise en charge (20 min par consultation), une jauge du délai.</p></div>
+</div>
+
+<div class='pied'>
+  <div class='bloc al' style='flex:1.05'><h3>Cas vital ou très urgent (niveaux 1 et 2)</h3>Pas de créneau à choisir : la demande est prise en charge en priorité, tout en tête de file.</div>
+  <div class='bloc ok' style='flex:1.05'><h3>Niveaux 3 à 5 : le patient choisit un créneau</h3>Un rendez-vous fixé sort de la file (c'est un engagement). Un créneau déjà pris n'est jamais proposé : double verrou contre la double réservation.</div>
+  <div class='bloc' style='flex:1.3'><h3>Les limites à connaître</h3>Un ordre de passage ne guérit pas la surcharge : si le médecin a trop de demandes, l'administrateur doit surveiller les demandes « en retard » et réorienter les patients. Seuils et délais = valeurs de démonstration, à faire valider par un professionnel de santé.</div>
+</div>
+</div></body></html>

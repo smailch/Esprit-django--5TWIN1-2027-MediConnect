@@ -4,3 +4,4 @@
 django>=5.2,<5.3
 django-mongodb-backend>=5.2,<5.3   # la ligne 5.2.x suit Django 5.2
 python-dotenv>=1.0
+scikit-learn>=1.5  # modèle de lecture du texte du triage (app ia)
