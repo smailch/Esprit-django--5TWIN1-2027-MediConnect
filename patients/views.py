@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from core.utils import objet_ou_404, proteger_tableur
 from ia import decision as decision_ia, modele as modele_ia
 
-from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, planning, suivi
+from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, notifications, planning, suivi
 from .forms import (
     AllergieForm,
     CompteForm,
@@ -319,6 +319,7 @@ def annuler(request, pk):
     if triage.statut == Triage.Statut.EN_ATTENTE:
         triage.statut = Triage.Statut.ANNULE
         triage.save(update_fields=["statut"])
+        notifications.rendez_vous_annule(triage)
         messages.success(request, "Votre demande a été annulée.")
     return redirect("patients:resultat", pk=triage.pk)
 
@@ -377,6 +378,9 @@ def creneaux(request, pk):
                 messages.error(request, "Ce créneau vient d'être pris par un autre patient. Choisissez-en un autre.")
             else:
                 messages.success(request, "Votre créneau est réservé.")
+                notifications.rendez_vous_fixe(
+                    triage, request.build_absolute_uri(reverse("patients:resultat", args=[triage.pk])), modifie=ancien is not None
+                )
                 return redirect("patients:resultat", pk=triage.pk)
         disponibles, pris = libres()  # le créneau a pu être pris entre-temps : liste à jour
 

@@ -4874,3 +4874,71 @@ class ChampsDuModeleTests(SimpleTestCase):
         gabarit = (Path(__file__).resolve().parent / "templates" / "patients" / "symptomes.html").read_text(encoding="utf-8")
         self.assertIn("Un modèle installé sur le serveur de MediConnect lit aussi votre texte", gabarit)
         self.assertIn("Rien ne sort du serveur.", gabarit)
+
+
+# --- E-mails de rendez-vous -------------------------------------------------------------------------------------
+import datetime as _dt  # noqa: E402
+from unittest import mock as _mock  # noqa: E402
+
+from django.core import mail as _mail  # noqa: E402
+from django.utils import timezone as _tz  # noqa: E402
+
+from . import notifications  # noqa: E402
+
+
+def _demande(email="amel@example.com", creneau=True, **champs):
+    utilisateur = SimpleNamespace(email=email, first_name="Amel", last_name="Ben Hassine", get_username=lambda: "amel",
+                                  get_full_name=lambda: "Amel Ben Hassine")
+    heure = _tz.make_aware(_dt.datetime(2026, 11, 3, 10, 30)) if creneau else None
+    return SimpleNamespace(pk="abc123", patient=SimpleNamespace(user=utilisateur), medecin_nom="Dr Sara Benali",
+                           medecin_specialite="Médecine générale", creneau=heure, niveau=4,
+                           texte_libre="Douleur dans la poitrine", explication="Score élevé", **champs)
+
+
+class EmailsDeRendezVousTests(SimpleTestCase):
+    def test_confirmation_donne_medecin_jour_heure_et_lien(self):
+        self.assertTrue(notifications.rendez_vous_fixe(_demande(), "http://testserver/patients/triage/abc123/"))
+        message = _mail.outbox[0]
+        self.assertEqual(message.to, ["amel@example.com"])
+        self.assertIn("confirmé", message.subject)
+        for attendu in ("Dr Sara Benali", "Médecine générale", "mardi 3 novembre 2026", "10:30", "http://testserver/patients/triage/abc123/"):
+            self.assertIn(attendu, message.body)
+
+    def test_aucune_donnee_medicale_dans_le_message(self):
+        notifications.rendez_vous_fixe(_demande(), "http://testserver/x/")
+        notifications.rendez_vous_annule(_demande())
+        for message in _mail.outbox:
+            for interdit in ("poitrine", "Score", "niveau", "urgent", "symptôme"):
+                self.assertNotIn(interdit, message.subject + message.body)
+
+    def test_heure_modifiee_est_annoncee_comme_telle(self):
+        notifications.rendez_vous_fixe(_demande(), "http://testserver/x/", modifie=True)
+        self.assertIn("modifié", _mail.outbox[0].subject)
+
+    def test_annulation_rappelle_l_heure_annulee(self):
+        self.assertTrue(notifications.rendez_vous_annule(_demande()))
+        self.assertIn("annulé", _mail.outbox[0].subject)
+        self.assertIn("3 novembre 2026", _mail.outbox[0].body)
+
+    def test_pas_d_email_sans_heure_fixee(self):
+        """Une simple estimation (file d'attente) ne déclenche jamais de message."""
+        self.assertFalse(notifications.rendez_vous_fixe(_demande(creneau=False), "http://testserver/x/"))
+        self.assertFalse(notifications.rendez_vous_annule(_demande(creneau=False)))
+        self.assertEqual(_mail.outbox, [])
+
+    def test_pas_d_email_si_le_patient_n_a_pas_d_adresse(self):
+        self.assertFalse(notifications.rendez_vous_fixe(_demande(email=""), "http://testserver/x/"))
+        self.assertEqual(_mail.outbox, [])
+
+    def test_une_panne_d_envoi_ne_bloque_pas_le_rendez_vous(self):
+        with _mock.patch.object(notifications, "send_mail", side_effect=OSError("serveur injoignable")):
+            with self.assertLogs(notifications.journal, level="ERROR"):
+                self.assertFalse(notifications.rendez_vous_fixe(_demande(), "http://testserver/x/"))
+
+    def test_les_vues_envoient_aux_bons_moments(self):
+        source = (Path(__file__).resolve().parent / "views.py").read_text(encoding="utf-8")
+        self.assertIn("notifications.rendez_vous_fixe(", source.split("def creneaux(")[1].split("def _demandes_actives")[0])
+        self.assertIn("notifications.rendez_vous_annule(", source.split("def annuler(")[1].split("def transferer")[0])
+        self.assertNotIn("notifications.", source.split("def creneau_retirer(")[1].split("def file_medecin_test")[0])
+        admin_vues = (Path(__file__).resolve().parent.parent / "backoffice" / "views.py").read_text(encoding="utf-8")
+        self.assertIn("notifications.rendez_vous_annule(", admin_vues.split("def rendez_vous_detail(")[1].split("def _villes")[0])

@@ -1,0 +1,16 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+Votre rendez-vous est fixé :
+
+  Médecin : {{ triage.medecin_nom }}{% if triage.medecin_specialite %} ({{ triage.medecin_specialite }}){% endif %}
+  Date : {{ creneau|date:"l j F Y" }}
+  Heure : {{ creneau|time:"H:i" }}
+
+Merci d'arriver quelques minutes avant l'heure prévue.
+Vous pouvez consulter ou changer ce rendez-vous depuis votre espace :
+{{ lien }}
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

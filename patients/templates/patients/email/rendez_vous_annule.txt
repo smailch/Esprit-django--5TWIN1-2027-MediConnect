@@ -1,0 +1,8 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+Votre rendez-vous avec {{ triage.medecin_nom }} prévu le {{ creneau|date:"l j F Y" }} à {{ creneau|time:"H:i" }} est annulé.
+
+Si vous avez encore besoin d'une consultation, vous pouvez refaire une demande depuis votre espace MediConnect.
+
+L'équipe MediConnect
+{% endautoescape %}

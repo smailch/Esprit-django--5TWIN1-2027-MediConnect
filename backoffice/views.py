@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404, proteger_tableur
 from ia import decision as decision_ia, modele as modele_ia
-from patients import analyse_service, compte as gestion_compte, ia_client, medecins_test, suivi
+from patients import analyse_service, compte as gestion_compte, ia_client, medecins_test, notifications, suivi
 from patients.models import (
     Allergie,
     Consultation,
@@ -106,10 +106,13 @@ def rendez_vous_detail(request, pk):
     compte_rendu = ConsultationForm(instance=consultation_pour(triage), prefix="cr")
     if request.method == "POST" and form.is_valid():
         termine = form.cleaned_data["statut"] == Triage.Statut.TERMINE
+        annule_maintenant = form.cleaned_data["statut"] == Triage.Statut.ANNULE and "statut" in form.changed_data
         if termine:  # un rendez-vous terminé a son compte rendu : c'est lui qui alimente le dossier du patient
             compte_rendu = ConsultationForm(request.POST, instance=compte_rendu.instance, prefix="cr")
         if not termine or compte_rendu.is_valid():
             form.save()
+            if annule_maintenant:
+                notifications.rendez_vous_annule(triage)
             if termine:
                 compte_rendu.save()
             messages.success(request, "La demande a été mise à jour." + (" Le compte rendu est dans le dossier du patient." if termine else ""))
