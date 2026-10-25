@@ -29,6 +29,17 @@
       </dl>
     </section>
 
+    {% if i.statut == 'realisee' and i.niveau_alerte %}
+    <section class="panel panel-pad" aria-labelledby="titre-alerte">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="titre-alerte" class="section-title">Alertes du compte rendu</h2>
+        {% include "infirmiers/_niveau.html" with niveau=i.niveau_alerte libelle=i.get_niveau_alerte_display %}
+      </div>
+      {% include "infirmiers/_signes.html" with signes=i.signes_alerte %}
+      <p class="muted mt-4 text-xs">{% if i.analyse_ia == 'ok' %}Note lue par les règles et par l'IA.{% else %}Note lue par les règles.{% endif %} Un repère, pas un diagnostic.</p>
+    </section>
+    {% endif %}
+
     {% if i.statut == 'realisee' %}
     <section class="panel panel-pad" aria-labelledby="titre-cr">
       <h2 id="titre-cr" class="section-title">Compte rendu</h2>

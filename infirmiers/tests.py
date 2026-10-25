@@ -12,9 +12,10 @@ from django.utils import timezone
 
 from core.models import User
 from core.views import ConnexionView
+from patients import ia_client
 from patients.models import ConstantesVitales, Patient
 
-from . import views
+from . import alertes, ia_soin, views
 from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, TypeSoin
 
@@ -476,3 +477,205 @@ class AdminTests(SimpleTestCase):
         for modele in (Infirmier, InterventionDomicile):
             with self.subTest(modele=modele.__name__):
                 self.assertEqual(admin.site._registry[modele].check(), [])
+
+
+# --- Compte rendu intelligent : règles ----------------------------------------------------------------
+
+
+class ExtraireConstantesTests(SimpleTestCase):
+    def valeurs(self, texte):
+        return {nom: v for nom, (v, _) in alertes.extraire_constantes(texte).items()}
+
+    def test_ecritures_courantes(self):
+        cas = {
+            "T 38,4, TA 150/90, pouls 98, sat 93 %": {
+                "temperature": 38.4, "tension_systolique": 150, "tension_diastolique": 90, "frequence_cardiaque": 98, "saturation_oxygene": 93,
+            },
+            "Température : 37.2 °C ; tension artérielle 128/76 ; FC=72 ; SpO2 97%": {
+                "temperature": 37.2, "tension_systolique": 128, "tension_diastolique": 76, "frequence_cardiaque": 72, "saturation_oxygene": 97,
+            },
+            "Fébrile à 38,9° ce matin, 110 bpm": {"temperature": 38.9, "frequence_cardiaque": 110},
+        }
+        for texte, attendu in cas.items():
+            with self.subTest(texte):
+                self.assertEqual(self.valeurs(texte), attendu)
+
+    def test_tension_en_centimetres_de_mercure(self):
+        self.assertEqual(self.valeurs("TA 15/9"), {"tension_systolique": 150, "tension_diastolique": 90})
+
+    def test_valeurs_improbables_ignorees(self):
+        self.assertEqual(self.valeurs("T 85, TA 90/150, sat 120 %"), {})
+
+    def test_extrait_cite_le_texte(self):
+        self.assertEqual(alertes.extraire_constantes("RAS. TA 15/9 au repos.")["tension_systolique"][1], "TA 15/9")
+
+    def test_note_vide(self):
+        self.assertEqual(alertes.extraire_constantes(""), {})
+
+
+class SignesDuTexteTests(SimpleTestCase):
+    def noms(self, texte):
+        return {s.nom: s.extrait for s in alertes.signes_du_texte(texte)}
+
+    def test_signes_reperes_avec_leur_extrait(self):
+        noms = self.noms("Plaie un peu rouge et chaude. Patiente essoufflée, Œdème des chevilles, elle n'a pas pris son traitement.")
+        self.assertEqual(noms, {
+            "Signes d'infection de la plaie": "rouge et chaude",
+            "Difficulté respiratoire": "essoufflée",
+            "Œdème": "Œdème",
+            "Traitement non pris": "n'a pas pris",
+        })
+
+    def test_signe_nie_ou_d_un_proche_ecarte(self):
+        self.assertEqual(self.noms("Pas de rougeur, pas de fièvre. Son mari est tombé hier."), {})
+
+    def test_gravite_et_origine(self):
+        signe = alertes.signes_du_texte("Saignement au point de ponction")[0]
+        self.assertEqual((signe.gravite, signe.origine), ("signaler", "texte"))
+
+
+class SeuilsEtEvolutionTests(SimpleTestCase):
+    def test_seuils(self):
+        cas = {
+            "temperature": ((38.2, "surveiller"), (39.8, "signaler"), (35, "signaler"), (37, None)),
+            "saturation_oxygene": ((93, "surveiller"), (88, "signaler"), (97, None)),
+            "frequence_cardiaque": ((105, "surveiller"), (130, "signaler"), (70, None)),
+        }
+        for nom, valeurs in cas.items():
+            for valeur, attendu in valeurs:
+                with self.subTest(nom=nom, valeur=valeur):
+                    signes = alertes.signes_des_constantes({nom: valeur})
+                    self.assertEqual(signes[0].gravite if signes else None, attendu)
+
+    def test_tension_un_seul_signe_le_plus_grave(self):
+        signes = alertes.signes_des_constantes({"tension_systolique": 150, "tension_diastolique": 112})
+        self.assertEqual([(s.nom, s.gravite, s.extrait) for s in signes], [("Tension très élevée", "signaler", "TA 150/112 mmHg")])
+
+    def test_extrait_de_la_note_prefere(self):
+        signe = alertes.signes_des_constantes({"temperature": 38.4}, {"temperature": "T 38,4"})[0]
+        self.assertEqual(signe.extrait, "T 38,4")
+
+    def test_degradation_sur_trois_releves(self):
+        signes = alertes.signes_d_evolution([{"tension_systolique": 130}, {"tension_systolique": 142}], {"tension_systolique": 150})
+        self.assertEqual(len(signes), 1)
+        self.assertEqual(signes[0].origine, "evolution")
+        self.assertIn("130 → 142 → 150", signes[0].extrait)
+
+    def test_saturation_en_baisse(self):
+        signes = alertes.signes_d_evolution([{"saturation_oxygene": 97}, {"saturation_oxygene": 95}], {"saturation_oxygene": 92})
+        self.assertEqual([s.nom for s in signes], ["Saturation en baisse"])
+
+    def test_pas_d_evolution_signalee(self):
+        cas = {
+            "trop peu de relevés": ([{"tension_systolique": 150}], {"tension_systolique": 160}),
+            "pas toujours en hausse": ([{"tension_systolique": 150}, {"tension_systolique": 140}], {"tension_systolique": 155}),
+            "sous le seuil": ([{"tension_systolique": 110}, {"tension_systolique": 120}], {"tension_systolique": 130}),
+        }
+        for nom, (historique, actuelles) in cas.items():
+            with self.subTest(nom):
+                self.assertEqual(alertes.signes_d_evolution(historique, actuelles), [])
+
+    def test_niveau_et_fusion(self):
+        a = alertes.Signe("Fièvre", "frissons", "surveiller", "texte")
+        b = alertes.Signe("Fièvre", "T 39,8", "signaler", "constantes")
+        c = alertes.Signe("Chute", "chute", "surveiller", "ia")
+        fusion = alertes.fusionner([a, c], [b])
+        self.assertEqual([(s.nom, s.gravite) for s in fusion], [("Fièvre", "signaler"), ("Chute", "surveiller")])
+        self.assertEqual(alertes.niveau(fusion), "signaler")
+        self.assertEqual(alertes.niveau([]), "ras")
+
+
+# --- Compte rendu intelligent : IA et garde-fous -------------------------------------------------------
+
+
+def reponse_ia(**donnees):
+    return mock.patch("infirmiers.ia_soin._appel", return_value=ia_client.ResultatIA(ia_client.OK, donnees))
+
+
+class GardeFousIATests(SimpleTestCase):
+    NOTE = "Le pourtour de la plaie est enflammé. Thermomètre à 38 et 6. Tension 16/10."
+
+    def test_constantes_acceptees(self):
+        brut = {
+            "temperature": {"valeur": 38.6, "extrait": "Thermomètre à 38 et 6"},
+            "tension_systolique": {"valeur": 160, "extrait": "Tension 16/10"},
+        }
+        self.assertEqual(ia_soin.constantes_valides(brut, self.NOTE), {
+            "temperature": (38.6, "Thermomètre à 38 et 6"), "tension_systolique": (160.0, "Tension 16/10"),
+        })
+
+    def test_constantes_refusees(self):
+        cas = {
+            "chiffre inventé": {"temperature": {"valeur": 39.2, "extrait": "Thermomètre à 38 et 6"}},
+            "extrait absent de la note": {"frequence_cardiaque": {"valeur": 90, "extrait": "pouls 90"}},
+            "valeur improbable": {"saturation_oxygene": {"valeur": 160, "extrait": "Tension 16/10"}},
+            "constante inconnue": {"glycemie": {"valeur": 1.2, "extrait": "Tension 16/10"}},
+            "booléen": {"temperature": {"valeur": True, "extrait": "Thermomètre à 38 et 6"}},
+            "format libre": {"temperature": "38,6"},
+        }
+        for nom, brut in cas.items():
+            with self.subTest(nom):
+                self.assertEqual(ia_soin.constantes_valides(brut, self.NOTE), {})
+
+    def test_le_nom_du_patient_n_est_pas_envoye(self):
+        note = ia_soin.anonymiser_note("Mme Trabelsi va mieux, appeler Amel au 20 111 222.", ("Amel", "Trabelsi"))
+        self.assertNotIn("Trabelsi", note)
+        self.assertNotIn("Amel", note)
+        self.assertNotIn("111", note)
+
+    def test_signes_de_l_ia_valides(self):
+        signes = [
+            {"nom": "Signes d'infection de la plaie", "extrait": "pourtour de la plaie est enflammé"},
+            {"nom": "Cancer", "extrait": "pourtour de la plaie est enflammé"},  # hors catalogue
+            {"nom": "Chute", "extrait": "est tombée dans la cuisine"},  # citation inventée
+        ]
+        with reponse_ia(constantes={}, signes=signes):
+            analyse = ia_soin.analyser(self.NOTE)
+        self.assertEqual(analyse.statut_ia, "ok")
+        self.assertEqual([s.nom for s in analyse.signes if s.origine == "ia"], ["Signes d'infection de la plaie"])
+        self.assertEqual(analyse.niveau, "signaler")
+
+    def test_les_regles_gardent_la_priorite_sur_les_constantes(self):
+        with reponse_ia(constantes={"tension_systolique": {"valeur": 16, "extrait": "Tension 16/10"}}, signes=[]):
+            analyse = ia_soin.analyser(self.NOTE)
+        self.assertEqual(analyse.constantes["tension_systolique"][0], 160.0)
+
+    def test_panne_de_l_ia_analyse_par_regles(self):
+        with mock.patch("infirmiers.ia_soin._appel", return_value=ia_client.ResultatIA(ia_client.DELAI)):
+            analyse = ia_soin.analyser("Patiente essoufflée. T 38,4.")
+        self.assertEqual(analyse.statut_ia, "delai")
+        self.assertFalse(analyse.ia_utilisee)
+        self.assertIn("règles uniquement", analyse.message_ia)
+        self.assertEqual({s.nom for s in analyse.signes}, {"Difficulté respiratoire", "Fièvre"})
+
+    def test_sans_ia(self):
+        analyse = ia_soin.analyser("Injection faite, RAS. T 37,1.", utiliser_ia=False)
+        self.assertEqual((analyse.niveau, analyse.libelle, analyse.signes), ("ras", "RAS", []))
+
+    def test_valeur_corrigee_par_l_infirmier(self):
+        """38,4 écrit dans la note mais corrigé en 37,6 : ni seuil de fièvre ni signe tiré de « T 38,4 »."""
+        analyse = ia_soin.analyser("Frissons. T 38,4.", constantes={"temperature": Decimal("37.6")}, utiliser_ia=False)
+        self.assertEqual([(s.nom, s.extrait) for s in analyse.signes], [("Fièvre", "Frissons")])
+
+    def test_evolution_prise_en_compte(self):
+        historique = [{"saturation_oxygene": 97}, {"saturation_oxygene": 95}]
+        analyse = ia_soin.analyser("RAS. Sat 93 %.", historique=historique, utiliser_ia=False)
+        self.assertIn("Saturation en baisse", {s.nom for s in analyse.signes})
+
+
+class TerminerAvecAnalyseTests(SansBaseMixin, SimpleTestCase):
+    def test_signes_enregistres_dans_l_intervention(self):
+        it = une_intervention()
+        it.accepter(un_infirmier(), plus_tard())
+        analyse = ia_soin.analyser("Patiente essoufflée. T 38,4.", utiliser_ia=False)
+        it.terminer("Patiente essoufflée. T 38,4.", ConstantesVitales(temperature=Decimal("38.4")), analyse=analyse)
+        self.assertEqual((it.niveau_alerte, it.analyse_ia), ("signaler", "non_configuree"))
+        self.assertTrue(it.a_signaler)
+        self.assertEqual({(s.nom, s.origine) for s in it.signes_alerte}, {("Difficulté respiratoire", "texte"), ("Fièvre", "constantes")})
+        self.assertEqual(it.releves(), {"temperature": 38.4})
+
+    def test_sans_analyse_rien_n_est_note(self):
+        it = une_intervention()
+        it.accepter(un_infirmier(), plus_tard())
+        it.terminer("Fait.")
+        self.assertEqual((it.niveau_alerte, it.signes_alerte, it.releves()), ("", [], {}))

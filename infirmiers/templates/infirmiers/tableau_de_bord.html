@@ -32,6 +32,25 @@
   <div class="panel kpi"><p class="kpi-num">{{ kpis.realisees_mois }}</p><p class="kpi-label">Soins réalisés ce mois-ci</p></div>
 </section>
 
+{% if alertes_recentes %}
+<section class="panel mt-6" aria-labelledby="titre-alertes">
+  <h2 id="titre-alertes" class="section-title px-5 pt-5">Patients à suivre <span class="count">{{ alertes_recentes|length }}</span></h2>
+  <p class="muted px-5 pt-1 text-sm">Alertes relevées dans vos comptes rendus des 7 derniers jours.</p>
+  <ul class="mt-2">
+    {% for i in alertes_recentes %}
+    <li class="item-row">
+      <div>
+        <p class="item-name"><a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.patient }}</a><span class="muted"> · {{ i.get_type_soin_display }}</span></p>
+        <p class="muted mt-1 text-sm">{{ i.realisee_le|date:"D j M à H:i" }} · {% for s in i.signes_alerte %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+      </div>
+      {% include "infirmiers/_niveau.html" with niveau=i.niveau_alerte libelle=i.get_niveau_alerte_display %}
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="pb-3"></div>
+</section>
+{% endif %}
+
 {% if a_cloturer %}
 <section class="panel mt-6" aria-labelledby="titre-cloturer">
   <h2 id="titre-cloturer" class="section-title px-5 pt-5">Comptes rendus à saisir <span class="count">{{ a_cloturer|length }}</span></h2>

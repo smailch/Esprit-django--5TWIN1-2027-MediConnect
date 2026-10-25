@@ -11,9 +11,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
+from patients.models import Mesure
 
+from . import ia_soin
 from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
-from .models import Infirmier, InterventionDomicile, TypeSoin
+from .models import Infirmier, InterventionDomicile, NiveauAlerte, TypeSoin
 
 Statut = InterventionDomicile.Statut
 
@@ -67,8 +69,17 @@ def tableau_de_bord(request):
     debut_mois = timezone.make_aware(datetime.datetime.combine(aujourdhui.replace(day=1), datetime.time.min))
     realisees_mois = InterventionDomicile.objects.de(infirmier).filter(statut=Statut.REALISEE, realisee_le__gte=debut_mois).count()
     demandes = InterventionDomicile.objects.demandes_pour(infirmier)
+    alertes_recentes = sorted(
+        InterventionDomicile.objects.de(infirmier).filter(
+            statut=Statut.REALISEE,
+            niveau_alerte__in=[NiveauAlerte.SIGNALER, NiveauAlerte.SURVEILLER],
+            realisee_le__gte=maintenant - datetime.timedelta(days=7),
+        ).select_related("patient__user"),
+        key=lambda i: (i.niveau_alerte != NiveauAlerte.SIGNALER, -i.realisee_le.timestamp()),
+    )
     return render(request, "infirmiers/tableau_de_bord.html", {
         "infirmier": infirmier,
+        "alertes_recentes": alertes_recentes,
         "a_cloturer": a_cloturer,
         "du_jour": du_jour,
         "a_venir": a_venir[:5],
@@ -199,23 +210,88 @@ def replanifier(request, pk):
     return render(request, "infirmiers/replanifier.html", {"intervention": intervention, "form": form})
 
 
+_MESURES_SUIVIES = {
+    Mesure.Type.TEMPERATURE: "temperature",
+    Mesure.Type.TENSION: "tension_systolique",
+    Mesure.Type.FREQUENCE: "frequence_cardiaque",
+    Mesure.Type.SATURATION: "saturation_oxygene",
+}
+
+
+def _historique(intervention):
+    """Relevés précédents du patient, du plus ancien au plus récent : constantes des passages infirmiers
+    déjà terminés et mesures saisies par le patient lui-même."""
+    releves = [
+        (i.realisee_le, i.releves())
+        for i in InterventionDomicile.objects.filter(patient=intervention.patient, statut=Statut.REALISEE).exclude(pk=intervention.pk)
+        if i.realisee_le and i.constantes is not None
+    ]
+    for m in Mesure.objects.filter(patient=intervention.patient, type__in=list(_MESURES_SUIVIES)):
+        valeurs = {_MESURES_SUIVIES[m.type]: m.valeur}
+        if m.type == Mesure.Type.TENSION and m.valeur2 is not None:
+            valeurs["tension_diastolique"] = m.valeur2
+        releves.append((m.mesure_le, valeurs))
+    return [valeurs for _, valeurs in sorted(releves, key=lambda r: r[0])]
+
+
+def _analyser(intervention, infirmier, texte, constantes=None):
+    user = intervention.patient.user
+    return ia_soin.analyser(
+        texte,
+        constantes=constantes,
+        historique=_historique(intervention),
+        noms_patient=(user.first_name, user.last_name),
+        identifiant=f"infirmier:{infirmier.pk}",
+    )
+
+
+def _valeur_de_champ(valeur):
+    return f"{valeur:g}"
+
+
 @login_required
 def terminer(request, pk):
-    _, intervention = _mon_intervention(request, pk)
+    """« Analyser » : lit la note (règles + IA), pré-remplit les constantes vides et montre les alertes, sans rien
+    enregistrer. « Enregistrer » : analyse la version finale (constantes relues par l'infirmier) et clôt l'intervention."""
+    infirmier, intervention = _mon_intervention(request, pk)
     if intervention.statut != Statut.ACCEPTEE:
         messages.error(request, "Le compte rendu ne peut être saisi que pour une intervention acceptée.")
         return redirect("infirmiers:intervention", pk=pk)
-    form = CompteRenduForm(request.POST if request.method == "POST" else None)
-    if request.method == "POST" and form.is_valid():
-        try:
-            intervention.terminer(form.cleaned_data["compte_rendu"], form.constantes(), form.cleaned_data["realisee_le"])
-        except ValidationError as erreur:
-            form.add_error(None, _message_erreur(erreur))
-        else:
-            intervention.save()
-            messages.success(request, "Compte rendu enregistré : l'intervention est terminée.")
-            return redirect("infirmiers:intervention", pk=pk)
-    return render(request, "infirmiers/compte_rendu.html", {"intervention": intervention, "form": form})
+
+    analyse, preremplis = None, []
+    if request.method == "POST" and request.POST.get("action") == "analyser":
+        analyse = _analyser(intervention, infirmier, request.POST.get("compte_rendu", ""))
+        initial = {nom: request.POST.get(nom, "") for nom in CompteRenduForm.base_fields}
+        for nom, (valeur, _, _) in analyse.constantes.items():
+            if not initial.get(nom, "").strip():
+                initial[nom] = _valeur_de_champ(valeur)
+                preremplis.append(nom)
+        form = CompteRenduForm(initial=initial)
+    else:
+        form = CompteRenduForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and form.is_valid():
+            constantes = form.constantes()
+            analyse = _analyser(
+                intervention, infirmier, form.cleaned_data["compte_rendu"],
+                constantes={n: form.cleaned_data[n] for n in CompteRenduForm.CONSTANTES},
+            )
+            try:
+                intervention.terminer(form.cleaned_data["compte_rendu"], constantes, form.cleaned_data["realisee_le"], analyse=analyse)
+            except ValidationError as erreur:
+                form.add_error(None, _message_erreur(erreur))
+            else:
+                intervention.save()
+                if analyse.niveau == NiveauAlerte.SIGNALER:
+                    messages.warning(request, "Compte rendu enregistré. Des signes d'alerte sont à signaler au médecin.")
+                else:
+                    messages.success(request, "Compte rendu enregistré : l'intervention est terminée.")
+                return redirect("infirmiers:intervention", pk=pk)
+    return render(request, "infirmiers/compte_rendu.html", {
+        "intervention": intervention,
+        "form": form,
+        "analyse": analyse,
+        "preremplis": [form[n].label for n in preremplis],
+    })
 
 
 @login_required

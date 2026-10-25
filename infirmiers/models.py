@@ -2,7 +2,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from django_mongodb_backend.fields import ArrayField, EmbeddedModelField
+from django_mongodb_backend.fields import ArrayField, EmbeddedModelArrayField, EmbeddedModelField
+from django_mongodb_backend.models import EmbeddedModel
 
 from patients.models import ConstantesVitales, Consultation, Patient
 
@@ -17,6 +18,30 @@ class TypeSoin(models.TextChoices):
     SURVEILLANCE = "surveillance", "Surveillance des constantes"
     HYGIENE = "hygiene", "Soins d'hygiène"
     AUTRE = "autre", "Autre soin"
+
+
+class NiveauAlerte(models.TextChoices):
+    """Résultat de l'analyse du compte rendu (voir alertes.py) : un repère pour le médecin, pas un diagnostic."""
+
+    RAS = "ras", "RAS"
+    SURVEILLER = "surveiller", "À surveiller"
+    SIGNALER = "signaler", "À signaler au médecin"
+
+
+class SigneAlerte(EmbeddedModel):
+    """Un signe d'alerte relevé dans le compte rendu, avec ce qui le justifie. Enregistré dans le document de
+    l'intervention : l'historique reste stable même si le catalogue des signes change ensuite."""
+
+    class Origine(models.TextChoices):
+        TEXTE = "texte", "Note (règles)"
+        IA = "ia", "Note (IA)"
+        CONSTANTES = "constantes", "Constantes"
+        EVOLUTION = "evolution", "Évolution"
+
+    nom = models.CharField(max_length=100)
+    extrait = models.CharField(max_length=200, help_text="Passage de la note ou valeurs qui justifient le signe.")
+    gravite = models.CharField(max_length=10, choices=NiveauAlerte.choices)
+    origine = models.CharField(max_length=12, choices=Origine.choices)
 
 
 def _ville_normalisee(ville):
@@ -142,6 +167,13 @@ class InterventionDomicile(models.Model):
     realisee_le = models.DateTimeField(null=True, blank=True)
     compte_rendu = models.TextField("Compte rendu de soin", blank=True)
     constantes = EmbeddedModelField(ConstantesVitales, null=True, blank=True)
+    niveau_alerte = models.CharField(
+        "Niveau d'alerte", max_length=10, choices=NiveauAlerte.choices, blank=True, help_text="Vide : pas encore analysé."
+    )
+    signes_alerte = EmbeddedModelArrayField(SigneAlerte, default=list, blank=True)
+    analyse_ia = models.CharField(
+        "Statut de l'IA", max_length=20, blank=True, help_text="« ok » si l'IA a lu la note, sinon la raison (désactivée, délai…)."
+    )
     annulee_le = models.DateTimeField(null=True, blank=True)
     motif_annulation = models.CharField("Motif d'annulation", max_length=200, blank=True)
 
@@ -246,15 +278,36 @@ class InterventionDomicile(models.Model):
             raise ValidationError("Seule une intervention acceptée peut être rendue.")
         self._passer(infirmier=None, date_prevue=None, acceptee_le=None, statut=self.Statut.DEMANDEE)
 
-    def terminer(self, compte_rendu, constantes=None, realisee_le=None):
+    def terminer(self, compte_rendu, constantes=None, realisee_le=None, analyse=None):
+        """analyse : résultat de ia_soin.analyser() (niveau, signes, statut_ia), enregistré avec le compte rendu."""
         if self.statut != self.Statut.ACCEPTEE:
             raise ValidationError("Seule une intervention acceptée peut être terminée.")
-        self._passer(
-            compte_rendu=(compte_rendu or "").strip(),
-            constantes=constantes,
-            realisee_le=realisee_le or timezone.now(),
-            statut=self.Statut.REALISEE,
-        )
+        valeurs = {
+            "compte_rendu": (compte_rendu or "").strip(),
+            "constantes": constantes,
+            "realisee_le": realisee_le or timezone.now(),
+            "statut": self.Statut.REALISEE,
+        }
+        if analyse is not None:
+            valeurs.update(
+                niveau_alerte=analyse.niveau,
+                signes_alerte=[
+                    SigneAlerte(nom=s.nom, extrait=s.extrait[:200], gravite=s.gravite, origine=s.origine) for s in analyse.signes
+                ],
+                analyse_ia=analyse.statut_ia,
+            )
+        self._passer(**valeurs)
+
+    @property
+    def a_signaler(self):
+        return self.niveau_alerte == NiveauAlerte.SIGNALER
+
+    def releves(self):
+        """{nom: valeur} des constantes de ce passage (pour comparer les passages entre eux)."""
+        if self.constantes is None:
+            return {}
+        noms = ("temperature", "tension_systolique", "tension_diastolique", "frequence_cardiaque", "saturation_oxygene")
+        return {n: float(getattr(self.constantes, n)) for n in noms if getattr(self.constantes, n) is not None}
 
     def annuler(self, motif):
         if not self.est_modifiable:

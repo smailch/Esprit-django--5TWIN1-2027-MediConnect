@@ -1,0 +1,18 @@
+{# Liste des signes d'alerte avec leur justification. Paramètre : signes (SigneAlerte enregistrés ou alertes.Signe). #}
+{% if signes %}
+<ul class="mt-4 space-y-3">
+  {% for s in signes %}
+  <li class="flex flex-wrap items-start justify-between gap-2 text-sm">
+    <div>
+      <p class="font-medium">{{ s.nom }}</p>
+      <p class="muted mt-0.5">« {{ s.extrait }} »
+        <span class="tag {% if s.origine == 'ia' %}tag-ia{% endif %}">{% if s.origine == 'ia' %}IA{% elif s.origine == 'texte' %}note{% elif s.origine == 'constantes' %}constantes{% else %}évolution{% endif %}</span>
+      </p>
+    </div>
+    {% if s.gravite == 'signaler' %}{% include "infirmiers/_niveau.html" with niveau="signaler" libelle="À signaler" %}{% else %}{% include "infirmiers/_niveau.html" with niveau="surveiller" libelle="À surveiller" %}{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted mt-3 text-sm">Aucun signe d'alerte repéré.</p>
+{% endif %}

@@ -41,9 +41,9 @@ class InfirmierAdmin(admin.ModelAdmin):
 
 @admin.register(InterventionDomicile)
 class InterventionDomicileAdmin(admin.ModelAdmin):
-    list_display = ("__str__", "infirmier", "ville", "date_souhaitee", "date_prevue", "statut", "cree_le")
+    list_display = ("__str__", "infirmier", "ville", "date_souhaitee", "date_prevue", "statut", "niveau_alerte", "cree_le")
     list_select_related = ("patient__user", "infirmier__user")
-    list_filter = ("statut", "type_soin", "moment", "date_souhaitee")
+    list_filter = ("statut", "niveau_alerte", "type_soin", "moment", "date_souhaitee")
     search_fields = (
         "patient__user__last_name",
         "patient__user__first_name",
@@ -58,6 +58,7 @@ class InterventionDomicileAdmin(admin.ModelAdmin):
         ("Demande", {"fields": ("patient", "consultation", "type_soin", "description", "adresse", "ville", "date_souhaitee", "moment")}),
         ("Prise en charge", {"fields": ("statut", "infirmier", "date_prevue", "acceptee_le")}),
         ("Compte rendu", {"fields": ("realisee_le", "compte_rendu", "constantes")}),
+        ("Alertes du compte rendu", {"fields": ("niveau_alerte", "signes_alerte", "analyse_ia")}),
         ("Annulation", {"fields": ("annulee_le", "motif_annulation")}),
         ("Suivi", {"fields": ("cree_le", "modifie_le")}),
     )

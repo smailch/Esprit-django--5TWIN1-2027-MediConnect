@@ -21,6 +21,7 @@
         <th scope="col">Patient</th>
         <th scope="col">Ville</th>
         <th scope="col">Statut</th>
+        <th scope="col">Alerte</th>
       </tr>
     </thead>
     <tbody>
@@ -31,6 +32,7 @@
         <td>{{ i.patient }}</td>
         <td>{{ i.ville }}</td>
         <td>{% include "infirmiers/_statut.html" %}</td>
+        <td>{% if i.niveau_alerte %}{% include "infirmiers/_niveau.html" with niveau=i.niveau_alerte libelle=i.get_niveau_alerte_display %}{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
