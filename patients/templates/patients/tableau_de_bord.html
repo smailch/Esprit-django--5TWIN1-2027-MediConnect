@@ -35,7 +35,8 @@
         <p class="mt-4"><a href="{% url 'patients:creneaux' t.pk %}" class="abtn abtn-primary"><i aria-hidden="true" data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir le jour et l'heure</a></p>
         {% endif %}
         {% if t.statut == "en_consultation" %}
-        <p class="mt-4 text-sm">Votre consultation est en cours.</p>
+        <p class="mt-4 text-sm">{{ t.medecin_nom }} a commencé la consultation. Vous entrez dans la même salle.</p>
+        <p class="mt-3"><a href="{% url 'patients:visio' t.pk %}" class="abtn abtn-primary">Rejoindre la téléconsultation</a></p>
         {% else %}
         <div class="mt-4">{% include "patients/_suivi_attente.html" %}</div>
         {% endif %}

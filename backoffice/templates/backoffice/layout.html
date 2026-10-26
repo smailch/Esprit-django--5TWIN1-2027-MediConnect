@@ -16,6 +16,9 @@
 <a href="{% url 'backoffice:patients' %}" class="nav-item" {% if page == 'patients' or page == 'patient_detail' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="users" class="h-5 w-5"></i><span>Patients</span>
 </a>
+<a href="{% url 'backoffice:medecins' %}" class="nav-item" {% if page == 'medecins' or page == 'medecin_detail' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i><span>Médecins</span>
+</a>
 <a href="{% url 'backoffice:parametres' %}" class="nav-item" {% if page == 'parametres' or page == 'symptomes' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="sliders-horizontal" class="h-5 w-5"></i><span>Paramètres</span>
 </a>

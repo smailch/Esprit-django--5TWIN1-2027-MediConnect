@@ -363,9 +363,7 @@ class Triage(models.Model):
         max_length=20, choices=Statut.choices, default=Statut.EN_ATTENTE
     )
 
-    # Médecin choisi par le patient. Provisoire : valeurs issues de
-    # patients/medecins_test.py, à remplacer par une clé étrangère vers le
-    # modèle Medecin quand le module `medecins` existera.
+    # Code du médecin (`medecins.Medecin.code`).
     medecin_id = models.CharField(max_length=50)
     medecin_nom = models.CharField(max_length=150)
     medecin_specialite = models.CharField(max_length=100, blank=True)
@@ -520,8 +518,8 @@ class Triage(models.Model):
 class Consultation(models.Model):
     """Compte rendu d'une consultation terminée : l'historique médical du patient.
 
-    Saisi par l'administrateur en terminant un rendez-vous (en attendant le module des médecins), puis lu dans
-    le dossier du patient. Un rendez-vous a au plus un compte rendu."""
+    Saisi par le médecin à la fin de la téléconsultation (le back-office peut aussi le faire),
+    puis lu dans le dossier du patient. Un rendez-vous a au plus un compte rendu."""
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="consultations")
     triage = models.OneToOneField(Triage, on_delete=models.CASCADE, related_name="consultation")

@@ -1,0 +1,17 @@
+{% extends "core/layout.html" %}
+
+{% block nav %}
+{% if user.is_authenticated and user.role == "medecin" %}
+{% with page=request.resolver_match.url_name %}
+<a href="{% url 'medecins:tableau_de_bord' %}" class="nav-item" {% if page == 'tableau_de_bord' or page == 'synthese' or page == 'visio' or page == 'compte_rendu' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="list-ordered" class="h-5 w-5"></i><span>File d'attente</span>
+</a>
+<a href="{% url 'medecins:consultations' %}" class="nav-item" {% if page == 'consultations' or page == 'consultation_detail' or page == 'consultation_modifier' or page == 'consultation_supprimer' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Consultations</span>
+</a>
+<a href="{% url 'medecins:profil' %}" class="nav-item" {% if page == 'profil' or page == 'mot_de_passe' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="user" class="h-5 w-5"></i><span>Mon profil</span>
+</a>
+{% endwith %}
+{% endif %}
+{% endblock %}

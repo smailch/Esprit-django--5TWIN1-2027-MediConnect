@@ -1,6 +1,5 @@
 from django.test import SimpleTestCase
 
-from . import medecins_test
 from .triage import evaluer
 
 
@@ -50,17 +49,6 @@ class TriageTests(SimpleTestCase):
     def test_explication_mentionne_niveau_et_score(self):
         r = evaluer([sym("fièvre", 6)])
         self.assertTrue(r.explication.startswith("Niveau 4 (score 6)"))
-
-
-class MedecinsTestListe(SimpleTestCase):
-    def test_trouver(self):
-        self.assertEqual(medecins_test.trouver("m1")["nom"], "Dr Sara Benali")
-        self.assertIsNone(medecins_test.trouver("inconnu"))
-
-    def test_filtrer(self):
-        res = medecins_test.filtrer(specialite="Cardiologie")
-        self.assertEqual([m["id"] for m in res], ["m2"])
-        self.assertTrue(all(m["ville"] == "Sfax" for m in medecins_test.filtrer(ville="Sfax")))
 
 
 from .suggestions import choisir_alternatives, est_eligible  # noqa: E402
@@ -1618,23 +1606,6 @@ class PlanningReglesTests(SimpleTestCase):
     def test_regroupement_vide(self):
         self.assertEqual(planning.grouper([]), [])
 
-    def test_les_horaires_des_medecins_sont_valides(self):
-        for m in medecins_test.tous():
-            with self.subTest(medecin=m["id"]):
-                self.assertIn("horaires", m)
-                if not m["disponible"]:
-                    self.assertEqual(m["horaires"], {})
-                for jour, plages in m["horaires"].items():
-                    self.assertIn(jour, range(7))
-                    for debut, fin in plages:
-                        self.assertTrue(0 <= debut < fin <= 24)
-
-    def test_un_medecin_disponible_a_des_creneaux(self):
-        for m in medecins_test.tous():
-            if m["disponible"]:
-                with self.subTest(medecin=m["id"]):
-                    self.assertTrue(planning.generer(m["horaires"], LUNDI_8H))
-
 
 class TriageCreneauModeleTests(SimpleTestCase):
     def test_champ_facultatif(self):
@@ -1847,6 +1818,7 @@ class ParcoursCreneauTests(SimpleTestCase):
         cree = Triage(niveau=niveau, statut="en_attente")
         cree.pk = ObjectId()
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
+                mock.patch("medecins.annuaire.trouver", return_value={"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True, "horaires": {}}), \
                 mock.patch.object(vues_patients, "evaluer", return_value=resultat), \
                 mock.patch.object(Triage.objects, "create", return_value=cree):
             reponse = vues_patients.declarer_symptomes(requete, "m1")
@@ -2216,10 +2188,9 @@ class SuiviTests(SimpleTestCase):
     def test_file_vide(self):
         self.assertEqual(suivi_mod.annoter([], fa.DEFAUT), {})
 
-    def test_horaires_des_medecins(self):
-        self.assertTrue(suivi_mod.horaires_du_medecin("m1"))
+    def test_horaires_sans_profil_enregistre(self):
+        self.assertEqual(suivi_mod.horaires_du_medecin("m1"), {})
         self.assertEqual(suivi_mod.horaires_du_medecin("zzz"), {})
-        self.assertEqual(suivi_mod.horaires_du_medecin("m3"), {})  # médecin indisponible
 
 
 # --- Pages : suivi de la file, liste des médecins, grille des créneaux ------------------------------
@@ -2371,9 +2342,9 @@ class SuiviPagesTests(SimpleTestCase):
 
     def test_liste_des_medecins_avec_prochain_creneau_et_attente(self):
         medecins = [
-            dict(medecins_test.trouver("m1"), prochain_creneau=LUNDI_8H.replace(hour=10), en_attente=3),
-            dict(medecins_test.trouver("m2"), prochain_creneau=None, en_attente=1),
-            dict(medecins_test.trouver("m3"), prochain_creneau=None, en_attente=0),
+            {"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True, "prochain_creneau": LUNDI_8H.replace(hour=10), "en_attente": 3},
+            {"id": "m2", "nom": "Dr Karim Trabelsi", "specialite": "Cardiologie", "ville": "Tunis", "disponible": True, "prochain_creneau": None, "en_attente": 1},
+            {"id": "m3", "nom": "Dr Leïla Mansouri", "specialite": "Pédiatrie", "ville": "Sfax", "disponible": False, "prochain_creneau": None, "en_attente": 0},
         ]
         html = render_to_string("patients/medecins.html", {"medecins": medecins, "specialites": [], "villes": [], "specialite": "", "ville": ""}, self.requete("medecins"))
         self.assertIn("Prochain créneau", html)
@@ -2421,7 +2392,11 @@ class SuiviPagesTests(SimpleTestCase):
         p = Triage(patient=FauxPatient("Sonia Mejri"), medecin_id="m1", niveau=3, statut="en_attente", explication="x", cree_le=LUNDI_8H)
         p.pk = ObjectId()
         p.__dict__.update(self.suivi(etat="planifie", creneau=LUNDI_8H + datetime.timedelta(days=1)).__dict__)
-        html = render_to_string("patients/file_medecin.html", {"medecin": medecins_test.trouver("m1"), "demandes": [d], "planning": [p], "medecins": medecins_test.tous()}, self.requete("file_medecin_test"))
+        html = render_to_string("patients/file_medecin.html", {
+            "medecin": {"id": "m1", "nom": "Dr Sara Benali"},
+            "demandes": [d], "planning": [p],
+            "medecins": [{"id": "m1", "nom": "Dr Sara Benali"}],
+        }, self.requete("file_medecin_test"))
         self.assertIn("Rendez-vous fixés", html)
         self.assertIn("File d&#x27;attente", html.replace("File d'attente", "File d&#x27;attente"))
         self.assertIn("Sonia Mejri", html)
@@ -3575,6 +3550,7 @@ class IaTriageEtConsentementTests(AvecFauxServeurIA):
             return "ok", ["Douleur thoracique — « serre la poitrine »"]
 
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
+                mock.patch("medecins.annuaire.trouver", return_value={"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True, "horaires": {}}), \
                 mock.patch.object(vues_patients, "_symptomes_par_ia", side_effect=ajouter), \
                 mock.patch.object(vues_patients, "_lecture_du_texte", side_effect=lambda texte, niveau: (None, niveau, False)), \
                 mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
@@ -3596,6 +3572,7 @@ class IaTriageEtConsentementTests(AvecFauxServeurIA):
         cree = Triage(niveau=5, statut="en_attente")
         cree.pk = ObjectId()
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), \
+                mock.patch("medecins.annuaire.trouver", return_value={"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True, "horaires": {}}), \
                 mock.patch.object(vues_patients, "_symptomes_par_ia", return_value=("", [])), \
                 mock.patch.object(vues_patients, "_lecture_du_texte", side_effect=lambda texte, niveau: (None, niveau, False)), \
                 mock.patch.object(Triage.objects, "create", return_value=cree) as creation:
@@ -4815,6 +4792,7 @@ class DemandeAvecLectureDuTexteTests(SimpleTestCase):
         cree = Triage(niveau=2, statut="en_attente")
         cree.pk = ObjectId()
         with mock.patch.object(vues_patients, "SymptomesForm", return_value=formulaire), mock.patch.object(vues_patients, "_symptomes_par_ia", return_value=("", [])), \
+                mock.patch("medecins.annuaire.trouver", return_value={"id": "m1", "nom": "Dr Sara Benali", "specialite": "Médecine générale", "ville": "Tunis", "disponible": True, "horaires": {}}), \
                 mock.patch.object(vues_patients.modele_ia, "predire", return_value=lecture), \
                 mock.patch.object(ReglageTriageTests, "actuel", return_value=ReglageTriageTests(seuil_modele=85)), \
                 mock.patch.object(Triage.objects, "create", return_value=cree) as creation:

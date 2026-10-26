@@ -81,7 +81,7 @@ class DroitsTests(SimpleTestCase):
         self.assertEqual(self.appeler(utilisateur(role="admin", is_staff=True)).status_code, 200)
 
     def test_toutes_les_vues_sont_protegees(self):
-        for nom in ("tableau_de_bord", "rendez_vous", "rendez_vous_detail", "patients", "patient_detail", "symptomes"):
+        for nom in ("tableau_de_bord", "rendez_vous", "rendez_vous_detail", "patients", "patient_detail", "medecins", "medecin_detail", "symptomes"):
             vue = getattr(views, nom)
             requete = RequestFactory().get("/backoffice/")
             requete.user = utilisateur(role="patient")
@@ -91,7 +91,7 @@ class DroitsTests(SimpleTestCase):
                     vue(requete, *args)
 
     def test_acces_anonyme_aux_urls_reelles(self):
-        for url in ("/backoffice/", "/backoffice/rendez-vous/", "/backoffice/patients/", "/backoffice/symptomes/"):
+        for url in ("/backoffice/", "/backoffice/rendez-vous/", "/backoffice/patients/", "/backoffice/medecins/", "/backoffice/symptomes/"):
             with self.subTest(url=url):
                 reponse = self.client.get(url)
                 self.assertEqual(reponse.status_code, 302)
@@ -108,12 +108,16 @@ class UrlsTests(SimpleTestCase):
         self.assertEqual(reverse("backoffice:rendez_vous_detail", args=["abc"]), "/backoffice/rendez-vous/abc/")
         self.assertEqual(reverse("backoffice:patients"), "/backoffice/patients/")
         self.assertEqual(reverse("backoffice:patient_detail", args=["abc"]), "/backoffice/patients/abc/")
+        self.assertEqual(reverse("backoffice:medecins"), "/backoffice/medecins/")
+        self.assertEqual(reverse("backoffice:medecin_detail", args=["abc"]), "/backoffice/medecins/abc/")
         self.assertEqual(reverse("backoffice:symptomes"), "/backoffice/symptomes/")
 
     def test_chaque_adresse_pointe_vers_la_bonne_vue(self):
         self.assertIs(resolve("/backoffice/").func, views.tableau_de_bord)
         self.assertIs(resolve("/backoffice/rendez-vous/").func, views.rendez_vous)
         self.assertIs(resolve("/backoffice/patients/x/").func, views.patient_detail)
+        self.assertIs(resolve("/backoffice/medecins/").func, views.medecins)
+        self.assertIs(resolve("/backoffice/medecins/x/").func, views.medecin_detail)
 
 
 # --- Statistiques --------------------------------------------------------------------
@@ -190,11 +194,10 @@ class FormulairesTests(SimpleTestCase):
     def test_le_filtre_propose_tous_les_niveaux_et_statuts(self):
         f = FiltreRendezVousForm()
         self.assertEqual([c[0] for c in f.fields["niveau"].choices], ["", "1", "2", "3", "4", "5"])
-        self.assertEqual(
-            [c[0] for c in f.fields["statut"].choices],
+        self.assertEqual([c[0] for c in f.fields["statut"].choices],
             ["", "en_attente", "en_consultation", "termine", "annule"],
         )
-        self.assertEqual(len(f.fields["medecin"].choices), 7)  # « Tous » + 6 médecins
+        self.assertEqual(f.fields["medecin"].choices[0], ("", "Tous"))
 
     def test_l_administrateur_ne_peut_modifier_que_statut_et_niveau_medecin(self):
         self.assertEqual(list(MajRendezVousForm.base_fields), ["statut", "niveau_medecin"])
@@ -269,9 +272,9 @@ class GabaritsTests(SimpleTestCase):
             "kpis": chiffres_cles([], 0), "repartition": repartition_par_niveau([]), "derniers": [],
         }, self.requete("tableau_de_bord"))
         self.assertEqual(html.count('aria-current="page"'), 1)
-        for lien in ("/backoffice/rendez-vous/", "/backoffice/file-attente/", "/backoffice/patients/", "/backoffice/parametres/"):
+        for lien in ("/backoffice/rendez-vous/", "/backoffice/file-attente/", "/backoffice/patients/", "/backoffice/medecins/", "/backoffice/parametres/"):
             self.assertIn(f'href="{lien}"', html)
-        self.assertEqual(html.count('class="nav-item"'), 5)  # cinq entrées au plus : lisible sur mobile
+        self.assertEqual(html.count('class="nav-item"'), 6)
 
     def test_les_tableaux_ont_des_en_tetes_accessibles(self):
         html = render_to_string("backoffice/tableau_de_bord.html", {
@@ -296,7 +299,7 @@ class GabaritsTests(SimpleTestCase):
         self.assertNotIn("Pagination", render_to_string("backoffice/_pager.html", {"page": page, "parametres": ""}))
 
     def test_tous_les_gabarits_du_backoffice_existent_et_etendent_le_bon_cadre(self):
-        for nom in ("tableau_de_bord", "rendez_vous", "rendez_vous_detail", "patients", "patient_detail", "symptomes"):
+        for nom in ("tableau_de_bord", "rendez_vous", "rendez_vous_detail", "patients", "patient_detail", "medecins", "medecin_detail", "symptomes"):
             src = (RACINE / "backoffice" / "templates" / "backoffice" / f"{nom}.html").read_text(encoding="utf-8")
             with self.subTest(gabarit=nom):
                 self.assertIn('extends "backoffice/layout.html"', src)
@@ -1083,3 +1086,191 @@ class ModeleTexteBackofficeTests(SimpleTestCase):
         sans = RendezVousDetailConsultationTests()
         t2 = sans.triage()
         self.assertNotIn("Lecture du texte par le modèle", sans.appeler(t2)[0].content.decode())
+
+
+# --- Médecins (liste, fiche, validation, compte, prise de rendez-vous) ----------------
+from medecins.models import Medecin, PlageHoraire  # noqa: E402
+from .forms import FiltreMedecinForm  # noqa: E402
+
+
+def un_medecin(prenom="Sara", nom="Benali", actif=True, valide=False, disponible=True, staff=False, code="sara"):
+    """Médecin non enregistré, avec son compte (aucun accès à la base)."""
+    medecin = Medecin(
+        pk=ObjectId_(), code=code, specialite="Cardiologie", ville="Sfax", telephone="22111333",
+        numero_ordre="ORD-9", disponible=disponible, presentation="Consultations sur rendez-vous.",
+    )
+    medecin.user = User(
+        username=prenom.lower(), first_name=prenom, last_name=nom, email=f"{prenom.lower()}@exemple.tn",
+        is_active=actif, is_staff=staff, est_valide=valide,
+    )
+    medecin.cree_le = datetime.datetime(2026, 9, 1, 9, 0, tzinfo=TUNIS_)
+    medecin.plages = [PlageHoraire(jour=0, debut=8, fin=12), PlageHoraire(jour=0, debut=14, fin=17)]
+    return medecin
+
+
+class FiltreMedecinFormulaireTests(SimpleTestCase):
+    def filtre(self, donnees=None):
+        return FiltreMedecinForm(donnees, specialites=("Cardiologie",), villes=("Sfax", "Tunis"))
+
+    def appliquer(self, donnees):
+        form = self.filtre(donnees)
+        self.assertTrue(form.is_valid(), form.errors)
+        liste = ListeFiltrable()
+        self.assertIs(form.appliquer(liste), liste)
+        return liste.filtres
+
+    def test_sans_filtre_rien_n_est_restreint(self):
+        self.assertEqual(self.appliquer({}), [])
+
+    def test_chaque_filtre(self):
+        cas = (
+            ({"specialite": "Cardiologie"}, {"specialite": "Cardiologie"}),
+            ({"ville": "Tunis"}, {"ville__iexact": "Tunis"}),
+            ({"compte": "actif"}, {"user__is_active": True}),
+            ({"compte": "desactive"}, {"user__is_active": False}),
+            ({"validation": "valide"}, {"user__est_valide": True}),
+            ({"validation": "attente"}, {"user__est_valide": False}),
+            ({"presence": "ouvert"}, {"disponible": True}),
+            ({"presence": "ferme"}, {"disponible": False}),
+        )
+        for donnees, attendu in cas:
+            with self.subTest(donnees=donnees):
+                self.assertEqual(self.appliquer(donnees), [((), attendu)])
+
+    def test_la_recherche_porte_sur_six_champs(self):
+        (args, kwargs), = self.appliquer({"q": "  sara "})
+        self.assertEqual((len(args), kwargs, isinstance(args[0], Q), len(args[0].children)), (1, {}, True, 6))
+        self.assertIn(("specialite__icontains", "sara"), args[0].children)
+
+    def test_valeurs_refusees(self):
+        for donnees, champ in (({"compte": "fantome"}, "compte"), ({"validation": "oui"}, "validation"), ({"ville": "Atlantide"}, "ville")):
+            with self.subTest(donnees=donnees):
+                self.assertIn(champ, self.filtre(donnees).errors)
+
+    def test_parametres_actifs(self):
+        form = self.filtre({"q": " sara ", "validation": "attente", "ville": ""})
+        self.assertEqual(form.parametres(), {"q": "sara", "validation": "attente"})
+
+
+class MedecinsListeBackofficeTests(SimpleTestCase):
+    def appeler(self, medecins, donnees=None, codes=()):
+        liste = ListeFiltrable(*medecins)
+        requete = requete_admin("/backoffice/medecins/", "get", donnees, "medecins")
+        with mock.patch.object(views, "_choix_medecins", return_value=(["Cardiologie"], ["Sfax", "Tunis"])), \
+                mock.patch.object(Medecin.objects, "select_related") as lien, mock.patch.object(Triage.objects, "filter") as demandes:
+            lien.return_value.order_by.return_value = liste
+            demandes.return_value.values_list.return_value = codes
+            reponse = views.medecins(requete)
+        return reponse, liste
+
+    def test_adresses(self):
+        self.assertEqual(reverse("backoffice:medecin_valider", args=["abc"]), "/backoffice/medecins/abc/valider/")
+        self.assertEqual(reverse("backoffice:medecin_retirer", args=["abc"]), "/backoffice/medecins/abc/retirer/")
+        self.assertEqual(reverse("backoffice:medecin_desactiver", args=["abc"]), "/backoffice/medecins/abc/desactiver/")
+        self.assertEqual(reverse("backoffice:medecin_reactiver", args=["abc"]), "/backoffice/medecins/abc/reactiver/")
+        self.assertEqual(reverse("backoffice:medecin_disponibilite", args=["abc"]), "/backoffice/medecins/abc/disponibilite/")
+        self.assertIs(resolve("/backoffice/medecins/abc/valider/").func, views.medecin_valider)
+        self.assertIs(resolve("/backoffice/medecins/abc/").func, views.medecin_detail)
+
+    def test_acces_reserve_aux_administrateurs(self):
+        for vue in (views.medecins, views.medecin_detail, views.medecin_valider, views.medecin_disponibilite):
+            with self.subTest(vue=vue.__name__):
+                requete = RequestFactory().post("/x/")
+                requete.user = utilisateur(role="patient")
+                with self.assertRaises(PermissionDenied):
+                    vue(requete) if vue is views.medecins else vue(requete, "abc")
+                requete.user = AnonymousUser()
+                reponse = vue(requete) if vue is views.medecins else vue(requete, "abc")
+                self.assertEqual(reponse.status_code, 302)
+
+    def test_la_liste_affiche_les_medecins_y_compris_en_attente(self):
+        attente = un_medecin()
+        absent = un_medecin("Karim", "Jaziri", valide=True, disponible=False, code="karim")
+        reponse, liste = self.appeler([attente, absent], codes=["sara", "sara"])
+        html = reponse.content.decode()
+        for texte in ("Dr Sara Benali", "Dr Karim Jaziri", "Cardiologie", "sara@exemple.tn", "En attente", "Absent", "Nom, e-mail, téléphone, spécialité ou ville"):
+            self.assertIn(texte, html)
+        self.assertEqual(attente.nb_demandes, 2)
+        self.assertEqual(absent.nb_demandes, 0)
+        self.assertEqual(liste.filtres, [])
+
+    def test_les_filtres_s_appliquent(self):
+        reponse, liste = self.appeler([un_medecin()], {"validation": "attente", "ville": "Sfax"})
+        self.assertEqual(len(liste.filtres), 2)
+        self.assertIn("Réinitialiser", reponse.content.decode())
+
+    def test_aucun_resultat(self):
+        self.assertIn("Aucun médecin ne correspond à ces critères.", self.appeler([], {"q": "zzz"})[0].content.decode())
+        self.assertIn("Aucun médecin inscrit pour le moment.", self.appeler([])[0].content.decode())
+
+
+class MedecinDetailBackofficeTests(SimpleTestCase):
+    def appeler(self, vue, medecin, methode="post"):
+        requete = requete_admin(f"/backoffice/medecins/{medecin.pk}/x/", methode, nom="medecin_detail")
+        messages = mock.Mock()
+        with mock.patch.object(views, "_medecin_ou_404", return_value=medecin), mock.patch.object(views, "messages", messages), \
+                mock.patch.object(User, "save") as sauve_user, mock.patch.object(Medecin, "save") as sauve_medecin:
+            reponse = vue(requete, str(medecin.pk))
+        return reponse, messages, sauve_user, sauve_medecin
+
+    def test_la_fiche(self):
+        medecin = un_medecin()
+        requete = requete_admin(f"/backoffice/medecins/{medecin.pk}/", nom="medecin_detail")
+        with mock.patch.object(views, "_medecin_ou_404", return_value=medecin), mock.patch.object(Triage.objects, "filter") as demandes:
+            demandes.return_value.count.return_value = 3
+            html = views.medecin_detail(requete, str(medecin.pk)).content.decode()
+        for texte in ("Dr Sara Benali", "Cardiologie", "ORD-9", "Lundi", "8 h – 12 h", "14 h – 17 h", "Valider le compte", "Fermer la prise de rendez-vous", "Désactiver le compte"):
+            self.assertIn(texte, html)
+        self.assertIn(">3<", html)
+
+    def test_valider_et_retirer(self):
+        medecin = un_medecin()
+        reponse, messages, sauve_user, _ = self.appeler(views.medecin_valider, medecin)
+        self.assertTrue(medecin.user.est_valide)
+        sauve_user.assert_called_once_with(update_fields=["est_valide"])
+        self.assertEqual((reponse.status_code, reponse["Location"]), (302, f"/backoffice/medecins/{medecin.pk}/"))
+        self.assertIn("peut ouvrir sa file", messages.success.call_args.args[1])
+
+        medecin.user.est_valide = True
+        _, messages, _, _ = self.appeler(views.medecin_retirer, medecin)
+        self.assertFalse(medecin.user.est_valide)
+        self.assertIn("validation", messages.success.call_args.args[1])
+
+    def test_deja_valide_ne_reecrit_pas(self):
+        medecin = un_medecin(valide=True)
+        _, messages, sauve_user, _ = self.appeler(views.medecin_valider, medecin)
+        sauve_user.assert_not_called()
+        messages.info.assert_called_once()
+
+    def test_desactiver_et_reactiver(self):
+        medecin = un_medecin(valide=True)
+        _, messages, _, _ = self.appeler(views.medecin_desactiver, medecin)
+        self.assertFalse(medecin.user.is_active)
+        self.assertIn("désactivé", messages.success.call_args.args[1])
+
+        _, messages, _, _ = self.appeler(views.medecin_reactiver, medecin)
+        self.assertTrue(medecin.user.is_active)
+        self.assertIn("réactivé", messages.success.call_args.args[1])
+
+    def test_un_compte_du_personnel_ne_se_desactive_pas_ici(self):
+        medecin = un_medecin(staff=True, valide=True)
+        _, messages, sauve_user, _ = self.appeler(views.medecin_desactiver, medecin)
+        messages.error.assert_called_once()
+        sauve_user.assert_not_called()
+        self.assertTrue(medecin.user.is_active)
+
+    def test_basculer_la_disponibilite(self):
+        medecin = un_medecin(valide=True, disponible=True)
+        _, messages, _, sauve_medecin = self.appeler(views.medecin_disponibilite, medecin)
+        self.assertFalse(medecin.disponible)
+        sauve_medecin.assert_called_once_with(update_fields=["disponible"])
+        self.assertIn("ne prend plus", messages.success.call_args.args[1])
+
+    def test_uniquement_en_post(self):
+        medecin = un_medecin()
+        for vue in (views.medecin_valider, views.medecin_desactiver, views.medecin_disponibilite):
+            with self.subTest(vue=vue.__name__):
+                reponse, _, sauve_user, sauve_medecin = self.appeler(vue, medecin, "get")
+                self.assertEqual(reponse.status_code, 405)
+                sauve_user.assert_not_called()
+                sauve_medecin.assert_not_called()

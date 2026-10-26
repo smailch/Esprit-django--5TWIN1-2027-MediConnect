@@ -1,0 +1,47 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Compte rendu — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'medecins:synthese' triage.pk %}" class="link text-sm">← {{ triage.patient }}</a>
+    <h1 class="page-title mt-2">{% if consultation.pk %}Modifier le compte rendu{% else %}Compte rendu{% endif %}</h1>
+    <p class="muted mt-2 text-sm">Enregistrer termine la consultation et verse le compte rendu dans le dossier du patient.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-3xl space-y-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <fieldset class="space-y-5">
+    <legend class="section-title">Consultation</legend>
+    {% for field in form %}
+      {% if field.name != "ordonnance" and field.name != "examens" and field.name != "soins" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="space-y-5">
+    <legend class="section-title">Prescriptions</legend>
+    <p class="muted text-sm">Chaque texte non vide devient un acte : ordonnance pour la pharmacie, examen pour le laboratoire, soin pour l'infirmier.</p>
+    {% for field in form %}
+      {% if field.name == "ordonnance" or field.name == "examens" or field.name == "soins" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer le compte rendu</button>
+</form>
+{% if consultation.pk %}
+{% include "medecins/_whatsapp.html" %}
+{% include "medecins/_courriel.html" %}
+{% endif %}
+{% endblock %}

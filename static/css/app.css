@@ -36,7 +36,7 @@
 /* ---- Cadre : menu latéral (ordinateur) / onglets en bas (mobile) ---------- */
 .app-shell { display: block; }
 .app-main { min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; }
-.app-content { flex: 1; padding: 1.25rem 1.25rem 2rem; width: 100%; max-width: 78rem; margin: 0 auto; }
+.app-content { flex: 1; padding: 1.25rem 1.25rem 6.5rem; width: 100%; max-width: 78rem; margin: 0 auto; }
 
 .rail {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
@@ -118,6 +118,46 @@
 .panel { background: var(--a-surface); border: 1px solid var(--a-line); border-radius: 1rem; }
 .panel-pad { padding: 1.25rem 1.5rem; }
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+
+/* Fenêtre d'appel : dans la page, elle prend toute la colonne à côté du menu. */
+.app-main:has(.appel) { min-height: 100dvh; height: auto; max-height: none; }
+.app-main:has(.appel) .app-footer { display: none; }
+.app-main:has(.appel) .app-content {
+  display: flex; flex-direction: column; flex: 1; min-height: 0; max-width: none;
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+.appel {
+  flex: none; display: flex; flex-direction: column; gap: 0.75rem;
+}
+.appel-barre {
+  flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 0.5rem;
+  min-height: 3rem;
+}
+.appel-titre {
+  flex: 1 1 auto; min-width: 0; margin: 0;
+  font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.appel-barre .abtn { flex: none; min-height: 36px; padding: 0 0.8rem; }
+.appel-barre .link { white-space: nowrap; }
+.appel-urgence { flex: none; font-size: 0.75rem; color: var(--a-muted); white-space: nowrap; }
+.appel-urgence strong { color: var(--a-text); font-weight: 500; }
+.appel-cadre {
+  position: relative; flex: 0 0 auto;
+  height: calc(100dvh - 8rem); min-height: 70vh;
+  margin: 0; overflow: hidden;
+}
+.jitsi-salle { position: absolute; inset: 0; width: 100%; height: 100%; background: #071324; }
+.jitsi-salle iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #040404;
+}
+@media (min-width: 1024px) {
+  .app-main:has(.appel) { padding-bottom: 0; }
+  .app-main:has(.appel) .app-content { padding: 0.75rem 1rem; height: 100%; }
+  .appel-cadre { height: calc(100dvh - 6rem); min-height: 75vh; }
+}
 .page-title { font-size: clamp(1.65rem, 3vw, 2.3rem); line-height: 1.1; }
 .section-title { font-size: 1.15rem; display: flex; align-items: center; gap: 0.6rem; }
 .count {
@@ -330,6 +370,16 @@
   padding: 1rem 1.25rem; border-bottom: 1px solid var(--a-line);
 }
 .item-row:last-child { border-bottom: 0; }
+.agenda { display: grid; gap: 1rem; margin-top: 1rem; }
+.agenda-jour { padding: 1rem 0.75rem 0.75rem; }
+.agenda-date { font-size: 0.95rem; padding: 0 0.35rem; }
+.agenda-liste { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.agenda-ligne {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem 0.85rem;
+  padding: 0.75rem 1rem; border-radius: 0.75rem; background: var(--a-raise); border: 1px solid var(--a-line);
+}
+.agenda-heure { flex: none; width: 3.25rem; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--a-accent); }
+.agenda-corps { flex: 1 1 10rem; min-width: 0; }
 .item-name { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
 .item-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .check-row { display: flex; align-items: center; gap: 0.7rem; min-height: 44px; font-size: 0.9rem; cursor: pointer; }
