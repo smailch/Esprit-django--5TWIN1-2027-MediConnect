@@ -112,6 +112,7 @@ CATALOGUE = {
     "Signes d'infection de la plaie": (SIGNALER, (
         "plaie rouge", "plaie chaude", "plaie inflammatoire", "plaie infectee", "plaie malodorante", "rougeur", "rougeurs",
         "rouge et chaude", "rouge et chaud", "rouge et gonflee", "rougeatre",
+        "enflamme", "enflammee", "enflammes", "enflammees", "chaud et rouge", "chaude et rouge",
         "inflammation", "pus", "purulent", "purulente", "ecoulement purulent", "mauvaise odeur", "suintement",
     )),
     "Difficulté respiratoire": (SIGNALER, (

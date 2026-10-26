@@ -530,6 +530,11 @@ class SignesDuTexteTests(SimpleTestCase):
     def test_signe_nie_ou_d_un_proche_ecarte(self):
         self.assertEqual(self.noms("Pas de rougeur, pas de fièvre. Son mari est tombé hier."), {})
 
+    def test_point_de_piqure_enflamme(self):
+        """Cas vu en test réel : l'IA ne l'a pas toujours repéré, les règles servent de filet."""
+        self.assertEqual(self.noms("Le point de piqûre est un peu enflammé et chaud."), {"Signes d'infection de la plaie": "enflammé"})
+        self.assertEqual(self.noms("Point de piqûre non enflammé."), {})
+
     def test_gravite_et_origine(self):
         signe = alertes.signes_du_texte("Saignement au point de ponction")[0]
         self.assertEqual((signe.gravite, signe.origine), ("signaler", "texte"))
@@ -625,13 +630,14 @@ class GardeFousIATests(SimpleTestCase):
         self.assertNotIn("111", note)
 
     def test_signes_de_l_ia_valides(self):
+        note = "Le pourtour de la plaie a un aspect inquiétant. Tension 16/10."  # formulation inconnue des règles
         signes = [
-            {"nom": "Signes d'infection de la plaie", "extrait": "pourtour de la plaie est enflammé"},
-            {"nom": "Cancer", "extrait": "pourtour de la plaie est enflammé"},  # hors catalogue
+            {"nom": "Signes d'infection de la plaie", "extrait": "pourtour de la plaie a un aspect inquiétant"},
+            {"nom": "Cancer", "extrait": "pourtour de la plaie a un aspect inquiétant"},  # hors catalogue
             {"nom": "Chute", "extrait": "est tombée dans la cuisine"},  # citation inventée
         ]
         with reponse_ia(constantes={}, signes=signes):
-            analyse = ia_soin.analyser(self.NOTE)
+            analyse = ia_soin.analyser(note)
         self.assertEqual(analyse.statut_ia, "ok")
         self.assertEqual([s.nom for s in analyse.signes if s.origine == "ia"], ["Signes d'infection de la plaie"])
         self.assertEqual(analyse.niveau, "signaler")
@@ -846,3 +852,17 @@ class NotificationsTests(SimpleTestCase):
         with mock.patch("infirmiers.notifications.EmailMultiAlternatives.send", side_effect=ConnectionRefusedError):
             with self.assertLogs("infirmiers.notifications", level="ERROR"):
                 self.assertFalse(notifications.passage_fixe(self.it, self.LIEN))
+
+
+class ValidationAdminTests(SimpleTestCase):
+    def test_actions_de_validation(self):
+        modele_admin = admin.site._registry[Infirmier]
+        a_valider, deja_valide = un_infirmier(valide=False), un_infirmier(valide=True)
+        requete = mock.Mock()
+        requete.select_related.return_value = [a_valider, deja_valide]
+        with mock.patch.object(User, "save") as enregistrer, mock.patch.object(modele_admin, "message_user") as message:
+            modele_admin.valider_comptes(None, requete)
+        self.assertTrue(a_valider.user.est_valide)
+        enregistrer.assert_called_once_with(update_fields=["est_valide"])  # seul le compte qui change est enregistré
+        message.assert_called_once_with(None, "1 compte(s) validé(s).")
+        self.assertEqual(modele_admin.actions, ["valider_comptes", "retirer_validation"])
