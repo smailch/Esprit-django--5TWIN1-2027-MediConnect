@@ -17,6 +17,9 @@
 <a href="{% url 'infirmiers:soins' %}" class="nav-item" {% if request.resolver_match.namespace == 'infirmiers' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="syringe" class="h-5 w-5"></i><span>Soins à domicile</span>
 </a>
+<a href="{% url 'pharmacies:ordonnances' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Mes ordonnances</span>
+</a>
 <a href="{% url 'patients:profil' %}" class="nav-item" {% if page == 'profil' or page == 'compte' or page == 'mot_de_passe' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="user" class="h-5 w-5"></i><span>Mon profil</span>
 </a>

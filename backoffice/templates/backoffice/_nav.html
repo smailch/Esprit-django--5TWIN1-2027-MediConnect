@@ -19,11 +19,8 @@ L'espace de noms distingue aussi les deux pages « tableau_de_bord ».
 <a href="{% url 'backoffice:medecins' %}" class="nav-item" {% if page == 'medecins' or page == 'medecin_detail' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i><span>Médecins</span>
 </a>
-<a href="{% url 'backoffice_pharmacies:pharmacies' %}" class="nav-item" {% if ns == 'backoffice_pharmacies' and 'pharmacie' in page %}aria-current="page"{% endif %}>
+<a href="{% url 'backoffice_pharmacies:pharmacies' %}" class="nav-item" {% if ns == 'backoffice_pharmacies' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="store" class="h-5 w-5"></i><span>Pharmacies</span>
-</a>
-<a href="{% url 'backoffice_pharmacies:ordonnances' %}" class="nav-item" {% if ns == 'backoffice_pharmacies' and 'ordonnance' in page %}aria-current="page"{% endif %}>
-  <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Ordonnances</span>
 </a>
 <a href="{% url 'backoffice:parametres' %}" class="nav-item" {% if page == 'parametres' or page == 'symptomes' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="sliders-horizontal" class="h-5 w-5"></i><span>Paramètres</span>

@@ -275,10 +275,10 @@ class GabaritsTests(SimpleTestCase):
         for lien in ("/backoffice/rendez-vous/", "/backoffice/file-attente/", "/backoffice/patients/", "/backoffice/medecins/", "/backoffice/parametres/"):
             self.assertIn(f'href="{lien}"', html)
         self.assertIn('href="/backoffice/medecins/"', html)  # module médecins
-        self.assertIn('href="/backoffice/pharmacies/"', html)  # module pharmacies (pharmacies et ordonnances)
-        self.assertIn('href="/backoffice/pharmacies/ordonnances/"', html)
+        self.assertIn('href="/backoffice/pharmacies/"', html)  # module pharmacies
+        self.assertNotIn('href="/backoffice/pharmacies/ordonnances/"', html)  # plus d'onglet « Ordonnances »
         self.assertNotIn("{#", html)  # aucun commentaire de gabarit affiché
-        self.assertEqual(html.count('class="nav-item"'), 8)  # sur mobile, la barre défile (voir .rail-nav dans app.css)
+        self.assertEqual(html.count('class="nav-item"'), 7)  # sur mobile, la barre défile (voir .rail-nav dans app.css)
 
     def test_les_tableaux_ont_des_en_tetes_accessibles(self):
         html = render_to_string("backoffice/tableau_de_bord.html", {

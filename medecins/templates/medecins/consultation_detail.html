@@ -20,6 +20,7 @@
 </section>
 {% include "medecins/_whatsapp.html" %}
 {% include "medecins/_courriel.html" %}
+{% load pharmacies_ordonnances %}{% bouton_envoi_ordonnance consultation %}
 
 {% if actes %}
 <section class="mt-8 max-w-3xl" aria-labelledby="titre-actes">

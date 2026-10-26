@@ -72,6 +72,7 @@ class RedirectionApresConnexionTests(SimpleTestCase):
 
     def test_autres_roles_vers_l_accueil(self):
         self.assertEqual(self.destination(role="laboratoire"), "/")
+        # Le rôle pharmacie arrive sur son tableau de bord : vérifié dans pharmacies/tests.py (ConnexionPharmacieTests).
 
 
 class AdminUserTests(SimpleTestCase):
