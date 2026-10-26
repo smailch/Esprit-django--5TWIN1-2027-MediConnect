@@ -9,13 +9,14 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 from patients import ia_client
 from patients.models import Allergie, Consultation
 
-from . import delivrance, ia_substitution, remplacements, stats, stock
+from . import delivrance, ia_substitution, prescriptions, remplacements, stats, stock
 from .forms import (
     FiltreOrdonnancesForm,
     FiltrePharmaciesForm,
@@ -27,7 +28,7 @@ from .forms import (
     TransmissionForm,
 )
 from .models import Medicament, Ordonnance, Pharmacie, Remplacement
-from .permissions import ADMIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_de, espace_requis, patient_de, pharmacie_de
+from .permissions import ADMIN, MEDECIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_de, espace_requis, patient_de, pharmacie_de
 
 PAR_PAGE = 12
 
@@ -173,10 +174,21 @@ def ordonnances_visibles(request):
     raise PermissionDenied
 
 
-def _consultations_sans_ordonnance(limite=8):
+def _consultations_du_prescripteur(request):
+    """Les consultations accessibles : toutes pour l'administrateur, seulement les SIENNES pour un médecin."""
+    consultations = Consultation.objects.select_related("patient__user")
+    if request.espace == MEDECIN:
+        fiche = getattr(request.user, "medecin", None)  # profil du module médecins
+        if fiche is None:
+            raise PermissionDenied("Aucun profil médecin n'est associé à ce compte.")
+        consultations = consultations.filter(triage__medecin_id=fiche.code)
+    return consultations
+
+
+def _consultations_sans_ordonnance(request, limite=8):
     """Les consultations récentes qui n'ont pas encore d'ordonnance : le point de départ du prescripteur."""
     deja = set(Ordonnance.objects.exclude(consultation=None).values_list("consultation", flat=True))
-    recentes = Consultation.objects.select_related("patient__user").order_by("-date")[:50]
+    recentes = _consultations_du_prescripteur(request).order_by("-date")[:50]
     return [c for c in recentes if c.pk not in deja][:limite]
 
 
@@ -220,7 +232,7 @@ def ordonnances(request):
         "onglets": _onglets(nombres, actif, request.espace),
         "parametres": parametres.urlencode(),
         "filtres_actifs": any(v for v in parametres.values()),
-        "a_rediger": _consultations_sans_ordonnance() if request.espace in PRESCRIPTEURS else [],
+        "a_rediger": _consultations_sans_ordonnance(request) if request.espace in PRESCRIPTEURS else [],
     })
 
 
@@ -440,9 +452,38 @@ def remplacement_decision(request, pk, remplacement_pk):
     return _redirection(request, "ordonnance_detail", ordonnance.pk)
 
 
+def _retour(request, defaut):
+    """Adresse de retour envoyée par la page d'origine (?next=), acceptée seulement si elle reste sur ce site."""
+    suivante = request.POST.get("next", "")
+    if suivante and url_has_allowed_host_and_scheme(suivante, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return suivante
+    return defaut
+
+
+@espace_requis(*PRESCRIPTEURS)
+@require_POST
+def ordonnance_envoyer(request, consultation_pk):
+    """Le médecin envoie l'ordonnance de sa consultation au patient, qui la retrouve dans « Mes ordonnances »
+    et choisit sa pharmacie. Les médicaments sont lus dans la consultation (pas de nouvelle saisie)."""
+    consultation = objet_ou_404(_consultations_du_prescripteur(request), pk=consultation_pk)
+    try:
+        ordonnance = prescriptions.envoyer(consultation)
+    except ValueError as erreur:
+        messages.error(request, str(erreur))
+        defaut = reverse("pharmacies:ordonnances", current_app=getattr(request.resolver_match, "namespace", None))
+    else:
+        messages.success(
+            request,
+            f"Ordonnance {ordonnance.reference} envoyée à {consultation.patient} : il la retrouve dans « Mes ordonnances » "
+            "et choisit la pharmacie qui la préparera.",
+        )
+        defaut = reverse("pharmacies:ordonnance_detail", args=[ordonnance.pk], current_app=getattr(request.resolver_match, "namespace", None))
+    return redirect(_retour(request, defaut))
+
+
 @espace_requis(*PRESCRIPTEURS)
 def ordonnance_creer(request, consultation_pk):
-    consultation = objet_ou_404(Consultation.objects.select_related("patient__user"), pk=consultation_pk)
+    consultation = objet_ou_404(_consultations_du_prescripteur(request), pk=consultation_pk)
     ordonnance = Ordonnance(patient=consultation.patient, consultation=consultation, prescripteur_nom=consultation.medecin_nom)
     if request.method == "POST":
         form = OrdonnanceForm(request.POST, instance=ordonnance)

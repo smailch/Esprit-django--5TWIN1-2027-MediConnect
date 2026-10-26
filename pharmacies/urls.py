@@ -16,6 +16,7 @@ urlpatterns = [
     path("stock/<str:pk>/supprimer/", views.stock_supprimer, name="stock_supprimer"),
     path("ordonnances/", views.ordonnances, name="ordonnances"),
     path("ordonnances/nouvelle/<str:consultation_pk>/", views.ordonnance_creer, name="ordonnance_creer"),
+    path("ordonnances/envoyer/<str:consultation_pk>/", views.ordonnance_envoyer, name="ordonnance_envoyer"),
     path("ordonnances/<str:pk>/", views.ordonnance_detail, name="ordonnance_detail"),
     path("ordonnances/<str:pk>/modifier/", views.ordonnance_modifier, name="ordonnance_modifier"),
     path("ordonnances/<str:pk>/supprimer/", views.ordonnance_supprimer, name="ordonnance_supprimer"),

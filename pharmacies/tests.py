@@ -394,7 +394,8 @@ class VuesTests(SimpleTestCase):
     def appeler(self, vue, espace, *args, methode="get", donnees=None, objet=None):
         with mock.patch.object(permissions, "espace_de", return_value=espace), \
                 mock.patch.object(views, "objet_ou_404", return_value=objet), \
-                mock.patch.object(views, "ordonnances_visibles"):
+                mock.patch.object(views, "ordonnances_visibles"), \
+                mock.patch.object(views, "_consultations_du_prescripteur"):
             return vue(self.requete(espace, methode, donnees), *args)
 
     def test_la_pharmacie_fait_avancer_en_post_uniquement(self):
@@ -2036,3 +2037,166 @@ class OrganisationPagesTests(SimpleTestCase):
         for espace, attendu in ((PATIENT, "Espace patient"), (PHARMACIE, "Espace pharmacie"), (MEDECIN, "Espace médecin"), (ADMIN, "Espace administrateur")):
             with self.subTest(espace=espace):
                 self.assertIn(attendu, render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(espace)))
+
+
+# --- Envoi de l'ordonnance depuis la consultation du médecin --------------------------------------------------------
+
+
+from django.template import Context, Template  # noqa: E402
+
+from . import prescriptions  # noqa: E402
+
+PRESCRIPTION_MEDECIN = (
+    "Ordonnance\nAzithromycine 500 mg, 1 comprimé par jour, 3 jours\nParacétamol 1 g si fièvre, 5 jours\n\n"
+    "Examens de laboratoire\nNFS, CRP\n\nSoins à domicile\nPrise de sang à domicile"
+)
+
+
+def une_consultation(prescription=PRESCRIPTION_MEDECIN, **kw):
+    c = Consultation(patient=un_patient(), medecin_nom="Dr Sara Benali", resume="…", prescription=prescription,
+                     date=timezone.now(), **kw)
+    c.pk = ObjectId()
+    return c
+
+
+class ExtractionMedicamentsTests(SimpleTestCase):
+    def test_seule_la_rubrique_ordonnance_part_en_pharmacie(self):
+        self.assertEqual(prescriptions.extraire_medicaments(PRESCRIPTION_MEDECIN),
+                         "Azithromycine 500 mg, 1 comprimé par jour, 3 jours\nParacétamol 1 g si fièvre, 5 jours")
+
+    def test_texte_sans_rubriques_pris_en_entier(self):
+        self.assertEqual(prescriptions.extraire_medicaments("Doliprane 1 g\nVentoline"), "Doliprane 1 g\nVentoline")
+
+    def test_seulement_des_examens_ou_des_soins_aucun_medicament(self):
+        self.assertEqual(prescriptions.extraire_medicaments("Examens de laboratoire\nNFS"), "")
+        self.assertEqual(prescriptions.extraire_medicaments("Soins à domicile\nPansement"), "")
+        self.assertEqual(prescriptions.extraire_medicaments(""), "")
+
+    def test_l_acte_ordonnance_du_module_medecins_prime(self):
+        c = une_consultation()
+        acte = SimpleNamespace(contenu="  Clamoxyl 1 g, 7 jours  ")
+        with mock.patch.object(type(c), "actes", new_callable=mock.PropertyMock) as actes:
+            actes.return_value.filter.return_value.first.return_value = acte
+            self.assertEqual(prescriptions.medicaments_de(c), "Clamoxyl 1 g, 7 jours")
+            actes.return_value.filter.return_value.first.return_value = None
+            self.assertTrue(prescriptions.medicaments_de(c).startswith("Azithromycine"))  # repli sur le texte
+
+
+class EnvoiOrdonnanceTests(SimpleTestCase):
+    def setUp(self):
+        for cible, valeur in (("ordonnance_de", None), ("medicaments_de", None)):
+            p = mock.patch.object(prescriptions, cible, return_value=valeur, side_effect=None)
+            setattr(self, cible, p.start())
+            self.addCleanup(p.stop)
+        self.medicaments_de.side_effect = lambda c: prescriptions.extraire_medicaments(c.prescription)
+
+    def test_l_ordonnance_emise_reprend_la_consultation(self):
+        c = une_consultation()
+        with mock.patch.object(Ordonnance, "full_clean") as valider, mock.patch.object(Ordonnance, "save") as enregistrer:
+            o = prescriptions.envoyer(c)
+        valider.assert_called_once()
+        enregistrer.assert_called_once()
+        self.assertEqual((o.patient, o.consultation, o.prescripteur_nom, o.statut, o.pharmacie), (c.patient, c, "Dr Sara Benali", S.EMISE, None))
+        self.assertEqual(o.lignes, ["Azithromycine 500 mg, 1 comprimé par jour, 3 jours", "Paracétamol 1 g si fièvre, 5 jours"])
+        self.assertEqual(o.date_emission, timezone.localtime(c.date).date())
+
+    def test_jamais_deux_ordonnances_pour_une_consultation(self):
+        self.ordonnance_de.return_value = une_ordonnance()
+        with mock.patch.object(Ordonnance, "save") as enregistrer, self.assertRaisesMessage(ValueError, "déjà été envoyée"):
+            prescriptions.envoyer(une_consultation())
+        enregistrer.assert_not_called()
+
+    def test_pas_d_ordonnance_sans_medicament(self):
+        with mock.patch.object(Ordonnance, "save") as enregistrer, self.assertRaisesMessage(ValueError, "Aucun médicament"):
+            prescriptions.envoyer(une_consultation(prescription="Examens de laboratoire\nNFS"))
+        enregistrer.assert_not_called()
+
+
+class EnvoiOrdonnanceVueTests(SimpleTestCase):
+    def appeler(self, espace, donnees=None, consultation=None, resultat=None, erreur=None):
+        requete = avec_messages(RequestFactory().post("/", donnees or {}))
+        requete.user = un_user(role=espace)
+        consultation = consultation or une_consultation()
+        envoi = mock.Mock(return_value=resultat, side_effect=erreur)
+        with mock.patch.object(permissions, "espace_de", return_value=espace), \
+                mock.patch.object(views, "_consultations_du_prescripteur") as accessibles, \
+                mock.patch.object(views, "objet_ou_404", return_value=consultation) as chercher, \
+                mock.patch.object(prescriptions, "envoyer", envoi):
+            reponse = views.ordonnance_envoyer(requete, consultation.pk)
+        return reponse, requete, chercher, accessibles
+
+    def test_envoi_par_le_medecin_et_retour_a_sa_consultation(self):
+        o = une_ordonnance()
+        reponse, requete, chercher, accessibles = self.appeler(MEDECIN, {"next": "/medecins/consultations/abc/"}, resultat=o)
+        self.assertEqual(reponse["Location"], "/medecins/consultations/abc/")
+        self.assertIn(o.reference, [str(m) for m in requete._messages][0])
+        chercher.assert_called_once()
+        self.assertIs(chercher.call_args.args[0], accessibles.return_value)  # cherchée parmi SES consultations
+
+    def test_pas_de_redirection_vers_un_autre_site(self):
+        o = une_ordonnance()
+        reponse, *_ = self.appeler(MEDECIN, {"next": "https://pirate.example/"}, resultat=o)
+        self.assertEqual(reponse["Location"], reverse("pharmacies:ordonnance_detail", args=[o.pk]))
+
+    def test_erreur_expliquee(self):
+        reponse, requete, *_ = self.appeler(MEDECIN, erreur=ValueError("Aucun médicament n'est prescrit"))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertIn("Aucun médicament", [str(m) for m in requete._messages][0])
+
+    def test_reserve_aux_prescripteurs_et_en_post(self):
+        for espace in (PATIENT, PHARMACIE):
+            with self.subTest(espace=espace), self.assertRaises(PermissionDenied):
+                self.appeler(espace)
+        requete = RequestFactory().get("/")
+        requete.user = un_user(role="medecin")
+        with mock.patch.object(permissions, "espace_de", return_value=MEDECIN):
+            self.assertEqual(views.ordonnance_envoyer(requete, "x").status_code, 405)
+
+    def test_un_medecin_ne_voit_que_ses_consultations(self):
+        requete = RequestFactory().get("/")
+        requete.espace = MEDECIN
+        requete.user = SimpleNamespace(medecin=SimpleNamespace(code="m1"))
+        with mock.patch.object(Consultation.objects, "select_related") as base:
+            views._consultations_du_prescripteur(requete)
+        base.return_value.filter.assert_called_once_with(triage__medecin_id="m1")
+        requete.user = SimpleNamespace()  # compte médecin sans fiche du module médecins
+        with mock.patch.object(Consultation.objects, "select_related"), self.assertRaises(PermissionDenied):
+            views._consultations_du_prescripteur(requete)
+        requete.espace = ADMIN
+        with mock.patch.object(Consultation.objects, "select_related") as base:
+            self.assertIs(views._consultations_du_prescripteur(requete), base.return_value)
+
+
+class BoutonEnvoiOrdonnanceTests(SimpleTestCase):
+    def rendre(self, deja=None, medicaments="Azithromycine 500 mg"):
+        c = une_consultation()
+        requete = RequestFactory().get("/medecins/consultations/abc/")
+        with mock.patch.object(prescriptions, "ordonnance_de", return_value=deja), \
+                mock.patch.object(prescriptions, "medicaments_de", return_value=medicaments):
+            html = Template("{% load pharmacies_ordonnances %}{% bouton_envoi_ordonnance consultation %}").render(
+                Context({"consultation": c, "request": requete, "csrf_token": "jeton"}))
+        return c, html
+
+    def test_bouton_d_envoi(self):
+        c, html = self.rendre()
+        self.assertIn("Envoyer l'ordonnance au patient", html)
+        self.assertIn(reverse("pharmacies:ordonnance_envoyer", args=[c.pk]), html)
+        self.assertIn('name="next" value="/medecins/consultations/abc/"', html)
+        self.assertIn("csrfmiddlewaretoken", html)
+
+    def test_deja_envoyee_pas_de_second_bouton(self):
+        o = une_ordonnance(statut=S.TRANSMISE, pharmacie=une_pharmacie())
+        _, html = self.rendre(deja=o)
+        self.assertIn("Ordonnance envoyée", html)
+        self.assertIn(o.reference, html)
+        self.assertIn("Pharmacie du Lac", html)
+        self.assertNotIn("<form", html)
+
+    def test_sans_medicament(self):
+        _, html = self.rendre(medicaments="")
+        self.assertIn("pas d'ordonnance à envoyer", html)
+        self.assertNotIn("<form", html)
+
+    def test_la_page_du_medecin_n_a_que_deux_lignes_ajoutees(self):
+        page = (RACINE / "medecins" / "templates" / "medecins" / "consultation_detail.html").read_text(encoding="utf-8")
+        self.assertIn("{% load pharmacies_ordonnances %}{% bouton_envoi_ordonnance consultation %}", page)
