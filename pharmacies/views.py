@@ -1,3 +1,5 @@
+from collections import Counter
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -178,12 +180,31 @@ def _consultations_sans_ordonnance(limite=8):
     return [c for c in recentes if c.pk not in deja][:limite]
 
 
+LIBELLES_ONGLETS = {
+    Ordonnance.Statut.EMISE: "Émises", Ordonnance.Statut.TRANSMISE: "Transmises", Ordonnance.Statut.EN_PREPARATION: "En préparation",
+    Ordonnance.Statut.PRETE: "Prêtes", Ordonnance.Statut.DELIVREE: "Délivrées", Ordonnance.Statut.ANNULEE: "Annulées",
+}
+
+
+def _onglets(nombres, actif, espace):
+    """Onglets de statut avec leur nombre : « Toutes » puis chaque statut présent (ou choisi). Pour la pharmacie,
+    « Transmises » se lit « À préparer »."""
+    onglets = [{"code": "", "libelle": "Toutes", "nombre": sum(nombres.values()), "actif": not actif}]
+    for code, libelle in LIBELLES_ONGLETS.items():
+        if nombres.get(code) or code == actif:
+            libelle = "À préparer" if espace == PHARMACIE and code == Ordonnance.Statut.TRANSMISE else libelle
+            onglets.append({"code": code, "libelle": libelle, "nombre": nombres.get(code, 0), "actif": code == actif})
+    return onglets
+
+
 @espace_requis(*TOUS)
 def ordonnances(request):
     filtre = FiltreOrdonnancesForm(request.GET or None)
     liste = ordonnances_visibles(request)
-    if filtre.is_valid() and filtre.cleaned_data["statut"]:
-        liste = liste.filter(statut=filtre.cleaned_data["statut"])
+    nombres = Counter(liste.values_list("statut", flat=True))  # une requête : le nombre par statut, pour les onglets
+    actif = filtre.cleaned_data["statut"] if filtre.is_valid() else ""
+    if actif:
+        liste = liste.filter(statut=actif)
     parametres = request.GET.copy()
     parametres.pop("page", None)
     page = _page(request, liste)
@@ -196,6 +217,7 @@ def ordonnances(request):
     return render(request, "pharmacies/ordonnances.html", {
         "page": page,
         "filtre": filtre,
+        "onglets": _onglets(nombres, actif, request.espace),
         "parametres": parametres.urlencode(),
         "filtres_actifs": any(v for v in parametres.values()),
         "a_rediger": _consultations_sans_ordonnance() if request.espace in PRESCRIPTEURS else [],
@@ -223,6 +245,7 @@ def ordonnance_detail(request, pk):
         # Le patient voit où ses médicaments sont réellement en stock (utile surtout pour le reste d'une délivrance partielle).
         disponibles = delivrance.pharmacies_disponibles(ordonnance.lignes, exclure=ordonnance.pharmacie, ville=ordonnance.patient.ville)
     servies = len(etats) - len(manquants)
+    remplacements = list(ordonnance.remplacements.all())
     return render(request, "pharmacies/ordonnance_detail.html", {
         "ordonnance": ordonnance,
         "allergies": allergies,
@@ -237,7 +260,9 @@ def ordonnance_detail(request, pk):
         ),
         "accord_demandable": request.espace == PHARMACIE and delivrance.accord_demandable(ordonnance, etats),
         "decision": decision,
-        "remplacements": list(ordonnance.remplacements.all()),
+        # Le patient voit en haut de page les propositions qui attendent SA réponse ; l'historique ne les répète pas.
+        "propositions": [r for r in remplacements if r.statut == Remplacement.Statut.PROPOSE] if request.espace == PATIENT else [],
+        "historique": [r for r in remplacements if request.espace != PATIENT or r.statut != Remplacement.Statut.PROPOSE],
         "disponibles": disponibles,
         "reliquats": list(ordonnance.reliquats.all()) if ordonnance.statut == Ordonnance.Statut.DELIVREE else [],
     })

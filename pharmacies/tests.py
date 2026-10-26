@@ -1938,10 +1938,11 @@ class RemplacementPagesTests(SimpleTestCase):
         o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie(), medicaments="Amoxicilline 1 g, matin et soir")
         r = Remplacement(ordonnance=o, ligne_origine=o.lignes[0], remplacant="Hiconcil 1 g", source="stock", alerte_allergie="pénicillines")
         r.pk, r.propose_le = ObjectId(), timezone.now()
-        html = DelivrancePagesTests().rendre(PATIENT, o, remplacements=[r])
-        for texte in ("Votre pharmacie propose un remplaçant", "Accepter Hiconcil 1 g", "Refuser", "même dosage",
-                      "parlez-en au pharmacien", "Stock de la pharmacie", "En attente du patient"):
+        html = DelivrancePagesTests().rendre(PATIENT, o, propositions=[r], historique=[])
+        for texte in ("Votre réponse est attendue", "Votre pharmacie propose un remplaçant", "Accepter Hiconcil 1 g", "Refuser",
+                      "même dosage", "parlez-en au pharmacien"):
             self.assertIn(texte, html)
+        self.assertNotIn("Historique des remplacements", html)  # la proposition n'est pas affichée deux fois
         self.assertIn(reverse("pharmacies:remplacement_decision", args=[o.pk, r.pk]), html)
         self.assertEqual(verifier_html(html), [])
 
@@ -1949,7 +1950,8 @@ class RemplacementPagesTests(SimpleTestCase):
         o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie())
         r = Remplacement(ordonnance=o, ligne_origine="Amoxicilline 1 g", remplacant="Hiconcil 1 g", statut=RS.ACCEPTE, source="ia")
         r.pk, r.propose_le, r.decide_le = ObjectId(), timezone.now(), timezone.now()
-        html = DelivrancePagesTests().rendre(PHARMACIE, o, remplacements=[r])
+        html = DelivrancePagesTests().rendre(PHARMACIE, o, historique=[r])
+        self.assertIn("Historique des remplacements", html)
         self.assertIn("Accepté par le patient", html)
         self.assertIn("Suggestion de l&#x27;IA", html)  # apostrophe échappée par le gabarit
         self.assertNotIn("Accepter Hiconcil", html)
@@ -1962,3 +1964,75 @@ class RemplacementPagesTests(SimpleTestCase):
         self.assertIn('type="hidden" name="source"', html)
         js = (RACINE / "pharmacies" / "static" / "pharmacies" / "substitution.js").read_text(encoding="utf-8")
         self.assertIn("source.value = s.source", js)  # l'origine de la suggestion suit le clic sur « Utiliser »
+
+
+# --- Organisation des pages et menus par rôle ------------------------------------------------------------------------
+
+
+class MenusParRoleTests(SimpleTestCase):
+    requete = PagesTests.requete
+
+    def menu(self, espace, page="ordonnances"):
+        html = render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(espace, page))
+        return html.split('aria-label="Navigation principale">')[1].split("</nav>")[0]
+
+    def test_chaque_role_a_son_menu(self):
+        attendus = {
+            PATIENT: ["Tableau de bord", "Rendez-vous", "Mon dossier", "Mes ordonnances", "Mon profil"],
+            PHARMACIE: ["Tableau de bord", "Ordonnances reçues", "Stock", "Ma pharmacie", "Annuaire"],
+            MEDECIN: ["Ordonnances", "Pharmacies"],
+            ADMIN: ["Tableau de bord", "Rendez-vous", "File d'attente", "Patients", "Pharmacies", "Ordonnances", "Paramètres"],
+        }
+        for espace, onglets in attendus.items():
+            menu = self.menu(espace)
+            with self.subTest(espace=espace):
+                trouves = [t.split("</span>")[0] for t in menu.split("<span>")[1:]]
+                self.assertEqual(trouves, onglets)
+                self.assertEqual(menu.count('aria-current="page"'), 1)
+
+    def test_le_patient_retrouve_les_onglets_de_son_espace(self):
+        """Mêmes adresses que le menu de l'app patients (sans modifier ses fichiers), plus « Mes ordonnances »."""
+        layout_patients = (RACINE / "patients" / "templates" / "patients" / "layout.html").read_text(encoding="utf-8")
+        menu = self.menu(PATIENT)
+        for nom in ("patients:tableau_de_bord", "patients:medecins", "patients:dossier", "patients:profil"):
+            with self.subTest(onglet=nom):
+                self.assertIn(f"{{% url '{nom}' %}}", layout_patients)
+                self.assertIn(f'href="{reverse(nom)}"', menu)
+        self.assertIn('href="/pharmacies/ordonnances/" class="nav-item" aria-current="page"', menu)
+
+
+class OrganisationPagesTests(SimpleTestCase):
+    requete = PagesTests.requete
+
+    def test_onglets_de_statut_avec_leur_nombre(self):
+        nombres = {S.TRANSMISE: 2, S.PRETE: 1}
+        onglets = views._onglets(nombres, "", PHARMACIE)
+        self.assertEqual([(o["libelle"], o["nombre"], o["actif"]) for o in onglets],
+                         [("Toutes", 3, True), ("À préparer", 2, False), ("Prêtes", 1, False)])
+        self.assertEqual([o["libelle"] for o in views._onglets(nombres, S.DELIVREE, PATIENT)], ["Toutes", "Transmises", "Prêtes", "Délivrées"])
+        html = render_to_string("pharmacies/ordonnances.html", {"page": [], "onglets": onglets}, self.requete(PHARMACIE))
+        self.assertIn('aria-label="Filtrer par statut"', html)
+        self.assertIn("?statut=transmise", html)
+        self.assertEqual(verifier_html(html), [])
+
+    def test_la_colonne_laterale_met_les_actions_et_les_allergies_avant_les_informations(self):
+        html = PagesTests().detail(PHARMACIE, statut=S.TRANSMISE, pharmacie=une_pharmacie())
+        laterale = html.split('class="colonne-fixe')[1]
+        self.assertLess(laterale.index("titre-actions"), laterale.index("titre-allergies"))
+        self.assertLess(laterale.index("titre-allergies"), laterale.index("titre-infos"))
+
+    def test_pas_de_cadre_actions_vide_pour_le_patient(self):
+        html = PagesTests().detail(PATIENT, statut=S.PRETE, pharmacie=une_pharmacie())
+        self.assertNotIn("titre-actions", html)
+        self.assertIn("titre-actions", PagesTests().detail(PATIENT))  # ordonnance à envoyer : l'action est proposée
+
+    def test_les_longs_boutons_passent_a_la_ligne(self):
+        css = (RACINE / "pharmacies" / "static" / "pharmacies" / "pharmacies.css").read_text(encoding="utf-8")
+        self.assertIn(".abtn-wrap { white-space: normal", css)
+        html = PagesTests().detail(PHARMACIE, statut=S.TRANSMISE, pharmacie=une_pharmacie())
+        self.assertIn("abtn abtn-wrap abtn-primary abtn-block", html)
+
+    def test_chaque_page_principale_dit_dans_quel_espace_on_est(self):
+        for espace, attendu in ((PATIENT, "Espace patient"), (PHARMACIE, "Espace pharmacie"), (MEDECIN, "Espace médecin"), (ADMIN, "Espace administrateur")):
+            with self.subTest(espace=espace):
+                self.assertIn(attendu, render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(espace)))

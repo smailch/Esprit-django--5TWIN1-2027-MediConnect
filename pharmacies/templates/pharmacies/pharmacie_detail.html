@@ -5,7 +5,11 @@
 {% block page %}
 <header class="page-head">
   <div>
+    {% if request.resolver_match.url_name == "ma_pharmacie" %}
+    {% include "pharmacies/_surtitre.html" %}
+    {% else %}
     <a href="{% url 'pharmacies:pharmacies' %}" class="link text-sm">← Toutes les pharmacies</a>
+    {% endif %}
     <h1 class="page-title mt-2">{{ pharmacie.nom }}</h1>
     <p class="muted mt-2 text-sm">{{ pharmacie.ville }}{% if pharmacie.de_garde %} · <span class="sev sev-info">De garde</span>{% endif %}</p>
   </div>

@@ -42,13 +42,38 @@
 .rx-suggestions:empty { display: none; } /* pas les zones aria-live : masquées, elles ne seraient pas annoncées */
 [aria-busy="true"] { cursor: progress; opacity: 0.7; }
 
+/* Boutons à long libellé (colonne latérale) : ils passent à la ligne au lieu de déborder */
+.abtn-wrap { white-space: normal; text-align: center; line-height: 1.3; padding-top: 0.6rem; padding-bottom: 0.6rem; height: auto; }
+
+/* Colonne latérale de l'ordonnance : reste visible pendant le défilement sur grand écran */
+@media (min-width: 1024px) { .colonne-fixe { position: sticky; top: 1.5rem; } }
+
+/* En-tête de page : coordonnées sur une ligne */
+.infos-ligne { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; font-size: 0.875rem; color: var(--a-muted); }
+.infos-ligne > span { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+/* Onglets de statut (listes d'ordonnances) */
+.onglets { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.onglet {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 40px; padding: 0 0.9rem; border-radius: 9999px;
+  border: 1px solid var(--a-line2); color: var(--a-muted); font-size: 0.85rem; text-decoration: none;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.onglet:hover { color: var(--a-text); border-color: var(--a-accent); }
+.onglet[aria-current="page"] { color: var(--a-accent-ink); background: var(--a-accent); border-color: var(--a-accent); font-weight: 500; }
+.onglet[aria-current="page"] .count { background: rgba(4, 24, 26, 0.18); color: var(--a-accent-ink); }
+
+/* Bloc « à vous de répondre » : les sous-blocs sont séparés d'un filet */
+.reponse-attendue > .bloc + .bloc { border-top: 1px solid var(--a-line); margin-top: 1.25rem; padding-top: 1.25rem; }
+
 /* Tableau de bord : chiffres cliquables et barres à la couleur d'accent */
 .kpi-link { display: block; text-decoration: none; color: inherit; transition: border-color 0.15s; }
 .kpi-link:hover { border-color: var(--a-accent); }
 .bar-fill-rx { background: var(--a-accent); }
+.stat-grid.stat-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .bar-row-rx { grid-template-columns: 7.5rem 1fr 2rem; }
 
-@media (prefers-reduced-motion: reduce) { .kpi-link { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .kpi-link, .onglet { transition: none; } }
 .ref { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.02em; }
 
 @media (forced-colors: active) {

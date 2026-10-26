@@ -1,0 +1,2 @@
+{# Surtitre commun aux pages principales du module : rappelle dans quel espace on se trouve. #}
+<p class="muted text-sm">{% if request.espace == "patient" %}Espace patient{% elif request.espace == "pharmacie" %}Espace pharmacie{% elif request.espace == "medecin" %}Espace médecin{% elif request.espace == "admin" %}Espace administrateur{% endif %}</p>
