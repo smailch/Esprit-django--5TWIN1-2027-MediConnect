@@ -7,7 +7,7 @@ from core.accessibilite import SEUIL_TEXTE_NORMAL, contrastes_du_projet, verifie
 
 PAGES_PUBLIQUES = ("/", "/comptes/connexion/", "/patients/inscription/", "/comptes/mot-de-passe-oublie/")
 PAGES_PATIENT = (
-    "/patients/tableau-de-bord/", "/patients/medecins/", "/patients/dossier/", "/patients/dossier/analyse/", "/patients/dossier/consultations/",
+    "/patients/tableau-de-bord/", "/patients/medecins/", "/patients/orientation/", "/patients/dossier/", "/patients/dossier/analyse/", "/patients/dossier/consultations/",
     "/patients/allergies/", "/patients/mesures/", "/patients/profil/", "/patients/compte/", "/comptes/mot-de-passe/",
 )
 PAGES_ADMIN = (

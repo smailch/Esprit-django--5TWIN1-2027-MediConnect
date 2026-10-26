@@ -12,10 +12,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404, proteger_tableur
-from ia import decision as decision_ia, modele as modele_ia
+from ia import decision as decision_ia, modele as modele_ia, specialite as specialite_ia
 
 from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, notifications, planning, suivi
 from .forms import (
+    OrientationForm,
     AllergieForm,
     CompteForm,
     FermetureCompteForm,
@@ -148,24 +149,63 @@ def _patient_connecte(request):
         raise PermissionDenied("Cet espace est réservé aux patients.")
 
 
+def _medecins_avec_disponibilite(medecins):
+    """Les médecins donnés, chacun avec son prochain créneau libre et le nombre de patients en attente."""
+    en_attente = suivi.toutes_les_demandes_en_attente()
+    maintenant = timezone.localtime()
+    resultat = []
+    for m in medecins:
+        pris = [t.creneau for t in en_attente if t.medecin_id == m["id"] and t.creneau]
+        libres = planning.generer(m.get("horaires", {}) if m["disponible"] else {}, maintenant, pris)
+        resultat.append(dict(
+            m,
+            prochain_creneau=libres[0] if libres else None,
+            en_attente=sum(1 for t in en_attente if t.medecin_id == m["id"] and not t.creneau),
+        ))
+    return resultat
+
+
+def _orienter(texte):
+    """Ce que dit « Quel médecin consulter ? » d'un texte : urgence, spécialité conseillée et médecins disponibles.
+    Rien n'est enregistré."""
+    lecture = modele_ia.predire(texte)
+    urgence = bool(lecture and lecture["niveau"] <= 2 and lecture["confiance"] >= decision_ia.SEUIL_PAR_DEFAUT)
+    prediction = specialite_ia.predire(texte)
+    conseillee, sure = specialite_ia.conseiller(prediction)
+    medecins = _medecins_avec_disponibilite(medecins_test.filtrer(conseillee, ""))
+    repli = not any(m["disponible"] for m in medecins) and conseillee != specialite_ia.ls.MEDECINE_GENERALE
+    if repli:  # aucun médecin de cette spécialité n'est disponible : la médecine générale reste un bon point de départ
+        generalistes = _medecins_avec_disponibilite(medecins_test.filtrer(specialite_ia.ls.MEDECINE_GENERALE, ""))
+    else:
+        generalistes = []
+    return {
+        "urgence": urgence,
+        "specialite": conseillee,
+        "sure": sure,
+        "domaine": specialite_ia.ls.DOMAINES.get(conseillee, ""),
+        "mots": (prediction or {}).get("mots", []) if sure else [],
+        "medecins": medecins,
+        "repli": repli,
+        "generalistes": generalistes,
+    }
+
+
+@login_required
+def orientation(request):
+    """« Quel médecin consulter ? » : le patient décrit ce qu'il ressent, le site propose une spécialité et ses médecins."""
+    _patient_connecte(request)
+    form = OrientationForm(request.POST if request.method == "POST" else None)
+    resultat = _orienter(form.cleaned_data["texte"]) if request.method == "POST" and form.is_valid() else None
+    return render(request, "patients/orientation.html", {"form": form, "resultat": resultat})
+
+
 @login_required
 def liste_medecins(request):
     _patient_connecte(request)
     specialite = request.GET.get("specialite", "")
     ville = request.GET.get("ville", "")
-    en_attente = suivi.toutes_les_demandes_en_attente()
-    maintenant = timezone.localtime()
-    medecins = []
-    for m in medecins_test.filtrer(specialite, ville):
-        pris = [t.creneau for t in en_attente if t.medecin_id == m["id"] and t.creneau]
-        libres = planning.generer(m.get("horaires", {}) if m["disponible"] else {}, maintenant, pris)
-        medecins.append(dict(
-            m,
-            prochain_creneau=libres[0] if libres else None,
-            en_attente=sum(1 for t in en_attente if t.medecin_id == m["id"] and not t.creneau),
-        ))
     return render(request, "patients/medecins.html", {
-        "medecins": medecins,
+        "medecins": _medecins_avec_disponibilite(medecins_test.filtrer(specialite, ville)),
         "specialites": medecins_test.specialites(),
         "villes": medecins_test.villes(),
         "specialite": specialite,

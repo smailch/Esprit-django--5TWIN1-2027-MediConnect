@@ -12,6 +12,10 @@
 
 {% include "patients/_etapes.html" with etape=1 %}
 
+<p class="mt-2">
+  <a href="{% url 'patients:orientation' %}" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="compass" class="h-4 w-4"></i>Je ne sais pas qui consulter</a>
+</p>
+
 <form method="get" class="toolbar">
   <div>
     <label for="f-specialite" class="f-label">Spécialité</label>

@@ -1,0 +1,129 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — Les modèles et algorithmes de la gestion patient</title><style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 9.4pt; line-height: 1.38; }
+.page { width: 210mm; height: 297mm; padding: 9mm 11mm 8mm; overflow: hidden; page-break-after: always; position: relative; }
+.page:last-child { page-break-after: auto; }
+h1 { margin: 0; font-size: 19pt; color: #0E7490; } .sous { color: #475569; margin: 1mm 0 3mm; font-size: 10pt; }
+h2 { margin: 2.2mm 0 1.2mm; font-size: 11.4pt; color: #fff; background: #0E7490; display: inline-block; padding: .8mm 3mm; border-radius: 1.6mm; letter-spacing: .02em; }
+h3 { margin: 0 0 1mm; font-size: 10pt; color: #0E7490; } p { margin: .7mm 0; }
+.bloc { border: 1.3px solid #0E7490; border-radius: 2.4mm; padding: 1.8mm 2.4mm; background: #F8FEFF; }
+.bloc.ia { border-color: #7C3AED; background: #FAF5FF; } .bloc.ia h3 { color: #6D28D9; }
+.bloc.ok { border-color: #16A34A; background: #F0FDF4; } .bloc.ok h3 { color: #15803D; }
+.bloc.ja { border-color: #D97706; background: #FFFBEB; } .bloc.ja h3 { color: #B45309; }
+.bloc.al { border-color: #DC2626; background: #FEF2F2; } .bloc.al h3 { color: #B91C1C; }
+.rang { display: flex; align-items: stretch; gap: 1.8mm; } .rang > .bloc { flex: 1; min-width: 0; }
+.fl { flex: 0 0 auto; align-self: center; font-size: 15pt; color: #0E7490; font-weight: 700; line-height: 1; }
+.tag { display: inline-block; min-width: 5mm; text-align: center; color: #fff; font-weight: 700; border-radius: 1.2mm; padding: 0 1.4mm; font-size: 8.4pt; margin-right: 1mm; }
+.A { background: #0E7490; } .B { background: #155E75; } .C { background: #7C3AED; } .D { background: #9333EA; } .E { background: #D97706; } .F { background: #15803D; }
+table { width: 100%; border-collapse: collapse; font-size: 8.6pt; } th { background: #0E7490; color: #fff; text-align: left; padding: 1.1mm 1.6mm; }
+td { padding: 1.1mm 1.6mm; border-bottom: .3mm solid #BAE6FD; vertical-align: top; } tr:nth-child(even) td { background: #F0FBFD; }
+.io { display: flex; gap: 1.6mm; align-items: stretch; margin: 1.2mm 0; } .io > div { flex: 1; border-radius: 1.8mm; padding: 1.4mm 2mm; min-width: 0; }
+.io .ent { background: #E0F2FE; border: 1px solid #38BDF8; } .io .mod { background: #EDE9FE; border: 1px solid #A78BFA; text-align: center; flex: 1.7; } .io .ent, .io .sor { flex: .85; } .io .sor { background: #DCFCE7; border: 1px solid #4ADE80; }
+.io b.t { display: block; font-size: 7.6pt; letter-spacing: .08em; text-transform: uppercase; color: #475569; margin-bottom: .4mm; }
+.io .fl { align-self: center; } q { quotes: none; font-style: italic; color: #0F172A; }
+.chip { display: inline-block; min-width: 14mm; text-align: center; font-size: 7.4pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-radius: 1.2mm; padding: 0 1.2mm; margin-right: 1mm; } .chip.e { background: #E0F2FE; color: #075985; } .chip.m { background: #EDE9FE; color: #5B21B6; } .chip.s { background: #DCFCE7; color: #166534; }
+.petit { font-size: 8.2pt; color: #475569; } ul { margin: .6mm 0; padding-left: 4mm; } li { margin: .3mm 0; }
+.chiffres { display: flex; gap: 1.6mm; margin-top: 1.2mm; } .chiffres div { flex: 1; text-align: center; background: #fff; border: 1px solid #C4B5FD; border-radius: 1.6mm; padding: .8mm; font-size: 8pt; color: #475569; } .chiffres b { display: block; font-size: 12pt; color: #6D28D9; }
+.pied { position: absolute; left: 11mm; right: 11mm; bottom: 2.6mm; font-size: 7.8pt; color: #64748B; display: flex; justify-content: space-between; }
+</style></head><body>
+
+<div class='page'>
+<h1>Les modèles et algorithmes de la gestion patient</h1>
+<div class='sous'>Ce que fait chaque outil « intelligent » de MediConnect : ce qu'il reçoit, ce qu'il produit.</div>
+
+<h2>1 · Le parcours du patient, et où intervient chaque outil</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc'><h3>① Je ne sais pas qui consulter</h3><p>Je décris ce que je ressens.</p><p><span class='tag A'>A</span><b>Orientation</b> : propose la spécialité et les médecins disponibles.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>② Je décris mes symptômes</h3><p>Cases, échelles, texte libre.</p><p><span class='tag B'>B</span><b>Règles</b> + <span class='tag C'>C</span><b>modèle du texte</b> + <span class='tag D'>D</span><b>IA</b> (facultative) : niveau d'urgence de 1 à 5.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>③ J'attends mon tour</h3><p>Rendez-vous fixé ou file d'attente.</p><p><span class='tag E'>E</span><b>File équitable + agenda</b> : heure prévue pour chacun, e-mails.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>④ Mon dossier</h3><p>Allergies, traitements, mesures, consultations.</p><p><span class='tag F'>F</span><b>Analyse du dossier</b> : alertes et synthèse pour le médecin.</p></div>
+</div>
+
+<h2>2 · Les six outils en un coup d'œil</h2>
+<table>
+<tr><th style='width:21mm'>Outil</th><th style='width:41mm'>Nature et nom du modèle</th><th>Il reçoit</th><th>Il produit</th><th style='width:38mm'>Qui décide ?</th></tr>
+<tr><td><span class='tag A'>A</span><b>Orientation</b></td><td><b>Modèle appris</b><br>TF-IDF + régression logistique</td><td>Un texte libre</td><td>Une spécialité conseillée + les médecins disponibles</td><td>Le patient choisit</td></tr>
+<tr><td><span class='tag B'>B</span><b>Règles pondérées</b></td><td>Algorithme<br>Score à règles pondérées</td><td>Symptômes cochés, constantes, échelles 0 à 5</td><td>Un score puis un niveau d'urgence (1 à 5)</td><td>Le médecin peut requalifier</td></tr>
+<tr><td><span class='tag C'>C</span><b>Lecture du texte</b></td><td><b>Modèle appris</b><br>TF-IDF + régression logistique</td><td>Le texte libre du patient</td><td>Un niveau estimé + un degré de confiance</td><td>Il ne peut que <b>relever</b> l'urgence</td></tr>
+<tr><td><span class='tag D'>D</span><b>IA de langage</b></td><td>IA de langage (facultatif) : Qwen via Groq, ou Qwen 2.5 en local (Ollama)</td><td>Le texte (anonymisé), si le patient accepte</td><td>Des signes repérés avec leur citation</td><td>Jamais le niveau : il propose seulement</td></tr>
+<tr><td><span class='tag E'>E</span><b>File + agenda</b></td><td>Algorithme<br>File à priorité équitable + agenda prévisionnel</td><td>Niveaux, ancienneté, rendez-vous fixés, horaires</td><td>Place, heure prévue de chacun, e-mails</td><td>Règles d'équité fixes</td></tr>
+<tr><td><span class='tag F'>F</span><b>Analyse du dossier</b></td><td>Règles d'analyse du dossier (IA en option)</td><td>Allergies, traitements, mesures, consultations</td><td>Alertes classées + synthèse lisible</td><td>Le médecin interprète</td></tr>
+</table>
+
+<h2>3 · Deux sortes d'outils</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc ia'><h3>Modèles « appris » (A et C)</h3>
+    <p>Un modèle a <b>appris tout seul</b> à reconnaître des mots et des tournures à partir de milliers de phrases d'exemple. On ne lui écrit pas de règle : il généralise.</p>
+    <p class='petit'>Deux modèles de 270 Ko et 428 Ko.</p></div>
+  <div class='bloc'><h3>Algorithmes à règles (B, E, F)</h3>
+    <p>Des règles <b>écrites et visibles</b> : on peut toujours expliquer pourquoi un résultat est sorti. Rien n'est « boîte noire ».</p>
+    <p class='petit'>C'est volontaire en santé : un résultat qu'on ne sait pas expliquer ne doit pas décider.</p></div>
+</div>
+
+<h2>4 · Les quatre principes de sécurité</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc ok'><h3>Le médecin décide</h3><p>Aucun outil ne pose de diagnostic. Le médecin garde le dernier mot.</p></div>
+  <div class='bloc ok'><h3>On relève, on ne baisse pas</h3><p>L'IA peut rendre un cas <b>plus urgent</b>, jamais moins.</p></div>
+  <div class='bloc ok'><h3>Le doute, on le dit</h3><p>Trop incertain : l'outil se tait ou envoie vers la médecine générale.</p></div>
+  <div class='bloc ok'><h3>Données protégées</h3><p>Modèles locaux, pas de donnée sortie ; IA externe seulement avec accord et texte anonymisé.</p></div>
+</div>
+<div class='bloc ja' style='margin-top:3mm'><h3>Les limites, dites franchement</h3><ul>
+  <li>Les modèles ont appris sur des phrases <b>générées</b>, pas sur de vrais patients : ce sont des <b>prototypes</b>.</li>
+  <li>Les tests à la main portent sur peu de phrases (39 et 30) : l'ordre de grandeur est fiable, pas la décimale.</li>
+  <li>L'heure prévue est une <b>estimation</b> ; seuils et délais : valeurs de démonstration, à valider par un professionnel de santé.</li></ul></div>
+<div class='pied'><span>MediConnect · Gestion patient</span><span>Page 1 sur 2</span></div>
+</div>
+
+<div class='page'>
+<h1 style='font-size:15pt'>Les outils en détail : entrée, traitement, sortie</h1>
+
+<h2>A · Orientation vers une spécialité <span style='font-weight:400'>(modèle appris)</span></h2>
+<div class='io'>
+  <div class='ent'><b class='t'>Entrée</b>Un texte libre<br><q>« Depuis une semaine mon coeur cogne très fort et j&#x27;ai mal dans la poitrine quan… »</q></div><div class='fl'>›</div>
+  <div class='mod'><b class='t'>Modèle</b><b>TF-IDF + régression logistique</b><br>9 spécialités<br><span class='petit'>appris sur 5400 phrases d'exemple</span></div><div class='fl'>›</div>
+  <div class='sor'><b class='t'>Sortie</b><b>Cardiologie</b> (99 % de confiance) + les médecins disponibles avec leur prochain créneau</div>
+</div>
+<p class='petit'><b>Garde-fous :</b> sous 70 % de confiance il ne devine pas (médecine générale). Alerte « appelez le 190 » si le texte semble grave. Rien n'est enregistré. <b>Résultat :</b> 93 % de bonnes orientations sur 30 phrases écrites à la main (au hasard : 20 %).</p>
+
+<h2>B + C · Le triage : quel niveau d'urgence ?</h2>
+<div class='io'>
+  <div class='ent'><b class='t'>Entrée</b>Cases cochées, température, échelles 0 à 5, et le <b>texte libre</b></div><div class='fl'>›</div>
+  <div class='mod'><b class='t'>Deux lecteurs</b><b>B</b> <b>Score à règles pondérées</b> : des points par symptôme, un signe d'alerte impose un minimum.<br><b>C</b> <b>TF-IDF + régression logistique</b> : lit le texte et estime un niveau.</div><div class='fl'>›</div>
+  <div class='sor'><b class='t'>Sortie</b>Niveau 1 vital · 2 très urgent · 3 urgent · 4 standard · 5 non urgent, avec l'explication</div>
+</div>
+<div class='bloc ia' style='margin-top:1mm'><p><b>Exemple.</b> Le patient n'a rien coché mais écrit <q>« Une douleur très forte me serre la poitrine et irradie dans le bras gauche »</q>. Les règles donnent le niveau 5 (aucun symptôme). Le modèle lit le texte et reconnaît un cas très grave (99 % de confiance). Comme il est sûr de lui, <b>le niveau est relevé à 2</b> (c'est le plus haut qu'il puisse atteindre : le niveau 1 reste aux règles et au médecin), avec les mots qui l'ont décidé, « à confirmer par le médecin ».</p></div>
+<div class='chiffres'>
+  <div><b>90 %</b>bon niveau exact<br>(39 phrases à la main)</div>
+  <div><b>92 %</b>cas graves repérés<br>(niveaux 1 et 2)</div>
+  <div><b>93 %</b>bon niveau<br>(1500 phrases générées)</div>
+  <div><b>0,4 %</b>fausses alertes<br>(cas bénins vus graves)</div>
+</div>
+
+<h2>D · IA de langage et F · Analyse du dossier</h2>
+<div class='rang'>
+  <div class='bloc ia'><h3>D · IA de langage <span style='font-weight:400'>(facultative, avec accord du patient)</span></h3>
+    <p><span class='chip e'>Entrée</span>le texte, <b>anonymisé</b> (téléphone, e-mail retirés)</p>
+    <p><span class='chip m'>Modèle</span><b>Qwen</b> (qwen3.8-27b) via Groq, ou Qwen 2.5 (3B) en local avec Ollama</p>
+    <p><span class='chip s'>Sortie</span>des signes repérés, chacun avec sa <b>citation exacte</b></p>
+    <p class='petit'>Citation introuvable ou niée : rejetée. Ne fixe jamais un niveau. Sans IA, tout fonctionne.</p></div>
+  <div class='bloc'><h3>F · Analyse du dossier médical <span style='font-weight:400'>(règles)</span></h3>
+    <p><span class='chip e'>Entrée</span>allergies, traitements, antécédents, mesures, consultations</p>
+    <p><span class='chip m'>Règles</span><b>analyse du dossier</b> : allergie contre médicament, interactions, cohérence, mesures récentes</p>
+    <p><span class='chip s'>Sortie</span>alertes classées et une synthèse lisible en 30 secondes</p>
+    <p class='petit'>Le médecin interprète : l'outil signale, il ne conclut pas.</p></div>
+</div>
+
+<h2>E · File d'attente équitable et agenda prévisionnel</h2>
+<div class='io'>
+  <div class='ent'><b class='t'>Entrée</b>Le niveau de chaque demande, son ancienneté, les rendez-vous fixés, les horaires du médecin</div><div class='fl'>›</div>
+  <div class='mod'><b class='t'>Algorithme</b><b>File à priorité équitable + agenda prévisionnel</b> : un délai cible par niveau, 5 dépassements au plus, puis on déroule la journée du médecin</div><div class='fl'>›</div>
+  <div class='sor'><b class='t'>Sortie</b>La <b>place</b> et l'<b>heure prévue</b> de chacun, et un <b>e-mail</b> si elle change beaucoup</div>
+</div>
+<p class='petit'><b>Attente maximale</b> avant de passer en tête : niveau 2 → 1 h 30, niveau 3 → 6 h, niveau 4 → 24 h, niveau 5 → 72 h (heures de présence du médecin). Une urgence décale les rendez-vous suivants, le patient est prévenu.</p>
+
+<div class='pied'><span>MediConnect · Gestion patient</span><span>Page 2 sur 2</span></div>
+</div>
+</body></html>

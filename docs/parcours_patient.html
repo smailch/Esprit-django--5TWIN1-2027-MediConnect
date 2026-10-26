@@ -1,0 +1,95 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — Le parcours du patient</title><style>
+@page { size: A4 landscape; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 8.8pt; line-height: 1.32; }
+.page { width: 297mm; height: 209mm; padding: 7mm 9mm 5mm; background: #fff; overflow: hidden; position: relative; }
+.haut { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: .6mm solid #0E7490; padding-bottom: 1.6mm; }
+h1 { margin: 0; font-size: 19pt; color: #0E7490; } .sous { color: #475569; font-size: 9.6pt; }
+.legende { display: flex; gap: 1.4mm; flex-wrap: wrap; justify-content: flex-end; max-width: 150mm; font-size: 7.8pt; color: #334155; }
+.legende span { display: inline-flex; align-items: center; gap: .8mm; }
+.tag { display: inline-block; min-width: 4.6mm; text-align: center; color: #fff; font-weight: 700; border-radius: 1.1mm; padding: 0 1mm; font-size: 7.8pt; }
+.A { background: #0E7490; } .B { background: #155E75; } .C { background: #7C3AED; } .D { background: #9333EA; } .E { background: #D97706; } .F { background: #15803D; } .M { background: #DB2777; }
+.rail { display: flex; gap: 1.6mm; margin-top: 3mm; align-items: stretch; }
+.etape { flex: 1; min-width: 0; border-radius: 3mm; border: 1.4px solid var(--c); background: var(--f); display: flex; flex-direction: column; }
+.tete { background: var(--c); color: #fff; border-radius: 1.6mm 1.6mm 0 0; padding: 1.6mm 2mm; display: flex; align-items: center; gap: 1.6mm; }
+.num { flex: 0 0 6.2mm; height: 6.2mm; border-radius: 50%; background: #fff; color: var(--c); font-weight: 800; text-align: center; line-height: 6.2mm; font-size: 10pt; }
+.tete b { font-size: 10pt; line-height: 1.15; } .tete small { display: block; font-size: 7.6pt; opacity: .92; font-weight: 400; }
+.corps { padding: 1.8mm 2.2mm; flex: 1; } .corps ul { margin: .6mm 0; padding-left: 3.4mm; } .corps li { margin: .5mm 0; }
+.icone { font-size: 17pt; line-height: 1; margin-right: .4mm; }
+.fl { flex: 0 0 auto; align-self: center; font-size: 17pt; color: #0E7490; font-weight: 800; margin: 0 -.6mm; }
+.s1 { --c: #0E7490; --f: #F0FBFD; } .s2 { --c: #7C3AED; --f: #FAF5FF; } .s3 { --c: #B45309; --f: #FFFBEB; } .s4 { --c: #DC2626; --f: #FEF2F2; }
+.s5 { --c: #0D9488; --f: #F0FDFA; } .s6 { --c: #15803D; --f: #F0FDF4; }
+.mini { border-radius: 1.8mm; padding: 1mm 1.6mm; margin: 1mm 0; font-size: 8.2pt; border: 1px solid; }
+.m-rouge { background: #fff; border-color: #FCA5A5; } .m-vert { background: #fff; border-color: #86EFAC; } .m-bleu { background: #fff; border-color: #7DD3FC; } .m-jaune { background: #fff; border-color: #FCD34D; }
+.mail { display: inline-block; background: #0E7490; color: #fff; border-radius: 1.2mm; padding: 0 1.2mm; font-size: 7.6pt; font-weight: 700; }
+.niv { display: flex; gap: .8mm; margin: 1mm 0; } .niv i { flex: 1; text-align: center; font-style: normal; color: #fff; font-weight: 700; border-radius: 1mm; font-size: 8pt; padding: .2mm 0; }
+.bandes { display: flex; gap: 2mm; margin-top: 2.6mm; }
+.bande { flex: 1; border-radius: 2.6mm; padding: 1.8mm 2.6mm; border: 1.3px solid; } .bande h3 { margin: 0 0 1mm; font-size: 9.6pt; }
+.b-mail { border-color: #0E7490; background: #ECFEFF; } .b-mail h3 { color: #0E7490; }
+.b-adm { border-color: #475569; background: #F8FAFC; } .b-adm h3 { color: #334155; }
+.b-reg { border-color: #D97706; background: #FFFBEB; } .b-reg h3 { color: #B45309; }
+.petit { font-size: 8pt; color: #475569; } .ligne { display: flex; gap: 1.6mm; flex-wrap: wrap; } .ligne span { background: #fff; border: 1px solid #CBD5E1; border-radius: 1.2mm; padding: .2mm 1.6mm; font-size: 8pt; }
+.modele { margin: 1.4mm 2.2mm 2mm; padding: 1mm 1.6mm; border-radius: 1.6mm; background: #fff; border: 1px dashed var(--c); font-size: 7.8pt; line-height: 1.3; } .modele b.t { display: block; font-size: 6.8pt; letter-spacing: .09em; text-transform: uppercase; color: #64748B; }
+.pied { position: absolute; left: 9mm; right: 9mm; bottom: 2.6mm; font-size: 7.6pt; color: #64748B; display: flex; justify-content: space-between; }
+</style></head><body><div class='page'><div class='zoom' style='zoom:.99'>
+
+<div class='haut'>
+  <div><h1>Le parcours du patient sur MediConnect</h1><div class='sous'>De l'inscription jusqu'au dossier après la consultation : ce que le patient fait, ce que le site fait pour lui, et où interviennent les outils intelligents.</div></div>
+  <div class='legende'>
+    <span><i class='tag A'>A</i>Orientation</span><span><i class='tag B'>B</i>Règles de triage</span><span><i class='tag C'>C</i>Lecture du texte</span>
+    <span><i class='tag D'>D</i>IA de langage (option)</span><span><i class='tag E'>E</i>File + agenda</span><span><i class='tag F'>F</i>Analyse du dossier</span><span><i class='mail'>✉</i>e-mail envoyé</span>
+  </div>
+</div>
+
+<div class='rail'>
+  <div class='etape s1'><div class='tete'><span class='num'>1</span><b>Créer mon espace<small>Une seule fois</small></b></div>
+    <div class='corps'><p><span class='icone'>👤</span></p>
+      <ul><li><b>Inscription</b> : identité, adresse e-mail, mot de passe.</li><li>Un <b>dossier médical</b> est créé pour moi.</li><li>Je le complète : <b>allergies</b>, <b>mesures</b> (tension, poids…), traitements.</li><li>Mot de passe oublié : <span class='mail'>✉</span> lien valable 2 h.</li></ul></div><div class='modele'><b class='t'>Modèle utilisé</b>Aucun : formulaires et e-mails.</div></div>
+  <div class='fl'>›</div>
+
+  <div class='etape s2'><div class='tete'><span class='num'>2</span><b>Trouver mon médecin<small>Je ne sais pas qui consulter</small></b></div>
+    <div class='corps'><p><span class='icone'>🧭</span></p>
+      <div class='mini m-bleu'><b>Je décris</b> ce que je ressens en quelques mots.</div>
+      <p style='text-align:center;margin:0'>▼</p>
+      <div class='mini m-bleu'><span class='tag A'>A</span> Spécialité conseillée <b>+ médecins disponibles</b> avec leur prochain créneau.</div>
+      <ul><li>Alerte <b>« appelez le 190 »</b> si le texte semble grave.</li><li>Sinon je filtre par <b>spécialité</b> et <b>ville</b>.</li></ul></div><div class='modele'><b class='t'>Modèle utilisé</b><span class='tag A'>A</span> <b>TF-IDF + régression logistique</b> (9 spécialités)</div></div>
+  <div class='fl'>›</div>
+
+  <div class='etape s3'><div class='tete'><span class='num'>3</span><b>Décrire mes symptômes<small>Triage</small></b></div>
+    <div class='corps'><p><span class='icone'>📝</span></p>
+      <ul><li>Je coche mes <b>symptômes</b>, je note <b>douleur, fièvre, respiration</b> de 0 à 5.</li><li>J'écris mon ressenti avec mes mots.</li></ul>
+      <p class='petit'><span class='tag B'>B</span><span class='tag C'>C</span><span class='tag D'>D</span> lisent ma demande :</p>
+      <div class='niv'><i style='background:#B91C1C'>1</i><i style='background:#EA580C'>2</i><i style='background:#CA8A04'>3</i><i style='background:#0E7490'>4</i><i style='background:#15803D'>5</i></div>
+      <p class='petit'>Niveau d'urgence + explication. Le médecin peut le corriger.</p></div><div class='modele'><b class='t'>Modèles utilisés</b><span class='tag B'>B</span> Score à règles pondérées<br><span class='tag C'>C</span> TF-IDF + régression logistique<br><span class='tag D'>D</span> Qwen (Groq ou Ollama), facultatif</div></div>
+  <div class='fl'>›</div>
+
+  <div class='etape s4'><div class='tete'><span class='num'>4</span><b>Mon tour<small>Rendez-vous ou file</small></b></div>
+    <div class='corps'><p><span class='icone'>🗓️</span></p>
+      <div class='mini m-rouge'><b>Niveaux 1 et 2</b> : pas de créneau, prise en charge <b>en priorité</b>. <span class='mail'>✉</span> place + heure estimée.</div>
+      <div class='mini m-vert'><b>Niveaux 3 à 5</b> : je choisis un <b>créneau fixe</b> <span class='mail'>✉</span> confirmation…</div>
+      <div class='mini m-jaune'>…ou je <b>reste dans la file</b> <span class='mail'>✉</span> place + heure estimée.</div></div><div class='modele'><b class='t'>Modèle utilisé</b><span class='tag E'>E</span> File à priorité équitable (un algorithme, pas d'IA apprise)</div></div>
+  <div class='fl'>›</div>
+
+  <div class='etape s5'><div class='tete'><span class='num'>5</span><b>J'attends<small>Avec transparence</small></b></div>
+    <div class='corps'><p><span class='icone'>⏳</span></p>
+      <p><span class='tag E'>E</span> calcule l'<b>heure prévue</b> de chacun, en continu.</p>
+      <ul><li>Une <b>urgence</b> passe devant : mon heure est décalée.</li><li>Retard d'au moins 10 min : <span class='mail'>✉</span> nouvelle heure.</li><li>Personne n'attend sans fin : <b>5 dépassements au plus</b>.</li><li>Je peux <b>changer ou annuler</b> <span class='mail'>✉</span>.</li></ul></div><div class='modele'><b class='t'>Modèle utilisé</b><span class='tag E'>E</span> Agenda prévisionnel (simulation de la journée du médecin)</div></div>
+  <div class='fl'>›</div>
+
+  <div class='etape s6'><div class='tete'><span class='num'>6</span><b>Consultation et après<small>Mon dossier vivant</small></b></div>
+    <div class='corps'><p><span class='icone'>🩺</span></p>
+      <ul><li>Le médecin lit ma <b>synthèse</b> et les <b>alertes</b> <span class='tag F'>F</span> (allergie contre médicament…).</li><li>Il rédige le <b>compte rendu</b> : diagnostic, prescription, conseils.</li><li>Je retrouve tout dans mon <b>historique</b> et mon dossier en <b>langage clair</b>.</li><li>Je peux <b>exporter</b> mes données ou supprimer mon compte.</li></ul></div><div class='modele'><b class='t'>Modèle utilisé</b><span class='tag F'>F</span> Règles d'analyse du dossier ; reformulation en clair par Qwen (facultatif)</div></div>
+</div>
+
+<div class='bandes'>
+  <div class='bande b-mail'><h3>✉ Les e-mails que je reçois, sans donnée médicale</h3>
+    <div class='ligne'><span>Rendez-vous confirmé</span><span>Heure modifiée</span><span>Rendez-vous retardé / retrouve son heure</span><span>Demande enregistrée (file)</span><span>Heure estimée changée</span><span>Annulation</span><span>Mot de passe</span></div>
+    <p class='petit' style='margin-top:1mm'>Pas d'e-mail pour une simple petite variation : seulement pour un vrai changement (10 min pour un rendez-vous, 30 min pour la file).</p></div>
+  <div class='bande b-adm'><h3>🛠 Pendant ce temps, côté administrateur</h3>
+    <div class='ligne'><span>Suivi de la file et des retards</span><span>Requalifier un niveau</span><span>Terminer avec compte rendu</span><span>Annuler</span><span>Patients : filtres, export CSV, désactivation</span><span>Réglages : délais, seuils</span></div>
+    <p class='petit' style='margin-top:1mm'>Le back-office voit les mêmes heures prévues que les patients.</p></div>
+  <div class='bande b-reg'><h3>⚖ Les règles qui protègent</h3>
+    <ul class='petit' style='margin:0;padding-left:3.4mm'><li><b>Le médecin décide</b> ; l'IA propose seulement.</li><li>L'IA peut <b>relever</b> l'urgence, jamais la baisser.</li><li>Des données protégées : modèles sur le serveur, IA externe avec accord.</li></ul></div>
+</div>
+
+</div><div class='pied'><span>MediConnect · Gestion patient · parcours du patient</span><span>Les durées et seuils sont des valeurs de démonstration, à faire valider par un professionnel de santé.</span></div>
+</div></body></html>

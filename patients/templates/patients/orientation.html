@@ -1,0 +1,59 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Quel médecin consulter ? — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:medecins' %}" class="link text-sm">← Choisir un médecin</a>
+    <h1 class="page-title mt-2">Quel médecin consulter ?</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Décrivez ce que vous ressentez : nous vous indiquons la spécialité qui correspond le mieux et les médecins disponibles. Rien n'est enregistré.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-4">
+  {% csrf_token %}
+  {% with field=form.texte %}{% include "core/_champ.html" %}{% endwith %}
+  <p class="note">
+    <i data-lucide="cpu" class="h-4 w-4" aria-hidden="true"></i>
+    Un petit modèle installé sur le serveur de MediConnect lit votre texte. Rien ne sort du serveur et votre texte n'est pas conservé.
+  </p>
+  <button type="submit" class="abtn abtn-primary abtn-lg">Trouver la bonne spécialité</button>
+</form>
+
+{% if resultat %}
+<section class="mt-8 max-w-3xl space-y-5" aria-labelledby="titre-resultat">
+  {% if resultat.urgence %}
+  <div role="alert" class="alert alert-danger">
+    <p><strong>Ce que vous décrivez peut être grave.</strong> N'attendez pas un rendez-vous : appelez immédiatement les urgences (SAMU : 190) ou rendez-vous aux urgences les plus proches.</p>
+  </div>
+  {% endif %}
+
+  <div class="panel panel-pad">
+    <h2 id="titre-resultat" class="text-sm font-medium muted">Spécialité conseillée</h2>
+    <p class="mt-1 text-2xl font-semibold">{{ resultat.specialite }}</p>
+    {% if resultat.sure %}
+    <p class="muted mt-2 text-sm">Votre description évoque plutôt {{ resultat.domaine }}.{% if resultat.mots %} Mots repérés : {% for m in resultat.mots %}<strong class="font-medium">« {{ m }} »</strong>{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}</p>
+    {% else %}
+    <p class="muted mt-2 text-sm">Votre description ne permet pas de cibler une spécialité. La médecine générale est le meilleur point de départ : le médecin vous orientera si besoin.</p>
+    {% endif %}
+    <p class="note mt-4">
+      <i data-lucide="info" class="h-4 w-4" aria-hidden="true"></i>
+      Cette orientation est une aide, pas un diagnostic. En cas de doute, choisissez la médecine générale.
+    </p>
+  </div>
+
+  <h2 class="text-base font-medium">{% if resultat.medecins %}Médecins de cette spécialité{% else %}Aucun médecin dans cette spécialité pour le moment{% endif %}</h2>
+  <ul class="grid gap-4 sm:grid-cols-2">
+    {% for m in resultat.medecins %}{% include "patients/_carte_medecin.html" %}{% endfor %}
+  </ul>
+
+  {% if resultat.repli or not resultat.medecins %}
+  <h2 class="text-base font-medium">{% if resultat.repli %}Aucun médecin de cette spécialité n'est disponible : en attendant, vous pouvez consulter en médecine générale{% else %}Vous pouvez consulter en médecine générale{% endif %}</h2>
+  <ul class="grid gap-4 sm:grid-cols-2">
+    {% for m in resultat.generalistes %}{% include "patients/_carte_medecin.html" %}{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
