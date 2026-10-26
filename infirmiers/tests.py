@@ -14,11 +14,11 @@ from django.utils import timezone
 from core.models import User
 from core.views import ConnexionView
 from patients import ia_client
-from patients.models import ConstantesVitales, Patient
+from patients.models import ConstantesVitales, Mesure, Patient
 
-from . import alertes, ia_soin, notifications, views, views_patient
+from . import alertes, dossier, ia_soin, notifications, views, views_patient
 from .forms import AnnulationForm, CompteRenduForm, DemandeSoinForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
-from .models import Infirmier, InterventionDomicile, TypeSoin
+from .models import Infirmier, InterventionDomicile, TypeSoin, passage_en_conflit, prochain_creneau_libre
 
 
 def un_infirmier(valide=True, **champs):
@@ -866,3 +866,86 @@ class ValidationAdminTests(SimpleTestCase):
         enregistrer.assert_called_once_with(update_fields=["est_valide"])  # seul le compte qui change est enregistré
         message.assert_called_once_with(None, "1 compte(s) validé(s).")
         self.assertEqual(modele_admin.actions, ["valider_comptes", "retirer_validation"])
+
+
+# --- Planning : pas de double réservation --------------------------------------------------------------
+
+
+class PlanningTests(SimpleTestCase):
+    def setUp(self):
+        self.dix_heures = timezone.make_aware(datetime.datetime(2026, 11, 2, 10, 0))
+
+    def a(self, minutes):
+        return self.dix_heures + datetime.timedelta(minutes=minutes)
+
+    def test_conflit_a_moins_de_trente_minutes(self):
+        self.assertEqual(passage_en_conflit(self.a(20), [self.dix_heures]), self.dix_heures)
+        self.assertEqual(passage_en_conflit(self.a(-29), [self.dix_heures]), self.dix_heures)
+        self.assertIsNone(passage_en_conflit(self.a(30), [self.dix_heures]))
+        self.assertIsNone(passage_en_conflit(self.a(-30), [self.dix_heures]))
+        self.assertIsNone(passage_en_conflit(self.dix_heures, []))
+
+    def test_prochain_creneau_libre(self):
+        self.assertEqual(prochain_creneau_libre(self.a(0), []), self.a(0))
+        self.assertEqual(prochain_creneau_libre(self.a(10), [self.a(0)]), self.a(30))
+        # 10:00 et 10:30 sont pris : on saute les deux
+        self.assertEqual(prochain_creneau_libre(self.a(5), [self.a(30), self.a(0)]), self.a(60))
+
+    def test_message_de_la_vue(self):
+        with mock.patch.object(InterventionDomicile.objects, "passages_autour", return_value=[self.dix_heures]) as passages:
+            message = views._conflit_de_planning(un_infirmier(), self.a(15), exclure="x")
+        self.assertIn("déjà un passage à 10:00", message)
+        self.assertIn("Prochain créneau libre : 02/11 à 10:30", message)
+        self.assertEqual(passages.call_args.args[2], "x")  # l'intervention déplacée ne se gêne pas elle-même
+        with mock.patch.object(InterventionDomicile.objects, "passages_autour", return_value=[]):
+            self.assertIsNone(views._conflit_de_planning(un_infirmier(), self.a(15)))
+
+
+# --- Dossier du patient : constantes reprises en mesures de santé ------------------------------------------
+
+
+class DossierPatientTests(SimpleTestCase):
+    def realisee(self, **constantes):
+        it = une_intervention(statut="realisee", infirmier=un_infirmier(), realisee_le=timezone.make_aware(datetime.datetime(2026, 11, 2, 10, 17, 42)))
+        it.constantes = ConstantesVitales(**constantes) if constantes else None
+        return it
+
+    def test_une_mesure_par_constante(self):
+        mesures = dossier.mesures_du_passage(self.realisee(
+            temperature=Decimal("38.2"), tension_systolique=160, tension_diastolique=98, frequence_cardiaque=92, saturation_oxygene=95,
+        ))
+        self.assertEqual(
+            sorted((m.type, m.valeur, m.valeur2) for m in mesures),
+            [("frequence", 92.0, None), ("saturation", 95.0, None), ("temperature", 38.2, None), ("tension", 160.0, 98.0)],
+        )
+        m = mesures[0]
+        self.assertEqual(m.mesure_le.second, 0)  # à la minute, comme les mesures saisies par le patient
+        self.assertEqual(m.note, "Relevé par l'infirmier Sami Ben Ali lors d'un soin à domicile")
+
+    def test_rien_a_reprendre(self):
+        self.assertEqual(dossier.mesures_du_passage(self.realisee()), [])
+        self.assertEqual(dossier.mesures_du_passage(self.realisee(tension_systolique=160)), [])  # tension incomplète
+        en_cours = self.realisee(temperature=Decimal("37"))
+        en_cours.statut = "acceptee"
+        self.assertEqual(dossier.mesures_du_passage(en_cours), [])
+
+    def test_une_mesure_invalide_ne_bloque_pas(self):
+        with mock.patch.object(Mesure, "full_clean", side_effect=ValidationError({"mesure_le": "doublon"})), \
+                mock.patch.object(Mesure, "save") as enregistrer:
+            self.assertEqual(dossier.enregistrer_mesures(self.realisee(temperature=Decimal("37.5"))), 0)
+        enregistrer.assert_not_called()
+
+    def test_historique_sans_doublon(self):
+        """Le passage et la mesure qui en est tirée (même minute) ne comptent qu'une fois."""
+        passage = self.realisee(tension_systolique=150, tension_diastolique=90)
+        meme_minute = Mesure(type="tension", valeur=150, valeur2=90, mesure_le=passage.realisee_le.replace(second=0))
+        plus_tot = Mesure(type="tension", valeur=141, valeur2=88, mesure_le=passage.realisee_le - datetime.timedelta(days=2))
+        passages = mock.Mock()
+        passages.exclude.return_value = [passage]
+        with mock.patch.object(InterventionDomicile.objects, "filter", return_value=passages), \
+                mock.patch.object(Mesure.objects, "filter", return_value=[meme_minute, plus_tot]):
+            historique = dossier.historique(une_intervention())
+        self.assertEqual(historique, [
+            {"tension_systolique": 141, "tension_diastolique": 88},
+            {"tension_systolique": 150.0, "tension_diastolique": 90.0},
+        ])
