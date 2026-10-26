@@ -376,3 +376,32 @@ class SpecialiteCommandeTests(SimpleTestCase):
             for morceau in ("900 phrases d'entraînement", "bonne spécialité", "F1 moyen", "Cardiologie", "Modèle enregistré"):
                 self.assertIn(morceau, texte)
             self.assertTrue((Path(dossier) / specialite.NOM_MODELE).exists())
+
+
+# --- Modèles enregistrés illisibles : le projet les réentraîne tout seul (autre version de scikit-learn, fichier abîmé) ---
+class ModeleIllisibleTests(SimpleTestCase):
+    def verifier(self, module, nom_fichier):
+        with tempfile.TemporaryDirectory() as dossier:
+            (Path(dossier) / nom_fichier).write_bytes(b"ceci n'est pas un modele enregistre")
+            petit = module.entrainer(n=900 if module is specialite else 600, graine=2, n_test=360 if module is specialite else 150)
+            module.oublier()
+            self.addCleanup(module.oublier)
+            with mock.patch.object(module, "DOSSIER_ARTEFACTS", Path(dossier)), mock.patch.object(module, "entrainer", return_value=petit):
+                with self.assertLogs("mediconnect.ia", level="WARNING"):
+                    charge = module.charger()
+                self.assertIsNotNone(charge)  # réentraîné
+                self.assertNotEqual((Path(dossier) / nom_fichier).read_bytes(), b"ceci n'est pas un modele enregistre")  # et réenregistré
+                module.oublier()
+                self.assertIsNotNone(module.charger())  # le fichier réenregistré se relit sans réentraîner
+
+    def test_modele_de_triage(self):
+        self.verifier(modele, modele.NOM_MODELE)
+
+    def test_modele_d_orientation(self):
+        self.verifier(specialite, specialite.NOM_MODELE)
+
+    def test_scikit_learn_est_fige_sur_la_version_des_modeles(self):
+        import sklearn
+
+        exigences = (Path(__file__).resolve().parent.parent / "requirements.txt").read_text(encoding="utf-8")
+        self.assertIn(f"scikit-learn=={sklearn.__version__}", exigences)

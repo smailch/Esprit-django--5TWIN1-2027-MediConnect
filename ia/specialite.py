@@ -176,7 +176,13 @@ def charger():
         chemin = DOSSIER_ARTEFACTS / NOM_MODELE
         try:
             if chemin.exists():
-                _etat["modele"] = joblib.load(chemin)
+                try:
+                    _etat["modele"] = joblib.load(chemin)
+                except Exception:  # noqa: BLE001 - autre version de scikit-learn, fichier abîmé : on réentraîne (quelques secondes)
+                    journal.warning("Modèle d'orientation enregistré illisible : réentraînement", exc_info=True)
+                    entraine, evaluation = entrainer()
+                    sauvegarder(entraine, evaluation)
+                    _etat["modele"] = entraine
             else:
                 entraine, evaluation = entrainer()
                 sauvegarder(entraine, evaluation)
