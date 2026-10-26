@@ -1,13 +1,14 @@
 import datetime
 import os
 import secrets
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from patients.models import Allergie, AutoEvaluation, Consultation, DossierMedical, Patient, Triage
-from pharmacies.models import Ordonnance, Pharmacie
+from pharmacies.models import Medicament, Ordonnance, Pharmacie
 
 # Préfixe distinct de celui de patients/charger_demo (« demo_ ») : les deux commandes ne se suppriment pas l'une l'autre.
 PREFIXE = "demorx_"
@@ -19,6 +20,20 @@ ORDONNANCES = [
     (Ordonnance.Statut.EMISE, False, 1, PRESCRIPTION),
     (Ordonnance.Statut.EN_PREPARATION, True, 3, "Ventoline 100 µg, 2 bouffées en cas de gêne respiratoire\nSérum physiologique, lavage de nez matin et soir, 10 jours"),
     (Ordonnance.Statut.DELIVREE, True, 30, "Ibuprofène 400 mg, 1 comprimé 3 fois par jour pendant les repas, 3 jours"),
+]
+
+# Stock de la pharmacie : (nom, principe actif, dosage, forme, quantité, seuil d'alerte, prix en DT).
+# L'amoxicilline est en RUPTURE (quantité 0) : l'ordonnance émise la contient, la démo de la substitution part de là.
+STOCK = [
+    ("Amoxicilline", "amoxicilline", "1 g", "comprime", 0, 5, "6.480"),
+    ("Clamoxyl", "amoxicilline", "1 g", "comprime", 4, 5, "8.950"),
+    ("Hiconcil", "amoxicilline", "1 g", "gelule", 12, 5, "7.200"),
+    ("Doliprane", "paracétamol", "1 g", "comprime", 40, 10, "2.900"),
+    ("Efferalgan", "paracétamol", "1 g", "comprime", 3, 10, "3.400"),
+    ("Ventoline", "salbutamol", "100 µg", "inhalateur", 8, 3, "9.700"),
+    ("Sérum physiologique", "chlorure de sodium", "", "autre", 25, 10, "1.200"),
+    ("Advil", "ibuprofène", "400 mg", "comprime", 15, 5, "4.600"),
+    ("Mopral", "oméprazole", "20 mg", "gelule", 0, 4, "11.300"),
 ]
 
 
@@ -37,7 +52,11 @@ class Command(BaseCommand):
         if options["supprimer"]:
             return self.supprimer(User)
         if User.objects.filter(username__startswith=PREFIXE).exists():
-            self.stdout.write("Les données de démonstration sont déjà chargées (utilisez --supprimer pour les retirer).")
+            ajoutes = self.ajouter_stock()
+            self.stdout.write(
+                "Les données de démonstration sont déjà chargées (utilisez --supprimer pour les retirer)."
+                + (f" {ajoutes} médicament(s) ajouté(s) au stock." if ajoutes else "")
+            )
             return
 
         # Aucun mot de passe écrit dans le code : il vient de l'option, de l'environnement, ou il est tiré au hasard.
@@ -85,10 +104,27 @@ class Command(BaseCommand):
                 delivree_le=maintenant - datetime.timedelta(days=jours - 1) if statut == Ordonnance.Statut.DELIVREE else None,
             )
 
-        self.stdout.write(self.style.SUCCESS("Pharmacie, médecin, patient, consultation et 3 ordonnances de démonstration créés."))
+        ajoutes = self.ajouter_stock()
+        self.stdout.write(self.style.SUCCESS(
+            f"Pharmacie, médecin, patient, consultation, 3 ordonnances et {ajoutes} médicaments en stock de démonstration créés."
+        ))
         self.stdout.write(f"Comptes : {PREFIXE}pharmacie, {PREFIXE}medecin, {PREFIXE}patient")
         if not (options["mot_de_passe"] or os.environ.get("DEMO_MOT_DE_PASSE")):
             self.stdout.write(f"Mot de passe (tiré au hasard, à noter) : {mot_de_passe}")
+
+    def ajouter_stock(self):
+        """Stock de démonstration (sans doublon si la commande est relancée)."""
+        pharmacie = Pharmacie.objects.filter(user__username=PREFIXE + "pharmacie").first()
+        if pharmacie is None:
+            return 0
+        ajoutes = 0
+        for nom, principe, dosage, forme, quantite, seuil, prix in STOCK:
+            if Medicament.objects.filter(pharmacie=pharmacie, nom=nom, dosage=dosage).exists():
+                continue
+            Medicament.objects.create(pharmacie=pharmacie, nom=nom, principe_actif=principe, dosage=dosage, forme=forme,
+                                      quantite=quantite, seuil_alerte=seuil, prix=Decimal(prix))
+            ajoutes += 1
+        return ajoutes
 
     def supprimer(self, User):
         # MongoDB ne supprime pas à travers plusieurs collections : objet par objet, des feuilles vers les comptes.
@@ -100,6 +136,8 @@ class Command(BaseCommand):
                         objet.delete()
                 patient.delete()
             for pharmacie in Pharmacie.objects.filter(user=user):
+                for medicament in Medicament.objects.filter(pharmacie=pharmacie):
+                    medicament.delete()
                 pharmacie.delete()
             user.delete()
             comptes += 1

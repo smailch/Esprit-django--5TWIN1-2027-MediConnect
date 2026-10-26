@@ -41,8 +41,20 @@
     <section class="panel" aria-labelledby="titre-medicaments">
       <h2 id="titre-medicaments" class="section-title px-5 pt-5">Médicaments <span class="count">{{ o.lignes|length }}</span></h2>
       <ol class="rx-lignes mt-3">
+        {% if etats %}
+        {% for e in etats %}
+        <li class="rx-ligne-stock">
+          <span>{{ e.ligne }}{% if e.medicament and e.medicament.nom|lower not in e.ligne|lower %}<span class="muted block text-xs">servi avec {{ e.medicament }}</span>{% endif %}</span>
+          <span class="sev stk-{{ e.etat }}">{{ e.libelle }}{% if e.medicament %} · {{ e.medicament.quantite }}{% endif %}</span>
+        </li>
+        {% endfor %}
+        {% else %}
         {% for ligne in o.lignes %}<li>{{ ligne }}</li>{% endfor %}
+        {% endif %}
       </ol>
+      {% if manquants and o.statut != "delivree" and o.statut != "annulee" %}
+      <p class="alert alert-danger mx-5 mb-5" role="note">{{ manquants|length }} médicament{{ manquants|length|pluralize }} absent{{ manquants|length|pluralize }} de votre stock : cherchez un remplaçant ci-dessous avant de marquer l'ordonnance prête.</p>
+      {% endif %}
     </section>
 
     {% if o.note_pharmacien %}
@@ -52,7 +64,7 @@
     {% if rupture %}
     <section class="panel panel-pad" aria-labelledby="titre-rupture">
       <h2 id="titre-rupture" class="section-title">Médicament en rupture ?</h2>
-      <p class="muted mt-1 text-sm">L'assistant propose jusqu'à trois équivalents au même principe actif. Seul le nom du médicament lui est envoyé ; c'est vous qui décidez.</p>
+      <p class="muted mt-1 text-sm">Les équivalents disponibles dans votre stock s'affichent d'abord, puis jusqu'à trois suggestions de l'assistant (seul le nom du médicament lui est envoyé). C'est vous qui décidez.</p>
       <form method="post" action="{% url 'pharmacies:ordonnance_rupture' o.pk %}" class="mt-4 space-y-5" novalidate
             data-substitution="{% url 'pharmacies:ordonnance_substitution' o.pk %}">
         {% csrf_token %}

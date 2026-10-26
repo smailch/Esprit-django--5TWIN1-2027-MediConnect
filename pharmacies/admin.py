@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Ordonnance, Pharmacie
+from .models import Medicament, Ordonnance, Pharmacie
 
 
 @admin.register(Pharmacie)
@@ -10,6 +10,15 @@ class PharmacieAdmin(admin.ModelAdmin):
     list_filter = ("ville", "de_garde")
     search_fields = ("nom", "ville", "user__username")
     autocomplete_fields = ("user",)
+
+
+@admin.register(Medicament)
+class MedicamentAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "principe_actif", "forme", "quantite", "seuil_alerte", "pharmacie")
+    list_select_related = ("pharmacie",)
+    list_filter = ("forme", "pharmacie")
+    search_fields = ("nom", "principe_actif", "pharmacie__nom")
+    autocomplete_fields = ("pharmacie",)
 
 
 @admin.register(Ordonnance)

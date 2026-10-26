@@ -1,0 +1,74 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}Stock — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace pharmacie</p>
+    <h1 class="page-title mt-1">Stock de médicaments</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Un médicament est en rupture quand sa quantité tombe à zéro : les ordonnances le signalent alors automatiquement.</p>
+  </div>
+  <a href="{% url 'pharmacies:stock_creer' %}" class="abtn abtn-primary">
+    <i aria-hidden="true" data-lucide="plus" class="h-4 w-4"></i>Ajouter un médicament
+  </a>
+</header>
+
+<section class="kpi-grid mt-8" aria-label="État du stock">
+  <div class="panel kpi"><p class="kpi-num">{{ chiffres.references }}</p><p class="kpi-label">Médicaments référencés</p></div>
+  <a href="?etat=rupture" class="panel kpi kpi-link {% if chiffres.rupture %}kpi-alert{% endif %}"><p class="kpi-num">{{ chiffres.rupture }}</p><p class="kpi-label">En rupture</p></a>
+  <a href="?etat=bas" class="panel kpi kpi-link {% if chiffres.bas %}kpi-warn{% endif %}"><p class="kpi-num">{{ chiffres.bas }}</p><p class="kpi-label">Stock bas</p></a>
+  <div class="panel kpi"><p class="kpi-num">{{ chiffres.boites }}</p><p class="kpi-label">Boîtes en stock</p></div>
+</section>
+
+<form method="get" class="filters mt-8" role="search" aria-label="Rechercher dans le stock">
+  <div>
+    <label for="{{ filtre.q.id_for_label }}" class="f-label">{{ filtre.q.label }}</label>
+    <input type="search" id="{{ filtre.q.id_for_label }}" name="q" value="{{ filtre.q.value|default_if_none:'' }}" class="field" placeholder="Ex. paracétamol">
+  </div>
+  <div>
+    <label for="{{ filtre.etat.id_for_label }}" class="f-label">{{ filtre.etat.label }}</label>
+    {{ filtre.etat }}
+  </div>
+  <div class="flex gap-2">
+    <button type="submit" class="abtn abtn-primary">Filtrer</button>
+    {% if filtres_actifs %}<a href="{% url 'pharmacies:stock' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  </div>
+</form>
+
+<section class="panel mt-6" aria-label="Médicaments du stock">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Médicament</th><th scope="col">Principe actif</th><th scope="col">Forme</th>
+          <th scope="col" class="num">Quantité</th><th scope="col" class="num">Prix (DT)</th><th scope="col">État</th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in page %}
+        <tr>
+          <td><strong class="font-medium">{{ m.nom }}</strong>{% if m.dosage %}<span class="muted"> {{ m.dosage }}</span>{% endif %}</td>
+          <td>{{ m.principe_actif|default:"—" }}</td>
+          <td>{{ m.get_forme_display }}</td>
+          <td class="num">{{ m.quantite }}<span class="muted block text-xs">alerte à {{ m.seuil_alerte }}</span></td>
+          <td class="num">{% if m.prix is not None %}{{ m.prix|floatformat:3 }}{% else %}—{% endif %}</td>
+          <td><span class="sev stk-{{ m.etat }}">{{ m.libelle_etat }}</span></td>
+          <td class="num">
+            <span class="item-actions justify-end">
+              <a href="{% url 'pharmacies:stock_modifier' m.pk %}" class="abtn abtn-outline">Modifier<span class="sr-only"> {{ m }}</span></a>
+              <a href="{% url 'pharmacies:stock_supprimer' m.pk %}" class="abtn abtn-danger">Supprimer<span class="sr-only"> {{ m }}</span></a>
+            </span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="muted">{% if filtres_actifs %}Aucun médicament ne correspond à ces critères.{% else %}Votre stock est vide : ajoutez vos premiers médicaments.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% include "backoffice/_pager.html" %}
+{% endblock %}

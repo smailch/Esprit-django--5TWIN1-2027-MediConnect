@@ -30,12 +30,21 @@
     return e;
   }
 
+  function disponibilite(s) {
+    // quantité dans CE stock : null = pas référencé ici
+    if (s.stock === null || s.stock === undefined) return element("span", "sev stk-inconnu ml-2", "Pas dans votre stock");
+    if (s.stock === 0) return element("span", "sev stk-rupture ml-2", "En rupture ici aussi");
+    return element("span", "sev stk-ok ml-2", "En stock : " + s.stock);
+  }
+
   function afficher(donnees) {
-    donnees.suggestions.forEach(function (s) {
+    // d'abord ce que la pharmacie a réellement en rayon, puis les suggestions de l'IA (ou de la table locale)
+    donnees.en_stock.concat(donnees.suggestions).forEach(function (s) {
       var ligne = element("li", "proposal");
       var texte = element("span", "text-sm");
       texte.appendChild(element("strong", "font-medium", s.nom));
       texte.appendChild(element("span", "muted", " · " + s.type_libelle + (s.raison ? " · " + s.raison : "")));
+      texte.appendChild(disponibilite(s));
       if (s.alerte_allergie) {
         // l'alerte est écrite en toutes lettres : la couleur seule ne suffit pas
         texte.appendChild(element("span", "sev sev-severe ml-2", "Allergie du patient : " + s.alerte_allergie));
@@ -51,7 +60,8 @@
       ligne.appendChild(utiliser);
       liste.appendChild(ligne);
     });
-    var bilan = donnees.suggestions.length + " suggestion(s) pour " + donnees.medicament + ". " + donnees.message;
+    var bilan = donnees.en_stock.length + " équivalent(s) dans votre stock et " + donnees.suggestions.length +
+      " suggestion(s) pour " + donnees.medicament + ". " + donnees.message;
     if (donnees.source === "ia") bilan += " (" + (donnees.en_cache ? "réponse déjà connue" : donnees.duree_ms + " ms") + ")";
     etat.textContent = bilan;
   }
