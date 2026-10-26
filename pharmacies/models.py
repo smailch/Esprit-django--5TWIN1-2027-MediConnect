@@ -127,6 +127,11 @@ class Ordonnance(models.Model):
         return self.statut in (self.Statut.EMISE, self.Statut.TRANSMISE) and not self.est_expiree
 
     @property
+    def est_en_traitement(self):
+        """Reçue par la pharmacie et pas encore prête : c'est le moment de signaler une rupture."""
+        return self.statut in (self.Statut.TRANSMISE, self.Statut.EN_PREPARATION)
+
+    @property
     def statut_suivant(self):
         return self.SUIVANT.get(self.statut)
 

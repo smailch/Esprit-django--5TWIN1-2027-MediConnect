@@ -25,6 +25,11 @@
 
 .stepper { flex-wrap: wrap; row-gap: 0.75rem; }
 
+/* Remplaçants proposés en cas de rupture */
+.rx-suggestions { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.5rem; }
+.rx-suggestions:empty { display: none; } /* pas les zones aria-live : masquées, elles ne seraient pas annoncées */
+[aria-busy="true"] { cursor: progress; opacity: 0.7; }
+
 /* Tableau de bord : chiffres cliquables et barres à la couleur d'accent */
 .kpi-link { display: block; text-decoration: none; color: inherit; transition: border-color 0.15s; }
 .kpi-link:hover { border-color: var(--a-accent); }

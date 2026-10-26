@@ -70,6 +70,21 @@ class TransmissionForm(StyledFormMixin, forms.Form):
         self._style_fields()
 
 
+class RuptureForm(StyledFormMixin, forms.Form):
+    """La pharmacie signale qu'un médicament de l'ordonnance manque et, si elle le décide, le remplaçant retenu."""
+
+    medicament = forms.ChoiceField(label="Médicament en rupture")
+    remplacant = forms.CharField(
+        label="Remplaçant retenu (facultatif)", required=False, max_length=100,
+        help_text="Choisissez une suggestion ou écrivez-le vous-même. Vérifiez le dosage et prévenez le patient.",
+    )
+
+    def __init__(self, *args, lignes=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["medicament"].choices = [("", "Choisissez le médicament")] + [(ligne, ligne) for ligne in lignes]
+        self._style_fields()
+
+
 class FiltreOrdonnancesForm(forms.Form):
     """Filtre de la liste des ordonnances (envoyé en GET)."""
 
