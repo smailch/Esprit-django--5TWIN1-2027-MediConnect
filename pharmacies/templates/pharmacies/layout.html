@@ -8,7 +8,7 @@
 {% block nav %}
 {% with page=request.resolver_match.url_name espace=request.espace %}
 {% if espace == "patient" %}
-{# Mêmes onglets que l'espace patient (patients/layout.html), plus « Mes ordonnances » : le patient garde ses repères. #}
+{# Mêmes onglets que l'espace patient (patients/layout.html), dont « Mes ordonnances » : le patient garde ses repères. #}
 <a href="{% url 'patients:tableau_de_bord' %}" class="nav-item">
   <i aria-hidden="true" data-lucide="layout-dashboard" class="h-5 w-5"></i><span>Tableau de bord</span>
 </a>
@@ -17,6 +17,9 @@
 </a>
 <a href="{% url 'patients:dossier' %}" class="nav-item">
   <i aria-hidden="true" data-lucide="clipboard-list" class="h-5 w-5"></i><span>Mon dossier</span>
+</a>
+<a href="{% url 'infirmiers:soins' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="syringe" class="h-5 w-5"></i><span>Soins à domicile</span>
 </a>
 <a href="{% url 'pharmacies:ordonnances' %}" class="nav-item" aria-current="page">
   <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Mes ordonnances</span>
@@ -43,11 +46,21 @@
 {% elif espace == "admin" %}
 {% include "backoffice/_nav.html" %}{# l'administrateur garde le menu du back-office #}
 {% else %}
+{# Médecin : mêmes onglets que son espace (medecins/layout.html), plus les ordonnances et l'annuaire des pharmacies. #}
+<a href="{% url 'medecins:tableau_de_bord' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="list-ordered" class="h-5 w-5"></i><span>File d'attente</span>
+</a>
+<a href="{% url 'medecins:consultations' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i><span>Consultations</span>
+</a>
 <a href="{% url 'pharmacies:ordonnances' %}" class="nav-item" {% if 'ordonnance' in page %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Ordonnances</span>
 </a>
 <a href="{% url 'pharmacies:pharmacies' %}" class="nav-item" {% if 'pharmacie' in page %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="store" class="h-5 w-5"></i><span>Pharmacies</span>
+</a>
+<a href="{% url 'medecins:profil' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="user" class="h-5 w-5"></i><span>Mon profil</span>
 </a>
 {% endif %}
 {% endwith %}
