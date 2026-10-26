@@ -282,3 +282,39 @@ class Ordonnance(models.Model):
             champs.append("delivree_le")
         self.save(update_fields=champs)
         return suivant
+
+
+class Remplacement(models.Model):
+    """Un remplaçant proposé par la pharmacie pour un médicament en rupture (droit de substitution).
+
+    Le patient accepte ou refuse ; s'il accepte, la ligne de l'ordonnance est réécrite avec le remplaçant. La proposition
+    reste en base : c'est la trace de qui a proposé quoi, d'où venait la suggestion, et de la réponse du patient."""
+
+    class Statut(models.TextChoices):
+        PROPOSE = "propose", "En attente du patient"
+        ACCEPTE = "accepte", "Accepté par le patient"
+        REFUSE = "refuse", "Refusé par le patient"
+
+    class Source(models.TextChoices):
+        STOCK = "stock", "Stock de la pharmacie"
+        IA = "ia", "Suggestion de l'IA"
+        LOCAL = "local", "Table des génériques"
+        SAISIE = "saisie", "Saisi par le pharmacien"
+
+    ordonnance = models.ForeignKey(Ordonnance, on_delete=models.CASCADE, related_name="remplacements")
+    ligne_origine = models.CharField("Médicament prescrit", max_length=300)
+    remplacant = models.CharField("Remplaçant proposé", max_length=100)
+    source = models.CharField(max_length=10, choices=Source.choices, default=Source.SAISIE)
+    alerte_allergie = models.CharField(max_length=100, blank=True, help_text="Famille d'allergie du patient concernée, s'il y en a une.")
+    statut = models.CharField(max_length=10, choices=Statut.choices, default=Statut.PROPOSE)
+    propose_le = models.DateTimeField(auto_now_add=True)
+    decide_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-propose_le"]
+        verbose_name = "remplacement"
+        verbose_name_plural = "remplacements"
+        indexes = [models.Index(fields=["ordonnance", "statut"])]
+
+    def __str__(self):
+        return f"{self.remplacant} à la place de {self.ligne_origine}"

@@ -13,7 +13,7 @@ from core.utils import objet_ou_404
 from patients import ia_client
 from patients.models import Allergie, Consultation
 
-from . import delivrance, ia_substitution, stats, stock
+from . import delivrance, ia_substitution, remplacements, stats, stock
 from .forms import (
     FiltreOrdonnancesForm,
     FiltrePharmaciesForm,
@@ -24,7 +24,7 @@ from .forms import (
     RuptureForm,
     TransmissionForm,
 )
-from .models import Medicament, Ordonnance, Pharmacie
+from .models import Medicament, Ordonnance, Pharmacie, Remplacement
 from .permissions import ADMIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_de, espace_requis, patient_de, pharmacie_de
 
 PAR_PAGE = 12
@@ -186,8 +186,15 @@ def ordonnances(request):
         liste = liste.filter(statut=filtre.cleaned_data["statut"])
     parametres = request.GET.copy()
     parametres.pop("page", None)
+    page = _page(request, liste)
+    # Ordonnances de la page avec un remplaçant en attente de réponse (une seule requête pour toute la page).
+    propositions = set(Remplacement.objects.filter(
+        ordonnance_id__in=[o.pk for o in page], statut=Remplacement.Statut.PROPOSE
+    ).values_list("ordonnance_id", flat=True)) if len(page) else set()
+    for o in page:
+        o.remplacement_en_attente = o.pk in propositions
     return render(request, "pharmacies/ordonnances.html", {
-        "page": _page(request, liste),
+        "page": page,
         "filtre": filtre,
         "parametres": parametres.urlencode(),
         "filtres_actifs": any(v for v in parametres.values()),
@@ -230,6 +237,7 @@ def ordonnance_detail(request, pk):
         ),
         "accord_demandable": request.espace == PHARMACIE and delivrance.accord_demandable(ordonnance, etats),
         "decision": decision,
+        "remplacements": list(ordonnance.remplacements.all()),
         "disponibles": disponibles,
         "reliquats": list(ordonnance.reliquats.all()) if ordonnance.statut == Ordonnance.Statut.DELIVREE else [],
     })
@@ -332,12 +340,15 @@ def ordonnance_substitution(request, pk):
     principe = stock.principe_de(ligne, medicaments) or resultat.principe_actif
     # D'abord ce que la pharmacie a réellement en rayon (même principe actif), calculé en local…
     en_stock = [
-        {"nom": str(m), "type": "en_stock", "type_libelle": "Dans votre stock", "raison": f"Même principe actif : {m.principe_actif}.", "stock": m.quantite}
+        {"nom": str(m), "type": "en_stock", "type_libelle": "Dans votre stock", "raison": f"Même principe actif : {m.principe_actif}.",
+         "stock": m.quantite, "source": Remplacement.Source.STOCK}
         for m in stock.equivalents_en_stock(principe, medicaments, exclure=stock.trouver(ligne, medicaments))
     ][:ia_substitution.MAX_SUGGESTIONS]
     ia_substitution.signaler_allergies(en_stock, principe, substances)
     # … puis les suggestions de l'IA (ou de la table locale), avec la quantité disponible ici.
     suggestions = stock.annoter_stock(ia_substitution.signaler_allergies(resultat.suggestions, principe, substances), medicaments)
+    for s in suggestions:
+        s["source"] = resultat.source  # « ia » ou « local » : gardé dans la trace si le pharmacien la propose
     message = MESSAGES_SOURCE[resultat.source]
     if resultat.source != ia_substitution.IA and resultat.statut in ia_client.MESSAGES:
         message += f" ({ia_client.MESSAGES[resultat.statut]})"
@@ -358,21 +369,49 @@ def ordonnance_substitution(request, pk):
 @espace_requis(PHARMACIE)
 @require_POST
 def ordonnance_rupture(request, pk):
-    """Enregistre la rupture (et le remplaçant choisi par le pharmacien) dans la note visible du patient et du prescripteur."""
+    """Médicament en rupture : la pharmacie propose un remplaçant au patient (action « proposer »), ou signale
+    simplement la rupture dans la note visible du patient et du prescripteur (action « signaler »)."""
     ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
     if not ordonnance.est_en_traitement:
         messages.error(request, "La rupture se signale pendant la préparation de l'ordonnance.")
         return _redirection(request, "ordonnance_detail", ordonnance.pk)
     form = RuptureForm(request.POST, lignes=ordonnance.lignes)
-    if form.is_valid():
-        note = f"Rupture de stock : {ia_substitution.nettoyer(form.cleaned_data['medicament'])}."
-        if form.cleaned_data["remplacant"].strip():
-            note += f" Remplaçant proposé par la pharmacie : {form.cleaned_data['remplacant'].strip()} (à confirmer avec le patient)."
-        ordonnance.note_pharmacien = note[:300]
+    if not form.is_valid():
+        messages.error(request, "Choisissez le médicament en rupture.")
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
+    ligne, remplacant = form.cleaned_data["medicament"], form.cleaned_data["remplacant"]
+    if request.POST.get("action") == "signaler":
+        ordonnance.note_pharmacien = f"Rupture de stock : {ia_substitution.nettoyer(ligne)}."[:300]
         ordonnance.save(update_fields=["note_pharmacien", "modifie_le"])
         messages.success(request, "La rupture est signalée : le patient et le prescripteur la voient sur l'ordonnance.")
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
+    medicaments = list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie))
+    substances = list(Allergie.objects.filter(patient=ordonnance.patient, active=True).values_list("substance", flat=True))
+    try:
+        proposition = remplacements.proposer(ordonnance, ligne, remplacant, form.cleaned_data["source"], medicaments, substances)
+    except ValueError as erreur:
+        messages.error(request, str(erreur))
     else:
-        messages.error(request, "Choisissez le médicament en rupture.")
+        messages.success(request, f"« {proposition.remplacant} » a été proposé au patient à la place de « {ia_substitution.nettoyer(ligne)} ».")
+    return _redirection(request, "ordonnance_detail", ordonnance.pk)
+
+
+@espace_requis(PATIENT)
+@require_POST
+def remplacement_decision(request, pk, remplacement_pk):
+    """Le patient accepte (l'ordonnance est modifiée) ou refuse le remplaçant proposé par sa pharmacie."""
+    ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
+    proposition = objet_ou_404(Remplacement, pk=remplacement_pk, ordonnance=ordonnance)  # uniquement sur SON ordonnance
+    proposition.ordonnance = ordonnance
+    try:
+        if request.POST.get("action") == "accepter":
+            remplacements.accepter(proposition)
+            messages.success(request, f"C'est noté : votre ordonnance contient maintenant {proposition.remplacant}.")
+        else:
+            remplacements.refuser(proposition)
+            messages.success(request, "Proposition refusée : votre ordonnance ne change pas.")
+    except ValueError as erreur:
+        messages.error(request, str(erreur))
     return _redirection(request, "ordonnance_detail", ordonnance.pk)
 
 

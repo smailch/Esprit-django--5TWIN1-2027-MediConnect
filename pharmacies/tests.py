@@ -1093,14 +1093,23 @@ class SubstitutionVueTests(SimpleTestCase):
         self.assertIn("table locale", donnees["message"])
         self.assertIn(ia_client.MESSAGES[ia_client.QUOTA], donnees["message"])
 
-    def test_signalement_de_la_rupture(self):
+    def test_signalement_de_la_rupture_sans_remplacant(self):
         o = self.ordonnance()
         with mock.patch.object(Ordonnance, "save") as enregistrer:
-            reponse = self.appeler(views.ordonnance_rupture, PHARMACIE, o, donnees={"medicament": o.lignes[0], "remplacant": "Clamoxyl"})
+            reponse = self.appeler(views.ordonnance_rupture, PHARMACIE, o, donnees={"medicament": o.lignes[0], "action": "signaler"})
         self.assertEqual(reponse.status_code, 302)
         enregistrer.assert_called_once()
-        self.assertIn("Rupture de stock : Amoxicilline.", o.note_pharmacien)
-        self.assertIn("Clamoxyl", o.note_pharmacien)
+        self.assertEqual(o.note_pharmacien, "Rupture de stock : Amoxicilline.")
+
+    def test_le_remplacant_est_propose_au_patient(self):
+        o = self.ordonnance()
+        with mock.patch.object(views.remplacements, "proposer", return_value=SimpleNamespace(remplacant="Hiconcil 1 g")) as proposer:
+            reponse = self.appeler(views.ordonnance_rupture, PHARMACIE, o, allergies=["Pénicilline"],
+                                   donnees={"medicament": o.lignes[0], "remplacant": "Hiconcil 1 g", "source": "stock", "action": "proposer"})
+        self.assertEqual(reponse.status_code, 302)
+        args = proposer.call_args.args
+        self.assertEqual((args[0], args[1], args[2], args[3], args[5]), (o, o.lignes[0], "Hiconcil 1 g", "stock", ["Pénicilline"]))
+        self.assertEqual(o.note_pharmacien, "")  # rien n'est écrit dans l'ordonnance avant la réponse du patient
 
     def test_rupture_refusee_hors_preparation_ou_sans_medicament(self):
         for o, donnees in ((self.ordonnance(statut=S.PRETE), {"medicament": "x"}), (self.ordonnance(), {"medicament": "inventé"})):
@@ -1761,3 +1770,195 @@ class AccordPatientTests(SimpleTestCase):
         o = self.ordonnance(accord_partiel=self.A.EN_ATTENTE)
         html = render_to_string("pharmacies/ordonnances.html", {"page": [o]}, PagesTests.requete(self, PATIENT))
         self.assertIn("Votre réponse est attendue", html)
+
+
+# --- Remplaçant proposé au patient (droit de substitution) ---------------------------------------------------------
+
+
+from . import remplacements  # noqa: E402
+from .models import Remplacement  # noqa: E402
+
+RS = Remplacement.Statut
+
+
+class NouvelleLigneTests(SimpleTestCase):
+    def test_le_nom_change_le_dosage_et_la_posologie_restent(self):
+        self.assertEqual(remplacements.nouvelle_ligne("Amoxicilline 1 g, 1 comprimé matin et soir, 7 jours", "Hiconcil 1 g"),
+                         "Hiconcil 1 g, 1 comprimé matin et soir, 7 jours (remplace Amoxicilline)")
+        self.assertEqual(remplacements.nouvelle_ligne("Mopral 20 mg, le matin", "Oméprazole générique"),
+                         "Oméprazole générique 20 mg, le matin (remplace Mopral)")
+        self.assertEqual(remplacements.nouvelle_ligne("Sérum physiologique, lavage de nez", "Physiomer"),
+                         "Physiomer, lavage de nez (remplace Sérum physiologique)")
+
+
+class RisqueAllergieTests(SimpleTestCase):
+    def test_un_risque_nouveau_est_signale_comme_tel(self):
+        # Doliprane prescrit, Advil proposé, patient allergique à l'ibuprofène : risque NOUVEAU.
+        self.assertEqual(remplacements.risque_allergie("Doliprane 1 g", "Advil", "paracétamol", ["Ibuprofène"]),
+                         ("anti-inflammatoires (aspirine, ibuprofène…)", True))
+
+    def test_meme_famille_que_le_medicament_prescrit(self):
+        # Amoxicilline prescrite, Hiconcil proposé, allergie à la pénicilline : même risque que la prescription.
+        famille, nouveau = remplacements.risque_allergie("Amoxicilline 1 g", "Hiconcil", "amoxicilline", ["Pénicilline"])
+        self.assertEqual((famille, nouveau), ("pénicillines", False))
+
+    def test_aucune_allergie_concernee(self):
+        self.assertEqual(remplacements.risque_allergie("Mopral", "Inexium", "oméprazole", ["Pénicilline"]), ("", False))
+
+
+class PropositionTests(SimpleTestCase):
+    def setUp(self):
+        self.creees = []
+        for cible, faux in (("filter", None), ("create", self.creer)):
+            p = mock.patch.object(Remplacement.objects, cible, side_effect=faux)
+            moque = p.start()
+            self.addCleanup(p.stop)
+            if cible == "filter":
+                moque.return_value.first.return_value = None
+                moque.side_effect = None
+
+    def creer(self, **champs):
+        r = Remplacement(**champs)
+        r.pk = ObjectId()
+        self.creees.append(r)
+        return r
+
+    def ordonnance(self, **kw):
+        valeurs = {"statut": S.EN_PREPARATION, "pharmacie": une_pharmacie(), "medicaments": "Amoxicilline 1 g, matin et soir\nDoliprane 1 g"}
+        valeurs.update(kw)
+        return une_ordonnance(**valeurs)
+
+    def proposer(self, o, remplacant="Hiconcil 1 g", source="stock", substances=(), ligne=None):
+        medicaments = [un_medicament("Amoxicilline", "amoxicilline", 0), un_medicament("Hiconcil", "amoxicilline", 12)]
+        return remplacements.proposer(o, ligne or o.lignes[0], remplacant, source, medicaments, list(substances))
+
+    def test_proposition_enregistree_avec_sa_source_et_l_alerte(self):
+        r = self.proposer(self.ordonnance(), substances=["Pénicilline"])
+        self.assertEqual((r.remplacant, r.source, r.statut, r.alerte_allergie), ("Hiconcil 1 g", "stock", RS.PROPOSE, "pénicillines"))
+        self.assertEqual(r.ligne_origine, "Amoxicilline 1 g, matin et soir")
+
+    def test_un_risque_d_allergie_nouveau_bloque_la_proposition(self):
+        o = self.ordonnance(medicaments="Doliprane 1 g\nMopral 20 mg")
+        with self.assertRaisesMessage(ValueError, "allergique"):
+            self.proposer(o, remplacant="Advil", substances=["Ibuprofène"], ligne="Doliprane 1 g")
+        self.assertEqual(self.creees, [])
+
+    def test_propositions_refusees(self):
+        cas = [
+            (self.ordonnance(statut=S.PRETE), "Hiconcil", None, "pendant la préparation"),
+            (self.ordonnance(), "Hiconcil", "Pas sur l'ordonnance", "médicament de l'ordonnance"),
+            (self.ordonnance(), "   ", None, "Indiquez le remplaçant"),
+            (self.ordonnance(), "Amoxicilline 500 mg", None, "autre médicament"),
+        ]
+        for o, remplacant, ligne, message in cas:
+            with self.subTest(message=message), self.assertRaisesMessage(ValueError, message):
+                self.proposer(o, remplacant=remplacant, ligne=ligne)
+
+    def test_source_inconnue_ramenee_a_saisie(self):
+        self.assertEqual(self.proposer(self.ordonnance(), source="pirate").source, Remplacement.Source.SAISIE)
+
+    def test_une_seule_proposition_en_attente_par_ligne(self):
+        existante = Remplacement(remplacant="Clamoxyl", source="stock", statut=RS.PROPOSE)
+        Remplacement.objects.filter.return_value.first.return_value = existante
+        with mock.patch.object(Remplacement, "save") as enregistrer:
+            r = self.proposer(self.ordonnance(), remplacant="Hiconcil 1 g")
+        self.assertIs(r, existante)
+        self.assertEqual(r.remplacant, "Hiconcil 1 g")
+        enregistrer.assert_called_once()
+        self.assertEqual(self.creees, [])
+
+
+class ReponsePatientTests(SimpleTestCase):
+    def setUp(self):
+        for modele in (Ordonnance, Remplacement):
+            p = mock.patch.object(modele, "save")
+            p.start()
+            self.addCleanup(p.stop)
+
+    def proposition(self, statut_ordonnance=S.EN_PREPARATION, **kw):
+        o = une_ordonnance(statut=statut_ordonnance, pharmacie=une_pharmacie(), medicaments="Amoxicilline 1 g, matin et soir\nDoliprane 1 g")
+        r = Remplacement(ordonnance=o, ligne_origine="Amoxicilline 1 g, matin et soir", remplacant="Hiconcil 1 g", **kw)
+        r.pk = ObjectId()
+        return o, r
+
+    def test_accepter_reecrit_la_ligne_de_l_ordonnance(self):
+        o, r = self.proposition()
+        remplacements.accepter(r)
+        self.assertEqual(o.lignes, ["Hiconcil 1 g, matin et soir (remplace Amoxicilline)", "Doliprane 1 g"])
+        self.assertEqual(r.statut, RS.ACCEPTE)
+        self.assertIsNotNone(r.decide_le)
+
+    def test_refuser_ne_change_pas_l_ordonnance(self):
+        o, r = self.proposition()
+        avant = o.medicaments
+        remplacements.refuser(r)
+        self.assertEqual((o.medicaments, r.statut), (avant, RS.REFUSE))
+
+    def test_une_seule_reponse(self):
+        for statut in (RS.ACCEPTE, RS.REFUSE):
+            o, r = self.proposition(statut=statut)
+            for action in (remplacements.accepter, remplacements.refuser):
+                with self.subTest(statut=statut, action=action.__name__), self.assertRaisesMessage(ValueError, "déjà répondu"):
+                    action(r)
+
+    def test_pas_de_modification_apres_delivrance_ou_si_la_ligne_a_change(self):
+        o, r = self.proposition(statut_ordonnance=S.DELIVREE)
+        with self.assertRaisesMessage(ValueError, "ne peut plus être modifiée"):
+            remplacements.accepter(r)
+        o, r = self.proposition()
+        o.medicaments = "Autre chose"  # le prescripteur a modifié l'ordonnance entre-temps
+        with self.assertRaisesMessage(ValueError, "modifiée entre-temps"):
+            remplacements.accepter(r)
+        self.assertEqual(r.statut, RS.PROPOSE)
+
+    def test_la_vue_ne_cherche_la_proposition_que_sur_l_ordonnance_du_patient(self):
+        source = inspect.getsource(views.remplacement_decision)
+        self.assertIn("objet_ou_404(ordonnances_visibles(request), pk=pk)", source)
+        self.assertIn("objet_ou_404(Remplacement, pk=remplacement_pk, ordonnance=ordonnance)", source)
+
+    def test_vue_reservee_au_patient_et_en_post(self):
+        o, r = self.proposition()
+        requete = avec_messages(RequestFactory().post("/", {"action": "accepter"}))
+        requete.user = un_user(role="patient")
+        with mock.patch.object(permissions, "espace_de", return_value=PATIENT), \
+                mock.patch.object(views, "ordonnances_visibles"), \
+                mock.patch.object(views, "objet_ou_404", side_effect=[o, r]):
+            reponse = views.remplacement_decision(requete, o.pk, r.pk)
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(r.statut, RS.ACCEPTE)
+        self.assertIn("Hiconcil", o.lignes[0])
+        requete = avec_messages(RequestFactory().post("/"))
+        requete.user = un_user(role="pharmacie")
+        with mock.patch.object(permissions, "espace_de", return_value=PHARMACIE), self.assertRaises(PermissionDenied):
+            views.remplacement_decision(requete, o.pk, r.pk)
+
+
+class RemplacementPagesTests(SimpleTestCase):
+    def test_le_patient_voit_la_proposition_et_peut_repondre(self):
+        o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie(), medicaments="Amoxicilline 1 g, matin et soir")
+        r = Remplacement(ordonnance=o, ligne_origine=o.lignes[0], remplacant="Hiconcil 1 g", source="stock", alerte_allergie="pénicillines")
+        r.pk, r.propose_le = ObjectId(), timezone.now()
+        html = DelivrancePagesTests().rendre(PATIENT, o, remplacements=[r])
+        for texte in ("Votre pharmacie propose un remplaçant", "Accepter Hiconcil 1 g", "Refuser", "même dosage",
+                      "parlez-en au pharmacien", "Stock de la pharmacie", "En attente du patient"):
+            self.assertIn(texte, html)
+        self.assertIn(reverse("pharmacies:remplacement_decision", args=[o.pk, r.pk]), html)
+        self.assertEqual(verifier_html(html), [])
+
+    def test_la_pharmacie_voit_l_historique_sans_boutons_de_reponse(self):
+        o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie())
+        r = Remplacement(ordonnance=o, ligne_origine="Amoxicilline 1 g", remplacant="Hiconcil 1 g", statut=RS.ACCEPTE, source="ia")
+        r.pk, r.propose_le, r.decide_le = ObjectId(), timezone.now(), timezone.now()
+        html = DelivrancePagesTests().rendre(PHARMACIE, o, remplacements=[r])
+        self.assertIn("Accepté par le patient", html)
+        self.assertIn("Suggestion de l&#x27;IA", html)  # apostrophe échappée par le gabarit
+        self.assertNotIn("Accepter Hiconcil", html)
+
+    def test_formulaire_de_rupture_propose_au_patient(self):
+        o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie())
+        html = DelivrancePagesTests().rendre(PHARMACIE, o, rupture=RuptureForm(lignes=o.lignes))
+        self.assertIn('name="action" value="proposer"', html)
+        self.assertIn('name="action" value="signaler"', html)
+        self.assertIn('type="hidden" name="source"', html)
+        js = (RACINE / "pharmacies" / "static" / "pharmacies" / "substitution.js").read_text(encoding="utf-8")
+        self.assertIn("source.value = s.source", js)  # l'origine de la suggestion suit le clic sur « Utiliser »
