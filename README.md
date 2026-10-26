@@ -4,11 +4,13 @@ Application web de gestion des patients et de leurs rendez-vous médicaux. Le pa
 l'urgence, l'oriente vers la bonne spécialité, lui donne une heure de rendez-vous (fixée ou estimée) et le prévient par
 e-mail quand elle change. Le médecin garde toujours la décision finale.
 
-**Technologies** : Python 3.13, Django 5.2, MongoDB Atlas (`django-mongodb-backend`), scikit-learn, Tailwind CSS.
+**Technologies** : Python 3.12/3.13, Django 5.2, MongoDB Atlas (`django-mongodb-backend`), scikit-learn, Celery + Redis,
+Tailwind CSS. Déploiement : Docker, Railway (site, worker, Redis) et Vercel (porte d'entrée publique).
 
 > Ce dépôt réunit les modules de l'équipe : patients et back-office (Ismail), médecins avec consultations, visio et compte
 > rendu PDF, e-mail ou WhatsApp (Mourad), infirmiers et soins à domicile (Walid), pharmacies et ordonnances (Ahmed). Le module
-> laboratoires reste à intégrer. Les médecins proposés aux patients sont ceux du module médecins (`medecins/annuaire.py`).
+> laboratoires n'a pas été réalisé (équipe de quatre). Les médecins proposés aux patients sont ceux du module médecins
+> (`medecins/annuaire.py`).
 
 ---
 
@@ -24,10 +26,11 @@ e-mail quand elle change. Le médecin garde toujours la décision finale.
 8. [Qualité : tests et vérifications](#8-qualité--tests-et-vérifications)
 9. [Structure du projet](#9-structure-du-projet)
 10. [Installer et lancer](#10-installer-et-lancer)
-11. [Commandes utiles](#11-commandes-utiles)
-12. [Documents d'explication](#12-documents-dexplication)
-13. [Limites assumées](#13-limites-assumées)
-14. [Branches Git](#14-branches-git)
+11. [Déploiement](#11-déploiement)
+12. [Commandes utiles](#12-commandes-utiles)
+13. [Documents d'explication](#13-documents-dexplication)
+14. [Limites assumées](#14-limites-assumées)
+15. [Branches Git](#15-branches-git)
 
 ---
 
@@ -160,24 +163,39 @@ Accessible sur `/backoffice/` aux comptes administrateur :
 **Accessibilité (WCAG 2.1 AA)** : structure sémantique (un `main`, `nav` nommés, pied de page, titres cohérents), lien d'évitement,
 focus visible, icônes décoratives masquées aux lecteurs d'écran, champs liés à leur aide et à leurs erreurs, `autocomplete`,
 contrastes calculés à partir des CSS (minimum 6,3:1), information jamais portée par la couleur seule. La commande
-`python manage.py audit_accessibilite` contrôle les pages.
+`python manage.py audit_accessibilite` contrôle les pages ; **Lighthouse : 100/100 en accessibilité** sur les pages publiques et
+connectées de chaque rôle (rapports dans `docs/lighthouse/`).
 
-**Sécurité** : pages réservées aux patients ou aux administrateurs, chaque donnée vérifiée contre son propriétaire (une demande
-d'un autre patient donne une erreur 404), protection CSRF, mots de passe hachés, sessions invalidées après réinitialisation,
-secrets uniquement dans `.env` (jamais dans Git), texte anonymisé avant tout envoi à une IA externe.
+**Sécurité (bases OWASP)** :
+
+| Exigence | Mise en œuvre |
+|---|---|
+| Contrôle d'accès par rôle | chaque espace vérifie le rôle ; la gestion des comptes exige les **permissions Django** (`LoginRequiredMixin` + `PermissionRequiredMixin`) portées par un **groupe par rôle** (`core/roles.py`, mis à jour à chaque `migrate`) ; une donnée d'un autre compte répond 404 |
+| Force brute | 5 échecs pour un identifiant -> connexion suspendue 15 min, même avec le bon mot de passe (`core/securite.py`) |
+| Traçabilité | **journal des connexions** (connexions, échecs, blocages, déconnexions, IP, navigateur ; jamais le mot de passe), consultable dans le back-office ; purge à 90 jours (`purger_journal`) |
+| CSRF, injections | protection CSRF sur tous les formulaires (page claire si le jeton expire) ; uniquement l'ORM, aucune requête brute |
+| Mots de passe | hachés (PBKDF2), validateurs Django, réinitialisation par lien à durée limitée |
+| Production | `DJANGO_ENV=production` : refus de démarrer avec `DEBUG=True` ou une clé faible ; HTTPS forcé, HSTS, cookies `Secure`/`HttpOnly`, `X-Frame-Options: DENY`, `nosniff` ; `manage.py check --deploy` sans avertissement |
+| Secrets | uniquement dans les variables d'environnement (`.env` local, Railway en ligne), jamais dans Git |
+| Erreurs | pages 400, 403, 404 et 500 personnalisées ; services externes (IA, e-mail, SMS) toujours dans un `try/except` qui journalise sans bloquer |
 
 ---
 
 ## 8. Qualité : tests et vérifications
 
 ```bash
-python manage.py test ia patients backoffice core
+python manage.py test                       # MongoDB local requis pour les tests d'intégration (MONGODB_TEST_URI)
+coverage run manage.py test && coverage report   # rapport de couverture (coverage html -> htmlcov/)
 ```
 
-**883 tests** (ia 49, patients 632, backoffice 115, core 87), rapides et sans base de données. Ils couvrent le triage, les modèles
-(chargement, seuils, réentraînement si un modèle est illisible), la file, l'agenda, les e-mails, les vues, l'accessibilité et le
-back-office. Des erreurs ont aussi été **introduites volontairement** dans le code pour vérifier que les tests les détectent, et
-les scénarios principaux ont été rejoués sur la vraie base avec des comptes jetables supprimés ensuite.
+* **Tests unitaires** (`tests.py` de chaque app, sans base) : règles du triage et des alertes, modèles, garde-fous de l'IA
+  avec une IA simulée, formulaires, gabarits, accessibilité.
+* **Tests d'intégration** (`tests_integration.py`, vraie base de test + client HTTP de Django) : inscription, connexion et
+  blocage, CRUD complet de chaque entité par les pages, **matrice des accès** (5 rôles × 21 adresses : anonyme -> connexion,
+  autre rôle -> 403), gestion des comptes, CSRF, pages d'erreur, réglages de production.
+* **Tâches de fond** (`tests_taches.py`) : Celery avec et sans Redis.
+* **Intégration continue** : GitHub Actions (`.github/workflows/ci.yml`) relance tout, avec MongoDB et Redis, à chaque Pull
+  Request, vérifie `check --deploy` et publie le rapport de couverture.
 
 ---
 
@@ -214,7 +232,7 @@ Il faut **Python 3.13** (3.11 ou plus convient) et **Git**.
 ```bash
 git clone https://github.com/smailch/Esprit-django--5TWIN1-2027-MediConnect.git
 cd Esprit-django--5TWIN1-2027-MediConnect
-git checkout gestion-patient
+git checkout preprod
 python -m venv .venv
 .venv\Scripts\activate            # Windows (Linux/Mac : source .venv/bin/activate)
 pip install -r requirements.txt
@@ -245,16 +263,58 @@ Le site est sur http://127.0.0.1:8000/.
 **Les modèles sont dans le dépôt** : rien à télécharger ni à entraîner. La version de `scikit-learn` est figée dans
 `requirements.txt` ; si un modèle est illisible, il est réentraîné automatiquement en quelques secondes.
 
-**Facultatif** : IA de langage (Groq gratuit) et e-mails réels, voir `.env.example`.
+**Facultatif** : IA de langage (Groq gratuit), e-mails réels et Redis (tâches de fond), voir `.env.example`.
+
+**Pour les tests d'intégration**, un MongoDB local suffit (`mongodb://localhost:27017`, ou `MONGODB_TEST_URI`) : les tests créent
+puis suppriment leur propre base `test_mediconnect` et ne touchent jamais au cluster Atlas.
+
+**Tout en conteneurs** (site, worker Celery, Redis, MongoDB) :
+
+```bash
+docker compose up --build                                   # http://localhost:8000
+docker compose exec web python manage.py charger_demo       # données de démonstration dans le MongoDB du conteneur
+```
 
 ---
 
-## 11. Commandes utiles
+## 11. Déploiement
+
+```
+Navigateur ─HTTPS─> Vercel (porte d'entrée, réécriture) ─HTTPS─> Railway « web » (gunicorn + Django + WhiteNoise)
+                                                                   │                     │
+                                                   Railway « Redis » <── Railway « worker » (Celery)
+                                                                   │
+                                                          MongoDB Atlas
+```
+
+| Fichier | Rôle |
+|---|---|
+| `Dockerfile` | une seule image : `SERVICE=web` (migrations puis gunicorn) ou `SERVICE=worker` (Celery) |
+| `railway.json`, `deploiement/railway-worker.json` | services Railway web (sonde `/sante/`) et worker |
+| `deploiement/vercel/` | projet Vercel qui renvoie toutes les requêtes vers Railway |
+| `docker-compose.yml` | la même architecture sur un poste |
+| `.github/workflows/ci.yml` | tests, `check --deploy` et couverture à chaque Pull Request |
+
+Variables de production : `DJANGO_ENV=production`, `DJANGO_DEBUG=False`, `DJANGO_SECRET_KEY` (64 caractères aléatoires),
+`DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `MONGODB_URI`, `MONGODB_NAME`, `REDIS_URL`, puis l'IA et l'e-mail.
+
+**Celery + Redis** : les e-mails de notification, l'analyse IA du dossier patient (deux appels à l'IA, jusqu'à 12 s) et la
+relecture IA d'un compte rendu enregistré pendant une panne de l'IA partent en tâche de fond ; la page répond tout de suite
+et affiche un indicateur, puis le résultat. Sans `REDIS_URL`, tout s'exécute dans la requête, comme avant.
+
+---
+
+## 12. Commandes utiles
 
 | Commande | Rôle |
 |---|---|
-| `python manage.py test ia patients backoffice core` | lancer les 883 tests |
-| `python manage.py check` | vérifier la configuration |
+| `python manage.py test` | lancer tous les tests (MongoDB local pour les tests d'intégration) |
+| `coverage run manage.py test && coverage report` | mesurer la couverture des tests |
+| `python manage.py check --deploy` | vérifier les réglages de production (avec `DJANGO_ENV=production`) |
+| `celery -A mediconnect worker -l info` | lancer le worker des tâches de fond (avec `REDIS_URL`) |
+| `python manage.py evaluer_alertes` | mesurer la détection des alertes des soins (règles, puis règles + IA) |
+| `python manage.py synchroniser_roles` | recréer les groupes et permissions des rôles |
+| `python manage.py purger_journal --jours 90` | supprimer les vieilles entrées du journal des connexions |
 | `python manage.py entrainer_triage` | réentraîner le modèle de lecture du texte |
 | `python manage.py entrainer_specialite` | réentraîner le modèle d'orientation |
 | `python manage.py tester_ia --phrase "Ça me serre la poitrine"` | essayer le triage sur une phrase |
@@ -264,7 +324,7 @@ Le site est sur http://127.0.0.1:8000/.
 
 ---
 
-## 12. Documents d'explication
+## 13. Documents d'explication
 
 Dans `docs/` :
 
@@ -276,25 +336,29 @@ Dans `docs/` :
 | `Triage_et_IA_MediConnect.pdf` | explication détaillée du triage et de l'IA |
 | `Logique_File_Attente_MediConnect.pdf` | logique de la file d'attente et simulation |
 | `Accessibilite_MediConnect.pdf` | rapport d'accessibilité avec les contrastes mesurés |
+| `Soins_a_domicile_MediConnect.pdf` | le module infirmiers : parcours, compte rendu intelligent, métriques de l'IA |
+| `Validation_Finale_MediConnect.pdf` | chaque critère de la grille de validation et sa preuve |
+| `lighthouse/` | rapports Lighthouse (accessibilité, bonnes pratiques) des pages de chaque rôle |
 
 ---
 
-## 13. Limites assumées
+## 14. Limites assumées
 
 * Les modèles ont appris sur des phrases **générées**, pas sur de vrais patients : ce sont des **prototypes**.
 * Les tests à la main portent sur peu de phrases (39 et 30).
 * L'heure prévue est une **estimation** : le système ne sait pas quand le médecin termine ; le statut doit être mis à jour.
 * Délais, seuils et durées sont des **valeurs de démonstration**, à faire valider par un professionnel de santé.
-* Les horaires et la liste des médecins sont fictifs, en attendant le module médecins.
 * Aucun outil ne pose de diagnostic : en cas de doute, la médecine générale et le médecin décident.
 
 ---
 
-## 14. Branches Git
+## 15. Branches Git
 
 | Branche | Rôle |
 |---|---|
-| `gestion-patient` | travail du module patient (cette branche) |
-| `preprod` | pré-production, mise à jour à partir de `gestion-patient` |
+| `preprod` | pré-production : chaque module y arrive par Pull Request, après les tests de l'intégration continue |
 | `main` | version de référence de l'équipe |
-| `gestion-infirmiers` | module d'un autre membre de l'équipe |
+| `gestion-patient` | module patients et back-office (Ismail) |
+| `gestion-medecins` | module médecins (Mourad) |
+| `gestion-infirmiers` | module infirmiers (Walid) |
+| `Pharmacie` | module pharmacies (Ahmed) |

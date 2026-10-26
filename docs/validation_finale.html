@@ -1,0 +1,126 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — Validation finale</title><style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 9.2pt; line-height: 1.36; }
+.page { width: 210mm; height: 297mm; padding: 9mm 11mm 8mm; overflow: hidden; page-break-after: always; position: relative; }
+.page:last-child { page-break-after: auto; }
+h1 { margin: 0; font-size: 19pt; color: #0E7490; } .sous { color: #475569; margin: 1mm 0 3mm; font-size: 10pt; }
+h2 { margin: 2.4mm 0 1.2mm; font-size: 11.2pt; color: #fff; background: #0E7490; display: inline-block; padding: .8mm 3mm; border-radius: 1.6mm; }
+h2 .pts { font-weight: 400; opacity: .85; margin-left: 2mm; }
+h3 { margin: 0 0 1mm; font-size: 9.8pt; color: #0E7490; } p { margin: .6mm 0; }
+.bloc { border: 1.3px solid #0E7490; border-radius: 2.4mm; padding: 1.7mm 2.3mm; background: #F8FEFF; }
+.bloc.ia { border-color: #7C3AED; background: #FAF5FF; } .bloc.ia h3 { color: #6D28D9; }
+.bloc.ok { border-color: #16A34A; background: #F0FDF4; } .bloc.ok h3 { color: #15803D; }
+.bloc.ja { border-color: #D97706; background: #FFFBEB; } .bloc.ja h3 { color: #B45309; }
+.rang { display: flex; align-items: stretch; gap: 1.8mm; } .rang > .bloc { flex: 1; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 8.5pt; } th { background: #0E7490; color: #fff; text-align: left; padding: 1mm 1.6mm; }
+td { padding: 1mm 1.6mm; border-bottom: .3mm solid #BAE6FD; vertical-align: top; } tr:nth-child(even) td { background: #F0FBFD; }
+.bloc table th { background: #6D28D9; } .bloc.ok table th { background: #15803D; } .bloc table td { background: transparent; }
+code { font-family: Consolas, monospace; font-size: 8pt; background: #E0F2FE; padding: 0 .8mm; border-radius: .8mm; }
+.petit { font-size: 8pt; color: #475569; } ul { margin: .5mm 0; padding-left: 4mm; } li { margin: .25mm 0; }
+.chiffre { font-size: 15pt; font-weight: 700; color: #0E7490; line-height: 1.1; } .chiffres { display: flex; gap: 1.8mm; margin: 1mm 0 1.5mm; }
+.chiffres .bloc { flex: 1; text-align: center; padding: 1.4mm; } .chiffres .petit { margin-top: .4mm; }
+.ok-tag { display: inline-block; background: #16A34A; color: #fff; border-radius: 1mm; padding: 0 1.3mm; font-size: 7.8pt; font-weight: 700; }
+pre { margin: 1mm 0; font-family: Consolas, monospace; font-size: 7.8pt; background: #0F172A; color: #E2E8F0; padding: 1.6mm 2.2mm; border-radius: 1.6mm; line-height: 1.35; white-space: pre; }
+.pied { position: absolute; left: 11mm; right: 11mm; bottom: 2.6mm; font-size: 7.8pt; color: #64748B; display: flex; justify-content: space-between; }
+</style></head><body>
+
+<div class='page'>
+<h1>Validation finale — MediConnect</h1>
+<div class='sous'>Classe 5TWIN · Équipe : Chemlali Ismail (patients, back-office), Missaoui Mourad (médecins), Gobji Walid (infirmiers), Allaya Ahmed (pharmacies) · chaque critère de la grille et sa preuve</div>
+
+<div class='chiffres'>
+  <div class='bloc'><div class='chiffre'>1 386</div><div class='petit'>tests automatisés, tous verts</div></div>
+  <div class='bloc'><div class='chiffre'>89 %</div><div class='petit'>de couverture (lignes + branches)</div></div>
+  <div class='bloc'><div class='chiffre'>100/100</div><div class='petit'>Lighthouse accessibilité, 13 pages / 5 rôles</div></div>
+  <div class='bloc ia'><div class='chiffre' style='color:#6D28D9'>95 %</div><div class='petit'>exactitude règles + IA (alertes de soins)</div></div>
+  <div class='bloc ok'><div class='chiffre' style='color:#15803D'>291</div><div class='petit'>pages parcourues en production Docker, 0 erreur</div></div>
+</div>
+
+<h2>Git et intégration <span class='pts'>conditions de la note</span></h2>
+<table>
+<tr><th style='width:40mm'>Exigence</th><th>Preuve</th></tr>
+<tr><td><b>Git</b> <span class='ok-tag'>OUI</span></td><td>Une branche par module (<code>gestion-patient</code>, <code>gestion-medecins</code>, <code>gestion-infirmiers</code>, <code>Pharmacie</code>), intégration dans <code>preprod</code> par Pull Requests relues, conflits résolus et documentés dans chaque PR.</td></tr>
+<tr><td><b>Intégration &amp; déploiement</b> <span class='ok-tag'>OUI</span></td><td>Intégration continue GitHub Actions (MongoDB + Redis, tests, <code>check --deploy</code>, couverture) ; image <code>Dockerfile</code> unique ; <code>docker compose up</code> (site, worker Celery, Redis, MongoDB) ; en ligne : Railway (site, worker, Redis) + MongoDB Atlas, Vercel comme porte d'entrée HTTPS.</td></tr>
+</table>
+
+<h2>1 · Fonctionnalités &amp; CRUD <span class='pts'>2 points</span></h2>
+<table>
+<tr><th style='width:30mm'>Module</th><th style='width:52mm'>Entités (CRUD par les pages)</th><th>Au-delà du CRUD</th></tr>
+<tr><td><b>Patients</b></td><td>Patient, DossierMedical, Allergie, Mesure, Triage</td><td>Triage IA niveau 1→5, file équitable, agenda, export de ses données</td></tr>
+<tr><td><b>Médecins</b></td><td>Medecin, Consultation, Prescription</td><td>File triée, requalification, visio, compte rendu PDF, e-mail / SMS / WhatsApp</td></tr>
+<tr><td><b>Infirmiers</b></td><td>Infirmier, InterventionDomicile</td><td>Zones, séries de soins, planning sans conflit, tournée, compte rendu intelligent, alertes</td></tr>
+<tr><td><b>Pharmacies</b></td><td>Pharmacie, Ordonnance, Medicament</td><td>Stock, rupture, délivrance partielle, substitution IA, extraction IA des médicaments</td></tr>
+<tr><td><b>Comptes</b></td><td>User (5 rôles), JournalConnexion</td><td>Validation des professionnels, désactivation, journal, groupes et permissions</td></tr>
+</table>
+<p class='petit'>Validation <b>côté serveur</b> (formulaires et modèles Django : dates passées, doublons, conflits, valeurs impossibles) et <b>côté client</b> (champs typés, <code>required</code>, <code>min</code>/<code>max</code>, <code>datetime-local</code>), messages d'erreur reliés aux champs. Le périmètre annoncé est couvert, sauf le module laboratoires (équipe de quatre). Parcours inter-modules testé : prescription du médecin → demande du patient en un clic → infirmier → constantes dans le dossier.</p>
+
+<h2>2 · Tests &amp; besoins non fonctionnels <span class='pts'>4 points</span></h2>
+<div class='rang'>
+  <div class='bloc'><h3>Stratégie de tests</h3><ul>
+    <li><b>Unitaires</b> : modèles, règles métier, garde-fous IA (IA simulée), formulaires, gabarits</li>
+    <li><b>Intégration</b> (<code>tests_integration.py</code>, vraie base + client HTTP) : CRUD de chaque entité, inscriptions, parcours complets, statuts HTTP</li>
+    <li><b>Permissions testées</b> : matrice 5 rôles × 21 adresses (anonyme → connexion, autre rôle → 403), données d'un autre compte → 404</li>
+    <li><b>Couverture</b> : <code>coverage run manage.py test</code> → 89 %, rapport HTML publié par la CI</li></ul></div>
+  <div class='bloc'><h3>Sécurité (OWASP)</h3><ul>
+    <li>CSRF sur tout formulaire (page claire si le jeton expire), ORM uniquement</li>
+    <li>Mots de passe hachés PBKDF2 + validateurs ; <b>blocage 15 min après 5 échecs</b></li>
+    <li><b>DEBUG=False imposé en production</b>, clé forte obligatoire, HTTPS, HSTS, cookies <code>Secure</code>/<code>HttpOnly</code>, <code>X-Frame-Options: DENY</code></li>
+    <li><code>check --deploy</code> sans avertissement ; secrets en variables d'environnement</li></ul></div>
+  <div class='bloc'><h3>Accès et robustesse</h3><ul>
+    <li><code>@login_required</code> + décorateurs de rôle ; <b>LoginRequiredMixin + PermissionRequiredMixin</b> pour la gestion des comptes</li>
+    <li>Un <b>groupe Django par rôle</b> avec ses permissions (mis à jour à chaque <code>migrate</code>)</li>
+    <li>Pages <b>400, 403, 404, 500</b> personnalisées ; IA, e-mail, SMS dans des <code>try/except</code> qui journalisent</li>
+    <li>Journal des connexions (traçabilité)</li></ul></div>
+</div>
+
+<div class='pied'><span>MediConnect · Validation finale</span><span>1 / 2</span></div>
+</div>
+
+<div class='page'>
+<h2>3 · Accessibilité web <span class='pts'>2 points</span></h2>
+<div class='rang'>
+  <div class='bloc ok'><h3>Audit Lighthouse 12.8 (rapports dans <code>docs/lighthouse/</code>)</h3>
+    <table><tr><th>Pages auditées (mode production)</th><th>Accessibilité</th><th>Bonnes pratiques</th></tr>
+    <tr><td>Accueil, connexion, inscriptions patient et infirmier</td><td>100</td><td>100</td></tr>
+    <tr><td>Patient : tableau de bord, demande de soin, analyse du dossier</td><td>100</td><td>100</td></tr>
+    <tr><td>Infirmier : tableau de bord, planning · Médecin : file</td><td>100</td><td>100</td></tr>
+    <tr><td>Pharmacie : stock · Admin : tableau de bord, comptes</td><td>100</td><td>100</td></tr></table></div>
+  <div class='bloc'><h3>Ce qui est fait sur toutes les pages</h3><ul>
+    <li><code>header</code>, <code>nav</code> nommée, <code>main</code>, <code>footer</code> ; un seul <code>h1</code>, titres dans l'ordre</li>
+    <li>Lien « Aller au contenu », <b>focus visible</b>, tout se fait au clavier (Tab, Entrée)</li>
+    <li>Icônes décoratives <code>aria-hidden</code>, boutons d'icône nommés, <code>aria-live</code> sur les résultats asynchrones</li>
+    <li>Contrastes ≥ 6,3:1 (AA = 4,5:1), calculés depuis les CSS par <code>audit_accessibilite</code></li></ul></div>
+</div>
+
+<h2>4 · Intelligence artificielle <span class='pts'>4 points</span></h2>
+<table>
+<tr><th style='width:34mm'>Cas d'usage (besoin réel)</th><th style='width:48mm'>Technique</th><th>Métriques mesurées</th></tr>
+<tr><td><b>Triage</b> du texte libre du patient</td><td>scikit-learn (TF-IDF + régression logistique), modèle versionné</td><td>Précision 92,7 % (1 500 cas), 89,7 % (39 écrits à la main) ; cas graves repérés 96,9 % ; matrice de confusion</td></tr>
+<tr><td><b>Orientation</b> vers une spécialité</td><td>scikit-learn</td><td>F1 moyen 0,93 sur 30 phrases écrites à la main</td></tr>
+<tr><td><b>Alertes des comptes rendus</b> de soin</td><td>Règles + LLM (Groq), JSON validé, citations vérifiées</td><td>60 notes annotées : exactitude 65 % → <b>95 %</b>, F1 macro 0,64 → <b>0,95</b>, rappel « à signaler » 0,50 → <b>0,85</b>, 0 fausse alerte</td></tr>
+<tr><td><b>Dossier, pharmacie</b></td><td>LLM : lecture du dossier, substitution, extraction des médicaments</td><td>Qualitatif : sortie refusée si hors catalogue, inventée ou non citée ; durée affichée au médecin</td></tr>
+</table>
+<div class='rang' style='margin-top:1.5mm'>
+  <div class='bloc ia'><h3>Intégration propre</h3><ul>
+    <li>Client unique (<code>patients/ia_client.py</code>) : clé en variable d'environnement, délai max 6 s, cache, quota par compte</li>
+    <li>Garde-fous : anonymisation, liste blanche, citation mot pour mot, consentement du patient</li>
+    <li><b>L'IA ne décide jamais seule</b> : règles et médecin gardent la main</li></ul></div>
+  <div class='bloc ia'><h3>Performance et asynchronisme</h3><ul>
+    <li>Temps mesurés : médiane 423 ms, p95 1,9 s par note (Groq)</li>
+    <li><b>Celery + Redis</b> : analyse du dossier (2 appels, jusqu'à 12 s) en arrière-plan, <b>indicateur de chargement</b> puis résultat ; e-mails en tâche de fond ; relecture IA reprogrammée si l'IA est en panne</li>
+    <li>Sans IA ou en panne : message explicite, les règles continuent</li></ul></div>
+</div>
+
+<h2>5 · UX / UI <span class='pts'>1 point</span></h2>
+<p>Même charte sur toutes les pages (thème sombre contrasté, composants communs), <b>responsive</b> : menu latéral sur ordinateur, barre d'onglets en bas sur mobile ; <b>menus identiques</b> pour un même rôle dans tous les modules ; parcours guidés (étapes, confirmations avant suppression, messages de succès et d'erreur).</p>
+
+<h2>Démonstration devant le jury</h2>
+<pre>docker compose up --build                         # site + worker Celery + Redis + MongoDB → http://localhost:8000
+python manage.py test                             # toute la suite (MongoDB local)
+coverage run manage.py test &amp;&amp; coverage report    # couverture
+python manage.py evaluer_alertes                  # métriques de l'IA des soins à domicile
+DJANGO_ENV=production ... python manage.py check --deploy   # réglages de production</pre>
+
+<div class='pied'><span>MediConnect · Validation finale</span><span>2 / 2</span></div>
+</div>
+</body></html>

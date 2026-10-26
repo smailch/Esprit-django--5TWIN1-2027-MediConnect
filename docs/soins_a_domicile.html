@@ -63,7 +63,7 @@ q { quotes: none; font-style: italic; } .ex { background: #fff; border: 1px dash
 <tr><th style='width:26mm'>Acteur</th><th>Pages</th></tr>
 <tr><td><b>Patient</b></td><td>Soins à domicile : demander (une fois ou en série), suivre en 3 étapes, modifier, retirer, annuler un passage, lire le compte rendu. Son adresse et son téléphone ne sont montrés qu'à l'infirmier qui accepte.</td></tr>
 <tr><td><b>Infirmier</b></td><td>Tableau de bord (patients à suivre, comptes rendus à saisir), demandes de la zone (séries regroupées), planning par jour, tournée du jour, compte rendu intelligent, historique, profil.</td></tr>
-<tr><td><b>Administrateur</b></td><td>Back-office → <b>Alertes soins</b> : alertes à traiter, suite donnée. Admin Django : validation des infirmiers.</td></tr>
+<tr><td><b>Administrateur</b></td><td>Back-office → <b>Alertes soins</b> : alertes à traiter, suite donnée. Back-office → <b>Comptes</b> : validation des infirmiers, désactivation (ses passages à venir retournent aux autres infirmiers, patients prévenus).</td></tr>
 </table>
 <h2>5 · Organisation de l'infirmier</h2>
 <div class='rang' style='margin-top:1mm'>
@@ -111,15 +111,21 @@ q { quotes: none; font-style: italic; } .ex { background: #fff; border: 1px dash
 <table>
 <tr><th style='width:36mm'>Module</th><th>Lien</th></tr>
 <tr><td><b>Patients</b> (Ismail)</td><td>Patient, adresse et ville ; allergies montrées à l'infirmier ; consultation d'origine ; <b>les constantes deviennent des mesures de santé</b> ; même client IA et mêmes garde-fous ; e-mails sur le même gabarit.</td></tr>
-<tr><td><b>Médecins</b> (Mourad)</td><td>Prévu : une prescription de type <code>soin</code> crée la demande chez l'infirmier ; l'espace médecin reçoit les alertes « à signaler ».</td></tr>
-<tr><td><b>Administration</b></td><td>Validation des infirmiers, page Alertes du back-office.</td></tr>
+<tr><td><b>Médecins</b> (Mourad)</td><td>Un soin prescrit dans le compte rendu du médecin apparaît chez le patient (« Soins prescrits par votre médecin ») : il le demande <b>en un clic</b>, formulaire pré-rempli (type de soin, répétition) et relié à la consultation.</td></tr>
+<tr><td><b>Administration</b></td><td>Page <b>Comptes</b> : validation et désactivation des infirmiers (permissions Django) ; page <b>Alertes</b> du back-office.</td></tr>
 </table>
 
-<h2>9 · E-mails, tests, démonstration</h2>
+<h2>9 · Tests, métriques de l'IA et tâches de fond</h2>
 <div class='rang' style='margin-top:1mm'>
-  <div class='bloc'><h3>E-mails</h3><p>Passage fixé, déplacé, annulé, désistement, série acceptée, compte rendu disponible (patient) ; annulation par le patient (infirmier). <b>Aucune donnée médicale</b> ; une panne d'envoi ne bloque rien.</p></div>
-  <div class='bloc'><h3>Tests</h3><p>Plus de <b>120 tests</b> sans base de données : règles, garde-fous avec IA simulée, cycle de vie, droits, formulaires, e-mails, tournée. Parcours vérifiés sur MongoDB avec le contrôle d'accessibilité du projet.</p></div>
-  <div class='bloc'><h3>Démonstration</h3><p><code>charger_symptomes</code>, <code>charger_demo</code>, puis <code>charger_demo_infirmiers --mot-de-passe …</code> : 3 infirmiers, 13 interventions, alertes et évolution prêtes.</p></div>
+  <div class='bloc'><h3>Tests</h3><p><b>Unitaires</b> (règles, garde-fous avec IA simulée, cycle de vie, formulaires, e-mails, tournée) et <b>d'intégration</b> sur une vraie base avec le client HTTP : CRUD complet des deux entités, parcours patient → infirmier → compte rendu → alerte traitée, séries, conflits, tournée, droits.</p></div>
+  <div class='bloc ia'><h3>Métriques (60 notes annotées)</h3>
+    <table><tr><th></th><th>Règles</th><th>Règles + IA</th></tr>
+    <tr><td>Exactitude</td><td>65 %</td><td><b>95 %</b></td></tr>
+    <tr><td>F1 macro</td><td>0,64</td><td><b>0,95</b></td></tr>
+    <tr><td>Rappel « à signaler »</td><td>0,50</td><td><b>0,85</b></td></tr>
+    <tr><td>Alertes manquées / fausses</td><td>7 / 0</td><td><b>1 / 0</b></td></tr></table>
+    <p class='petit'>Groq, médiane 423 ms, p95 1,9 s. <code>python manage.py evaluer_alertes</code></p></div>
+  <div class='bloc'><h3>Celery + Redis</h3><p>E-mails envoyés en tâche de fond. Si l'IA ne répond pas à l'enregistrement d'un compte rendu (délai, réseau), une <b>relecture IA</b> est reprogrammée (1, 2, puis 4 min) : un signe vu par l'IA s'ajoute, le niveau ne peut que monter.</p></div>
 </div>
 <div class='pied'><span>MediConnect · Module infirmiers</span><span>2 / 2</span></div>
 </div>
