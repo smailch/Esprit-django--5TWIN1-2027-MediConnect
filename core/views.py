@@ -8,6 +8,8 @@ from django.contrib.auth.views import (
     PasswordResetDoneView,
     PasswordResetView,
 )
+from django.http import JsonResponse
+from django.shortcuts import render
 from django.urls import reverse, reverse_lazy
 
 from .forms import ChangementMotDePasseForm, ConnexionForm, DemandeReinitialisationForm, NouveauMotDePasseForm
@@ -95,3 +97,20 @@ class ReinitialisationConfirmationView(PasswordResetConfirmView):
 
 class ReinitialisationTermineeView(PasswordResetCompleteView):
     template_name = "core/reinitialisation_terminee.html"
+
+
+def echec_csrf(request, reason=""):
+    """Jeton CSRF absent ou expiré (settings.CSRF_FAILURE_VIEW) : page claire au lieu de la page technique de Django."""
+    return render(request, "403_csrf.html", status=403)
+
+
+def sante(request):
+    """Sonde de santé pour l'hébergeur (Railway) : 200 si l'application répond et que la base est joignable."""
+    from django.db import connection
+
+    try:
+        connection.ensure_connection()
+        base = "ok"
+    except Exception:  # la sonde rend compte de l'état, elle ne plante pas
+        base = "injoignable"
+    return JsonResponse({"application": "ok", "base": base}, status=200 if base == "ok" else 503)

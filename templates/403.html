@@ -1,0 +1,6 @@
+{% extends "erreur.html" %}
+{% block code %}Accès refusé{% endblock %}
+{% block code_court %}403{% endblock %}
+{% block titre %}Cette page ne vous est pas accessible{% endblock %}
+{% block explication %}Votre compte n'a pas les droits nécessaires : chaque espace (patient, médecin, infirmier, pharmacie, administration) est réservé à son rôle. Si vous pensez que c'est une erreur, contactez un administrateur.{% endblock %}
+{% block actions %}{% if not user.is_authenticated %}<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>{% endif %}{% endblock %}

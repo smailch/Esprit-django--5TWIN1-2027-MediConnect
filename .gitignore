@@ -10,3 +10,6 @@ comptes_test.txt
 db.sqlite3
 staticfiles/
 venv/
+htmlcov/
+.coverage
+.coverage.*
