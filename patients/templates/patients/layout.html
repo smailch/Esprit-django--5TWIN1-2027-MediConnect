@@ -14,6 +14,9 @@
 <a href="{% url 'patients:dossier' %}" class="nav-item" {% if page == 'dossier' or page == 'consultations' or page == 'analyse_dossier' or page == 'ia_consentement' or page == 'allergies' or page == 'allergie_creer' or page == 'allergie_modifier' or page == 'allergie_supprimer' or page == 'mesures' or page == 'mesure_creer' or page == 'mesure_modifier' or page == 'mesure_supprimer' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="clipboard-list" class="h-5 w-5"></i><span>Mon dossier</span>
 </a>
+<a href="{% url 'infirmiers:soins' %}" class="nav-item" {% if request.resolver_match.namespace == 'infirmiers' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="syringe" class="h-5 w-5"></i><span>Soins à domicile</span>
+</a>
 <a href="{% url 'patients:profil' %}" class="nav-item" {% if page == 'profil' or page == 'compte' or page == 'mot_de_passe' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="user" class="h-5 w-5"></i><span>Mon profil</span>
 </a>

@@ -1,0 +1,18 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+{% if ancien %}Votre infirmier a déplacé son passage, initialement prévu le {{ ancien|date:"l j F à H:i" }}. Voici la nouvelle heure :{% else %}Bonne nouvelle : votre demande de soin à domicile a été acceptée. Voici le récapitulatif :{% endif %}
+
+  Infirmier : {{ infirmier }}
+  Téléphone : {{ infirmier.telephone }}
+  Date : {{ intervention.date_prevue|date:"l j F Y" }}
+  Heure : {{ intervention.date_prevue|time:"H:i" }}
+
+Bon à savoir :
+- Préparez votre ordonnance et le matériel éventuel.
+- Un empêchement ? Prévenez l'infirmier ou annulez le passage depuis votre espace :
+  {{ lien }}
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

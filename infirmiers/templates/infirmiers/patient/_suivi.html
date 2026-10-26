@@ -1,0 +1,14 @@
+{# Étapes d'une demande de soin, vues par le patient. Paramètre : demande (non annulée). #}
+{% with s=demande.statut %}
+<ol class="stepper" aria-label="Suivi de votre demande">
+  <li class="step step-done">
+    <span class="step-dot">✓</span><span>Demande envoyée</span>
+  </li>
+  <li class="step {% if s == 'demandee' %}step-current{% else %}step-done{% endif %}" {% if s == 'demandee' %}aria-current="step"{% endif %}>
+    <span class="step-dot">{% if s == 'demandee' %}2{% else %}✓{% endif %}</span><span>{% if s == 'demandee' %}En attente d'un infirmier{% else %}Infirmier trouvé{% endif %}</span>
+  </li>
+  <li class="step {% if s == 'acceptee' %}step-current{% elif s == 'realisee' %}step-done{% endif %}" {% if s == 'acceptee' %}aria-current="step"{% endif %}>
+    <span class="step-dot">{% if s == 'realisee' %}✓{% else %}3{% endif %}</span><span>Soin réalisé</span>
+  </li>
+</ol>
+{% endwith %}

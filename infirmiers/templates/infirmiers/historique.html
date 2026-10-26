@@ -1,0 +1,44 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Historique — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Historique</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Vos interventions terminées ou annulées, de la plus récente à la plus ancienne.</p>
+  </div>
+</header>
+
+{% if interventions %}
+<div class="table-wrap panel mt-8">
+  <table class="tbl">
+    <caption class="sr-only">Interventions closes</caption>
+    <thead>
+      <tr>
+        <th scope="col">Date</th>
+        <th scope="col">Soin</th>
+        <th scope="col">Patient</th>
+        <th scope="col">Ville</th>
+        <th scope="col">Statut</th>
+        <th scope="col">Alerte</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in interventions %}
+      <tr>
+        <td>{% firstof i.realisee_le|date:"d/m/Y H:i" i.annulee_le|date:"d/m/Y H:i" %}</td>
+        <td><a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.get_type_soin_display }}</a></td>
+        <td>{{ i.patient }}</td>
+        <td>{{ i.ville }}</td>
+        <td>{% include "infirmiers/_statut.html" %}</td>
+        <td>{% if i.niveau_alerte %}{% include "infirmiers/_niveau.html" with niveau=i.niveau_alerte libelle=i.get_niveau_alerte_display %}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="panel panel-pad muted mt-8 text-center text-sm">Aucune intervention close pour l'instant.</p>
+{% endif %}
+{% endblock %}

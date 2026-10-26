@@ -30,6 +30,8 @@ class ConnexionView(LoginView):
             return reverse("backoffice:tableau_de_bord")
         if role == user.Role.PATIENT:
             return reverse("patients:tableau_de_bord")
+        if role == user.Role.INFIRMIER:
+            return reverse("infirmiers:tableau_de_bord")
         return reverse("home")
 
 
@@ -53,6 +55,9 @@ class ChangementMotDePasseView(PasswordChangeView):
         est_patient = hasattr(self.request.user, "patient")  # un patient garde son menu et revient à « Mon compte »
         contexte["cadre"] = "patients/layout.html" if est_patient else "core/layout.html"
         contexte["retour"] = reverse("patients:compte") if est_patient else reverse("home")
+        if hasattr(self.request.user, "infirmier"):  # de même pour un infirmier, qui revient à son profil
+            contexte["cadre"] = "infirmiers/layout.html"
+            contexte["retour"] = reverse("infirmiers:profil")
         return contexte
 
 

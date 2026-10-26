@@ -1,0 +1,11 @@
+{# Encadré du passage : infirmier, date, heure. Paramètres : nom, telephone, quand (date et heure), barre (couleur). #}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F0FBFD;border-left:4px solid {{ barre|default:'#0E7490' }};border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Infirmier</td><td style="padding:3px 0;font-weight:700;">{{ nom }}</td></tr>
+      {% if telephone %}<tr><td style="padding:3px 18px 3px 0;color:#475569;">Téléphone</td><td style="padding:3px 0;font-weight:700;">{{ telephone }}</td></tr>{% endif %}
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Date</td><td style="padding:3px 0;font-weight:700;">{{ quand|date:"l j F Y"|capfirst }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Heure</td><td style="padding:3px 0;font-weight:700;">{{ quand|time:"H:i" }}</td></tr>
+    </table>
+  </td></tr>
+</table>

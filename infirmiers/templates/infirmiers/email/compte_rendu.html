@@ -1,0 +1,9 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Le compte rendu de votre soin est disponible{% endblock %}
+{% block preheader %}{{ infirmier|default:"Votre infirmier" }} a enregistré le compte rendu de son passage.{% endblock %}
+{% block titre %}Le compte rendu de votre soin est disponible{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">{{ infirmier|default:"Votre infirmier" }} est passé le {{ intervention.realisee_le|date:"l j F à H:i" }} et a enregistré son compte rendu.</p>
+<p style="margin:0;">Vous pouvez le lire, avec les mesures relevées, dans votre espace MediConnect. Il reste aussi consultable par la suite.</p>
+{% endblock %}
+{% block bouton_texte %}Lire le compte rendu{% endblock %}
