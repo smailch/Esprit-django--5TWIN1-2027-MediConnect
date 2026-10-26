@@ -36,6 +36,17 @@ STOCK = [
     ("Mopral", "oméprazole", "20 mg", "gelule", 0, 4, "11.300"),
 ]
 
+# Une seconde pharmacie qui a ce qui manque à la première : la délivrance partielle y oriente le patient.
+SECONDE_PHARMACIE = {"nom": "Pharmacie Ennasr", "adresse": "45 avenue Hédi Nouira, Ennasr 2", "ville": "Tunis",
+                     "telephone": "71 820 456", "horaires": "Tous les jours, 8 h – 22 h", "de_garde": False}
+STOCK_SECONDE = [
+    ("Amoxicilline", "amoxicilline", "1 g", "comprime", 20, 5, "6.480"),
+    ("Inexium", "ésoméprazole", "20 mg", "gelule", 6, 3, "14.200"),
+    ("Mopral", "oméprazole", "20 mg", "gelule", 9, 4, "11.300"),
+    ("Doliprane", "paracétamol", "1 g", "comprime", 30, 10, "2.900"),
+]
+STOCKS = {"pharmacie": STOCK, "pharmacie2": STOCK_SECONDE}
+
 
 class Command(BaseCommand):
     help = "Crée une pharmacie, un médecin, un patient, une consultation et 3 ordonnances de démonstration (--supprimer pour les retirer)."
@@ -51,16 +62,21 @@ class Command(BaseCommand):
         User = get_user_model()
         if options["supprimer"]:
             return self.supprimer(User)
+        # Aucun mot de passe écrit dans le code : il vient de l'option, de l'environnement, ou il est tiré au hasard.
+        mot_de_passe = options["mot_de_passe"] or os.environ.get("DEMO_MOT_DE_PASSE") or secrets.token_urlsafe(9)
+        aleatoire = not (options["mot_de_passe"] or os.environ.get("DEMO_MOT_DE_PASSE"))
+
         if User.objects.filter(username__startswith=PREFIXE).exists():
+            seconde = self.ajouter_seconde_pharmacie(User, mot_de_passe)
             ajoutes = self.ajouter_stock()
             self.stdout.write(
                 "Les données de démonstration sont déjà chargées (utilisez --supprimer pour les retirer)."
                 + (f" {ajoutes} médicament(s) ajouté(s) au stock." if ajoutes else "")
             )
+            if seconde:
+                self.stdout.write(f"Seconde pharmacie créée : compte {PREFIXE}pharmacie2"
+                                  + (f", mot de passe (tiré au hasard, à noter) : {mot_de_passe}" if aleatoire else ""))
             return
-
-        # Aucun mot de passe écrit dans le code : il vient de l'option, de l'environnement, ou il est tiré au hasard.
-        mot_de_passe = options["mot_de_passe"] or os.environ.get("DEMO_MOT_DE_PASSE") or secrets.token_urlsafe(9)
 
         def compte(identifiant, prenom, nom, role):
             user = User(username=PREFIXE + identifiant, first_name=prenom, last_name=nom, role=role, est_valide=True,
@@ -104,26 +120,39 @@ class Command(BaseCommand):
                 delivree_le=maintenant - datetime.timedelta(days=jours - 1) if statut == Ordonnance.Statut.DELIVREE else None,
             )
 
+        self.ajouter_seconde_pharmacie(User, mot_de_passe)
         ajoutes = self.ajouter_stock()
         self.stdout.write(self.style.SUCCESS(
-            f"Pharmacie, médecin, patient, consultation, 3 ordonnances et {ajoutes} médicaments en stock de démonstration créés."
+            f"2 pharmacies, médecin, patient, consultation, 3 ordonnances et {ajoutes} médicaments en stock de démonstration créés."
         ))
-        self.stdout.write(f"Comptes : {PREFIXE}pharmacie, {PREFIXE}medecin, {PREFIXE}patient")
-        if not (options["mot_de_passe"] or os.environ.get("DEMO_MOT_DE_PASSE")):
+        self.stdout.write(f"Comptes : {PREFIXE}pharmacie, {PREFIXE}pharmacie2, {PREFIXE}medecin, {PREFIXE}patient")
+        if aleatoire:
             self.stdout.write(f"Mot de passe (tiré au hasard, à noter) : {mot_de_passe}")
 
+    def ajouter_seconde_pharmacie(self, User, mot_de_passe):
+        """La seconde pharmacie de la démo (une seule fois). Renvoie True si elle vient d'être créée."""
+        if User.objects.filter(username=PREFIXE + "pharmacie2").exists():
+            return False
+        user = User(username=PREFIXE + "pharmacie2", first_name="Karim", last_name="Mansour", role=User.Role.PHARMACIE,
+                    est_valide=True, email="pharmacie2@demo.mediconnect.test")
+        user.set_password(mot_de_passe)
+        user.save()
+        Pharmacie.objects.create(user=user, **SECONDE_PHARMACIE)
+        return True
+
     def ajouter_stock(self):
-        """Stock de démonstration (sans doublon si la commande est relancée)."""
-        pharmacie = Pharmacie.objects.filter(user__username=PREFIXE + "pharmacie").first()
-        if pharmacie is None:
-            return 0
+        """Stock de démonstration de chaque pharmacie (sans doublon si la commande est relancée)."""
         ajoutes = 0
-        for nom, principe, dosage, forme, quantite, seuil, prix in STOCK:
-            if Medicament.objects.filter(pharmacie=pharmacie, nom=nom, dosage=dosage).exists():
+        for compte, lignes in STOCKS.items():
+            pharmacie = Pharmacie.objects.filter(user__username=PREFIXE + compte).first()
+            if pharmacie is None:
                 continue
-            Medicament.objects.create(pharmacie=pharmacie, nom=nom, principe_actif=principe, dosage=dosage, forme=forme,
-                                      quantite=quantite, seuil_alerte=seuil, prix=Decimal(prix))
-            ajoutes += 1
+            for nom, principe, dosage, forme, quantite, seuil, prix in lignes:
+                if Medicament.objects.filter(pharmacie=pharmacie, nom=nom, dosage=dosage).exists():
+                    continue
+                Medicament.objects.create(pharmacie=pharmacie, nom=nom, principe_actif=principe, dosage=dosage, forme=forme,
+                                          quantite=quantite, seuil_alerte=seuil, prix=Decimal(prix))
+                ajoutes += 1
         return ajoutes
 
     def supprimer(self, User):

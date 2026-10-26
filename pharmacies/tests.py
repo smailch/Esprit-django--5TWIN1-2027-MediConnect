@@ -450,7 +450,8 @@ class VuesTests(SimpleTestCase):
     def test_la_transmission_choisit_la_pharmacie(self):
         o, pharmacie = une_ordonnance(), une_pharmacie()
         formulaire = mock.Mock(is_valid=mock.Mock(return_value=True), cleaned_data={"pharmacie": pharmacie})
-        with mock.patch.object(views, "TransmissionForm", return_value=formulaire), mock.patch.object(Ordonnance, "save"):
+        with mock.patch.object(views, "TransmissionForm", return_value=formulaire), mock.patch.object(Ordonnance, "save"), \
+                mock.patch.object(views.delivrance, "pharmacies_disponibles", return_value=[]):
             reponse = self.appeler(views.ordonnance_transmettre, PATIENT, o.pk, methode="post", objet=o)
         self.assertEqual(reponse.status_code, 302)
         self.assertEqual((o.pharmacie, o.statut), (pharmacie, S.TRANSMISE))
@@ -545,6 +546,7 @@ class PagesTests(SimpleTestCase):
             "ordonnance": ordonnance,
             "allergies": [Allergie(substance="Pénicilline", gravite="severe", type="medicament")],
             "etapes": [(s, Ordonnance.Statut(s).label) for s in Ordonnance.PARCOURS],
+            "peut_avancer": bool(ordonnance.statut_suivant),  # tout est en stock dans ces pages
         }, self.requete(espace, "ordonnance_detail"))
 
     def test_le_patient_envoie_son_ordonnance_et_ne_voit_pas_les_outils_des_autres(self):
@@ -904,7 +906,8 @@ class IaSubstitutionTests(SimpleTestCase):
     def test_seul_le_nom_du_medicament_est_envoye(self):
         sub.suggerer("Amoxicilline 1 g, pour Yassine Khelifi yassine@exemple.tn")
         for systeme, utilisateur, _ in self.envois:
-            self.assertEqual(utilisateur, "<medicament>Amoxicilline</medicament>")  # ni dosage, ni patient
+            # le nom et la molécule, rien d'autre : ni dosage, ni patient
+            self.assertEqual(utilisateur, "<medicament>Amoxicilline</medicament>\n<principe_actif>amoxicilline</principe_actif>")
             self.assertNotIn("Yassine", systeme + utilisateur)
 
     def test_la_validation_refuse_posologie_liens_balises_et_doublons(self):
@@ -999,6 +1002,33 @@ class IaSubstitutionTests(SimpleTestCase):
         marque_inconnue = [{"nom": "Marque X"}]
         sub.signaler_allergies(marque_inconnue, "amoxicilline", ["pénicilline"])  # repérée par son principe actif
         self.assertEqual(marque_inconnue[0]["alerte_allergie"], "pénicillines")
+
+    def test_une_reponse_sur_une_autre_molecule_est_rejetee(self):
+        """Cas réel observé : pour du Mopral (oméprazole), le modèle a proposé de la mizolastine (un antihistaminique)."""
+        self.reponse = ia_client.ResultatIA(ia_client.OK, {"principe_actif": "mizolastine", "suggestions": [
+            {"nom": "Mizolastine générique", "type": "generique", "raison": "Même principe actif."}]})
+        with self.assertLogs("mediconnect.ia", level="WARNING"):
+            r = sub.suggerer("Mopral 20 mg, le matin", principe="oméprazole")
+        self.assertEqual((r.statut, r.source, r.principe_actif), (ia_client.INVALIDE, sub.LOCAL, "oméprazole"))
+        self.assertEqual([s["nom"] for s in r.suggestions], ["Oméprazole générique"])  # repli sûr
+
+    def test_le_principe_actif_attendu_est_envoye_et_impose(self):
+        sub.suggerer("Mopral 20 mg", principe="Oméprazole")
+        self.assertEqual(self.envois[-1][1], "<medicament>Mopral</medicament>\n<principe_actif>oméprazole</principe_actif>")
+        sub.suggerer("Clamoxyl")  # sans stock : principe tiré de la table locale
+        self.assertIn("<principe_actif>amoxicilline</principe_actif>", self.envois[-1][1])
+
+    def test_une_suggestion_d_une_autre_molecule_est_ecartee(self):
+        brut = {"principe_actif": "oméprazole", "suggestions": [
+            {"nom": "Mopral", "raison": "Marque d'origine."},
+            {"nom": "Doliprane", "raison": "Erreur du modèle."},  # paracétamol d'après la table
+            {"nom": "Mizolastine générique", "raison": "Erreur du modèle."},  # « X générique » : X est la molécule
+            {"nom": "Oméprazole générique", "raison": "Générique."},
+        ]}
+        _, retenues = sub.valider(brut, "Inexium", "oméprazole")
+        self.assertEqual([s["nom"] for s in retenues], ["Mopral", "Oméprazole générique"])
+        self.assertTrue(sub.meme_principe("Oméprazole magnésium", "omeprazole"))
+        self.assertFalse(sub.meme_principe("mizolastine", "oméprazole"))
 
     def test_le_prompt_impose_le_json_et_interdit_les_chiffres(self):
         self.assertIn("JSON", sub.SYSTEME)
@@ -1375,3 +1405,215 @@ class StockPagesTests(SimpleTestCase):
         from .management.commands import charger_demo_pharmacies as demo
 
         self.assertTrue(any(quantite == 0 and principe == "amoxicilline" for _, principe, _, _, quantite, *_ in demo.STOCK))
+
+
+# --- Délivrance partielle et orientation vers une autre pharmacie -------------------------------------------------
+
+
+from importlib import import_module  # noqa: E402
+
+from . import delivrance  # noqa: E402
+
+
+class CoherenceStatutTests(SimpleTestCase):
+    def test_une_ordonnance_confiee_a_une_pharmacie_est_transmise(self):
+        o = une_ordonnance(statut=S.EMISE, pharmacie=une_pharmacie())
+        with mock.patch("django.db.models.Model.save") as enregistrer:
+            o.save(update_fields=["pharmacie"])
+        self.assertEqual(o.statut, S.TRANSMISE)
+        self.assertEqual(set(enregistrer.call_args.kwargs["update_fields"]), {"pharmacie", "statut"})  # statut aussi écrit
+
+    def test_sans_pharmacie_elle_reste_emise(self):
+        o = une_ordonnance(statut=S.EMISE)
+        with mock.patch("django.db.models.Model.save"):
+            o.save()
+        self.assertEqual(o.statut, S.EMISE)
+
+    def test_la_migration_corrige_les_donnees_existantes(self):
+        migration = import_module("pharmacies.migrations.0003_delivrance_partielle")
+        modele = mock.Mock()
+        migration.corriger_emises_avec_pharmacie(SimpleNamespace(get_model=lambda app, nom: modele), None)
+        modele.objects.filter.assert_called_once_with(statut="emise", pharmacie__isnull=False)
+        modele.objects.filter.return_value.update.assert_called_once_with(statut="transmise")
+
+
+class DelivranceTests(SimpleTestCase):
+    def setUp(self):
+        self.enregistrees = []
+        p = mock.patch.object(Ordonnance, "save", autospec=True, side_effect=self.enregistrer)
+        p.start()
+        self.addCleanup(p.stop)
+        r = mock.patch.object(stock, "retirer_du_stock", return_value=1)
+        self.retirer = r.start()
+        self.addCleanup(r.stop)
+
+    def enregistrer(self, ordonnance, *args, **kwargs):
+        if ordonnance.pk is None:
+            ordonnance.pk = ObjectId()
+        self.enregistrees.append((ordonnance, kwargs.get("update_fields")))
+
+    def preparer(self, medicaments, stock_pharmacie, **kw):
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments=medicaments, instructions="Au cours des repas.",
+                           valide_jusqu_au=AUJOURDHUI + datetime.timedelta(days=30), **kw)
+        return o, stock.etat_des_lignes(o.lignes, stock_pharmacie)
+
+    def test_tout_est_en_stock_delivrance_complete(self):
+        o, etats = self.preparer("Doliprane 1 g\nVentoline", [un_medicament("Doliprane", quantite=4), un_medicament("Ventoline", "salbutamol", 8)])
+        retirees, reste = delivrance.delivrer(o, etats)
+        self.assertIsNone(reste)
+        self.assertEqual((o.statut, retirees), (S.DELIVREE, 1))
+        self.retirer.assert_called_once_with(etats)
+
+    def test_delivrance_partielle_le_reste_part_sur_une_nouvelle_ordonnance(self):
+        o, etats = self.preparer("Doliprane 1 g, si douleur\nMopral 20 mg, le matin", [un_medicament("Doliprane", quantite=4), un_medicament("Mopral", "oméprazole", 0)])
+        _, reste = delivrance.delivrer(o, etats)
+        self.assertEqual(o.statut, S.DELIVREE)
+        self.assertEqual(o.lignes, ["Doliprane 1 g, si douleur"])  # l'ordonnance délivrée ne garde que ce qui a été remis
+        self.assertIn(reste.reference, o.note_pharmacien)
+        self.assertEqual(reste.lignes, ["Mopral 20 mg, le matin"])  # le reste : seulement les médicaments non livrés
+        self.assertEqual((reste.statut, reste.pharmacie, reste.ordonnance_origine), (S.EMISE, None, o))
+        self.assertEqual((reste.patient_id, reste.prescripteur_nom, reste.instructions), (o.patient_id, o.prescripteur_nom, o.instructions))
+        self.assertEqual((reste.date_emission, reste.valide_jusqu_au), (o.date_emission, o.valide_jusqu_au))  # même validité
+        self.assertTrue(reste.est_reliquat)
+
+    def test_rien_en_stock_rien_n_est_delivre(self):
+        o, etats = self.preparer("Mopral 20 mg", [un_medicament("Mopral", "oméprazole", 0)])
+        with self.assertRaisesMessage(ValueError, "Renvoyez-la au patient"):
+            delivrance.delivrer(o, etats)
+        self.assertEqual((o.statut, self.enregistrees), (S.PRETE, []))
+        self.retirer.assert_not_called()
+
+    def test_ordonnance_expiree_aucune_ecriture(self):
+        o, etats = self.preparer("Doliprane\nMopral", [un_medicament("Doliprane", quantite=4)])
+        o.valide_jusqu_au = AUJOURDHUI - datetime.timedelta(days=1)
+        with self.assertRaisesMessage(ValueError, "expiré"):
+            delivrance.delivrer(o, etats)
+        self.assertEqual(self.enregistrees, [])  # pas de reste créé pour une ordonnance qui ne peut pas être délivrée
+
+
+class OrientationPharmaciesTests(SimpleTestCase):
+    def test_classement_des_pharmacies_qui_ont_les_medicaments(self):
+        lignes = ["Mopral 20 mg", "Doliprane 1 g"]
+        sousse = une_pharmacie(nom="Pharmacie Sousse", ville="Sousse")
+        garde = une_pharmacie(nom="Pharmacie de garde", ville="Tunis", de_garde=True)
+        tunis = une_pharmacie(nom="Pharmacie Centrale", ville="Tunis")
+        vide = une_pharmacie(nom="Pharmacie vide", ville="Tunis")
+        groupes = [
+            (sousse, [un_medicament("Mopral", "oméprazole", 5), un_medicament("Doliprane", quantite=2)]),  # a tout
+            (tunis, [un_medicament("Mopral", "oméprazole", 5)]),
+            (garde, [un_medicament("Inexium", "oméprazole", 3)]),  # même principe actif : compte aussi
+            (vide, [un_medicament("Mopral", "oméprazole", 0)]),  # en rupture : écartée
+        ]
+        principes = delivrance.principes_des_lignes(lignes, [m for _, meds in groupes for m in meds])
+        self.assertEqual(principes, {"Mopral 20 mg": "oméprazole", "Doliprane 1 g": "paracétamol"})
+        resultats = delivrance.classer_pharmacies(lignes, groupes, ville="tunis", principes=principes)
+        self.assertEqual([r["pharmacie"].nom for r in resultats], ["Pharmacie Sousse", "Pharmacie de garde", "Pharmacie Centrale"])
+        self.assertTrue(resultats[0]["complete"])
+        self.assertEqual((resultats[1]["nombre"], resultats[1]["medicaments"]), (1, ["Mopral"]))
+        sans_principe = delivrance.classer_pharmacies(lignes, groupes, ville="tunis")
+        self.assertNotIn("Pharmacie de garde", [r["pharmacie"].nom for r in sans_principe])  # l'Inexium n'est retrouvé que par le principe
+
+    def test_principe_actif_par_la_table_locale(self):
+        self.assertEqual(delivrance.principes_des_lignes(["Clamoxyl 1 g"], []), {"Clamoxyl 1 g": "amoxicilline"})
+        self.assertEqual(delivrance.principes_des_lignes(["Inconnu"], []), {})
+
+    def test_limite_et_cas_vides(self):
+        groupes = [(une_pharmacie(nom=f"P{i}"), [un_medicament("Doliprane", quantite=1)]) for i in range(5)]
+        self.assertEqual(len(delivrance.classer_pharmacies(["Doliprane"], groupes)), delivrance.MAX_PHARMACIES)
+        self.assertEqual(delivrance.pharmacies_disponibles([]), [])  # aucune requête pour une liste vide
+
+
+class RenvoiEtDelivranceVuesTests(SimpleTestCase):
+    appeler = SubstitutionVueTests.appeler
+
+    def test_la_pharmacie_rend_l_ordonnance_au_patient(self):
+        o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie())
+        with mock.patch.object(Ordonnance, "save"):
+            reponse = self.appeler(views.ordonnance_renvoyer, PHARMACIE, o)
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual((o.statut, o.pharmacie), (S.EMISE, None))
+        self.assertIn("Renvoyée par Pharmacie du Lac", o.note_pharmacien)
+
+    def test_renvoi_impossible_apres_delivrance_et_reserve_a_la_pharmacie(self):
+        o = une_ordonnance(statut=S.DELIVREE, pharmacie=une_pharmacie())
+        with mock.patch.object(Ordonnance, "save") as enregistrer:
+            self.appeler(views.ordonnance_renvoyer, PHARMACIE, o)
+        enregistrer.assert_not_called()
+        self.assertEqual(self.appeler(views.ordonnance_renvoyer, PHARMACIE, o, methode="get").status_code, 405)
+        with self.assertRaises(PermissionDenied):
+            self.appeler(views.ordonnance_renvoyer, PATIENT, o)
+
+    def test_message_de_delivrance_partielle(self):
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie())
+        reste = une_ordonnance(medicaments="Mopral 20 mg")
+        requete = avec_messages(RequestFactory().post("/"))
+        requete.user = un_user(role="pharmacie")
+        with mock.patch.object(permissions, "espace_de", return_value=PHARMACIE), \
+                mock.patch.object(views, "objet_ou_404", return_value=o), mock.patch.object(views, "ordonnances_visibles"), \
+                mock.patch.object(Medicament.objects, "filter", return_value=[]), \
+                mock.patch.object(delivrance, "delivrer", return_value=(2, reste)):
+            views.ordonnance_avancer(requete, o.pk)
+        message = [str(m) for m in requete._messages][0]
+        self.assertIn("2 boîte(s) retirée(s)", message)
+        self.assertIn(reste.reference, message)
+        self.assertIn("pharmacies qui les ont en stock", message)
+
+    def test_une_delivrance_impossible_est_expliquee(self):
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments="Mopral 20 mg")
+        with mock.patch.object(Ordonnance, "save") as enregistrer:
+            reponse = self.appeler(views.ordonnance_avancer, PHARMACIE, o, stock_pharmacie=[un_medicament("Mopral", "oméprazole", 0)])
+        self.assertEqual(reponse.status_code, 302)
+        enregistrer.assert_not_called()
+        self.assertEqual(o.statut, S.PRETE)
+
+
+class DelivrancePagesTests(SimpleTestCase):
+    requete = PagesTests.requete
+
+    def rendre(self, espace, o, **contexte):
+        valeurs = {"ordonnance": o, "allergies": [], "etapes": [(s, Ordonnance.Statut(s).label) for s in Ordonnance.PARCOURS]}
+        valeurs.update(contexte)
+        return render_to_string("pharmacies/ordonnance_detail.html", valeurs, self.requete(espace, "ordonnance_detail"))
+
+    def contexte_pharmacie(self, o, stock_pharmacie):
+        etats = stock.etat_des_lignes(o.lignes, stock_pharmacie)
+        manquants = stock.lignes_en_rupture(etats)
+        servies = len(etats) - len(manquants)
+        return {"etats": etats, "manquants": manquants, "servies": servies,
+                "peut_avancer": bool(o.statut_suivant) and (o.statut_suivant != S.DELIVREE or servies > 0)}
+
+    def test_bouton_de_delivrance_partielle(self):
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments="Doliprane 1 g\nMopral 20 mg")
+        html = self.rendre(PHARMACIE, o, **self.contexte_pharmacie(o, [un_medicament("Doliprane"), un_medicament("Mopral", "oméprazole", 0)]))
+        self.assertIn("Délivrer les médicaments disponibles (1 sur 2)", html)
+        self.assertIn("sera reporté sur une nouvelle ordonnance", html)
+        self.assertIn("Renvoyer au patient", html)
+        self.assertEqual(verifier_html(html), [])
+
+    def test_rien_en_stock_pas_de_bouton_de_delivrance(self):
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments="Mopral 20 mg")
+        html = self.rendre(PHARMACIE, o, **self.contexte_pharmacie(o, [un_medicament("Mopral", "oméprazole", 0)]))
+        self.assertNotIn("Délivrer", html)
+        self.assertNotIn("Confirmer la délivrance", html)
+        self.assertIn("Renvoyer au patient", html)
+        self.assertIn("Rien ne peut être délivré ici", html)
+
+    def test_le_patient_voit_ou_trouver_ses_medicaments(self):
+        origine = une_ordonnance(statut=S.DELIVREE)
+        reste = une_ordonnance(statut=S.EMISE, medicaments="Mopral 20 mg", ordonnance_origine=origine)
+        disponibles = [{"pharmacie": une_pharmacie(nom="Pharmacie Centrale", de_garde=True), "medicaments": ["Mopral"], "nombre": 1, "complete": True}]
+        html = self.rendre(PATIENT, reste, disponibles=disponibles)
+        self.assertIn("Ordonnance à compléter", html)
+        self.assertIn(origine.reference, html)
+        self.assertIn("Où trouver vos médicaments", html)
+        self.assertIn("A tous vos médicaments", html)
+        self.assertIn(f'name="pharmacie" value="{disponibles[0]["pharmacie"].pk}"', html)  # envoi en un clic
+        self.assertIn(reverse("pharmacies:ordonnance_transmettre", args=[reste.pk]), html)
+        self.assertEqual(verifier_html(html), [])
+
+    def test_l_ordonnance_delivree_renvoie_vers_le_reste(self):
+        o = une_ordonnance(statut=S.DELIVREE, pharmacie=une_pharmacie())
+        reste = une_ordonnance(statut=S.TRANSMISE, medicaments="Mopral 20 mg")
+        html = self.rendre(PATIENT, o, reliquats=[reste])
+        self.assertIn("Délivrance partielle", html)
+        self.assertIn(reste.reference, html)

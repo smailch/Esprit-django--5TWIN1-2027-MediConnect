@@ -13,6 +13,16 @@
 
 <form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
   {% csrf_token %}
+  {% if disponibles %}
+  <div>
+    <p class="f-label">Pharmacies qui ont vos médicaments en stock</p>
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for d in disponibles %}
+      <li><strong class="font-medium">{{ d.pharmacie.nom }}</strong><span class="muted"> · {{ d.pharmacie.ville }} · {% if d.complete %}tous vos médicaments{% else %}{{ d.nombre }} sur {{ ordonnance.lignes|length }} ({{ d.medicaments|join:", " }}){% endif %}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% with field=form.pharmacie %}{% include "core/_champ.html" %}{% endwith %}
   <p class="muted text-sm"><a class="link" href="{% url 'pharmacies:pharmacies' %}">Voir l'annuaire des pharmacies</a> (adresses, horaires, gardes).</p>
 

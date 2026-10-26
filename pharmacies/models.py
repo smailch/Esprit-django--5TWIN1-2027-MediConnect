@@ -156,6 +156,11 @@ class Ordonnance(models.Model):
         "Valable jusqu'au", null=True, blank=True, help_text=f"Laissez vide : {DUREE_VALIDITE_JOURS} jours après la date de l'ordonnance."
     )
     note_pharmacien = models.CharField("Note de la pharmacie", max_length=300, blank=True)
+    # Délivrance partielle : les médicaments manquants partent sur une nouvelle ordonnance, reliée à celle-ci.
+    ordonnance_origine = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="reliquats",
+        help_text="Ordonnance partiellement délivrée dont celle-ci reprend les médicaments manquants.",
+    )
     delivree_le = models.DateTimeField(null=True, blank=True)
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
@@ -240,7 +245,17 @@ class Ordonnance(models.Model):
 
     def save(self, *args, **kwargs):
         self.appliquer_validite_par_defaut()
+        # Cohérence : une ordonnance confiée à une pharmacie est transmise, quel que soit le code qui l'enregistre
+        # (sinon elle resterait « émise » chez la pharmacie, sans aucune action possible).
+        if self.statut == self.Statut.EMISE and self.pharmacie_id is not None:
+            self.statut = self.Statut.TRANSMISE
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"statut"}
         super().save(*args, **kwargs)
+
+    @property
+    def est_reliquat(self):
+        return self.ordonnance_origine_id is not None
 
     def avancer(self):
         """Passe à l'étape suivante (action de la pharmacie). Lève ValueError si c'est impossible."""
