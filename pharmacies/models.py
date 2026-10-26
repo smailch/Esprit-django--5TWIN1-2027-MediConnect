@@ -156,7 +156,18 @@ class Ordonnance(models.Model):
         "Valable jusqu'au", null=True, blank=True, help_text=f"Laissez vide : {DUREE_VALIDITE_JOURS} jours après la date de l'ordonnance."
     )
     note_pharmacien = models.CharField("Note de la pharmacie", max_length=300, blank=True)
-    # Délivrance partielle : les médicaments manquants partent sur une nouvelle ordonnance, reliée à celle-ci.
+    # Délivrance partielle : la pharmacie demande l'accord du patient ; s'il accepte, il peut déjà choisir la pharmacie
+    # qui aura le reste. Les médicaments manquants partent alors sur une nouvelle ordonnance, reliée à celle-ci.
+    class Accord(models.TextChoices):
+        NON_DEMANDE = "", "Non demandé"
+        EN_ATTENTE = "attente", "En attente de la réponse du patient"
+        ACCEPTE = "accepte", "Acceptée par le patient"
+
+    accord_partiel = models.CharField("Délivrance partielle", max_length=10, choices=Accord.choices, default="", blank=True)
+    pharmacie_reste = models.ForeignKey(
+        Pharmacie, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        help_text="Pharmacie choisie par le patient pour les médicaments manquants.",
+    )
     ordonnance_origine = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="reliquats",
         help_text="Ordonnance partiellement délivrée dont celle-ci reprend les médicaments manquants.",

@@ -1304,7 +1304,7 @@ class StockVuesTests(SimpleTestCase):
 
 class StockEtOrdonnancesTests(SimpleTestCase):
     def test_la_delivrance_retire_les_boites_du_stock(self):
-        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments="Doliprane 1 g\nVentoline")
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments="Doliprane 1 g\nVentoline", accord_partiel="accepte")
         requete = avec_messages(RequestFactory().post("/"))
         requete.user = un_user(role="pharmacie")
         with mock.patch.object(permissions, "espace_de", return_value=PHARMACIE), \
@@ -1464,8 +1464,24 @@ class DelivranceTests(SimpleTestCase):
         self.assertEqual((o.statut, retirees), (S.DELIVREE, 1))
         self.retirer.assert_called_once_with(etats)
 
+    def test_pas_de_delivrance_partielle_sans_l_accord_du_patient(self):
+        o, etats = self.preparer("Doliprane 1 g\nMopral 20 mg", [un_medicament("Doliprane", quantite=4)])
+        for accord in (Ordonnance.Accord.NON_DEMANDE, Ordonnance.Accord.EN_ATTENTE):
+            o.accord_partiel = accord
+            with self.subTest(accord=accord), self.assertRaisesMessage(ValueError, "l'accord du patient"):
+                delivrance.delivrer(o, etats)
+        self.assertEqual((o.statut, self.enregistrees), (S.PRETE, []))
+
+    def test_le_reste_part_chez_la_pharmacie_choisie_par_le_patient(self):
+        o, etats = self.preparer("Doliprane 1 g\nMopral 20 mg", [un_medicament("Doliprane", quantite=4)], accord_partiel=Ordonnance.Accord.ACCEPTE)
+        ennasr = une_pharmacie(nom="Pharmacie Ennasr")
+        o.pharmacie_reste = ennasr
+        _, reste = delivrance.delivrer(o, etats)
+        self.assertEqual(reste.pharmacie_id, ennasr.pk)  # confiée d'office ; save() la passe « transmise » (CoherenceStatutTests)
+
     def test_delivrance_partielle_le_reste_part_sur_une_nouvelle_ordonnance(self):
-        o, etats = self.preparer("Doliprane 1 g, si douleur\nMopral 20 mg, le matin", [un_medicament("Doliprane", quantite=4), un_medicament("Mopral", "oméprazole", 0)])
+        o, etats = self.preparer("Doliprane 1 g, si douleur\nMopral 20 mg, le matin", [un_medicament("Doliprane", quantite=4), un_medicament("Mopral", "oméprazole", 0)],
+                                 accord_partiel=Ordonnance.Accord.ACCEPTE)
         _, reste = delivrance.delivrer(o, etats)
         self.assertEqual(o.statut, S.DELIVREE)
         self.assertEqual(o.lignes, ["Doliprane 1 g, si douleur"])  # l'ordonnance délivrée ne garde que ce qui a été remis
@@ -1484,7 +1500,7 @@ class DelivranceTests(SimpleTestCase):
         self.retirer.assert_not_called()
 
     def test_ordonnance_expiree_aucune_ecriture(self):
-        o, etats = self.preparer("Doliprane\nMopral", [un_medicament("Doliprane", quantite=4)])
+        o, etats = self.preparer("Doliprane\nMopral", [un_medicament("Doliprane", quantite=4)], accord_partiel=Ordonnance.Accord.ACCEPTE)
         o.valide_jusqu_au = AUJOURDHUI - datetime.timedelta(days=1)
         with self.assertRaisesMessage(ValueError, "expiré"):
             delivrance.delivrer(o, etats)
@@ -1617,3 +1633,131 @@ class DelivrancePagesTests(SimpleTestCase):
         html = self.rendre(PATIENT, o, reliquats=[reste])
         self.assertIn("Délivrance partielle", html)
         self.assertIn(reste.reference, html)
+
+
+# --- Accord du patient pour une délivrance partielle ----------------------------------------------------------------
+
+
+class AccordPatientTests(SimpleTestCase):
+    appeler = SubstitutionVueTests.appeler
+    A = Ordonnance.Accord
+
+    def ordonnance(self, **kw):
+        valeurs = {"statut": S.PRETE, "pharmacie": une_pharmacie(), "medicaments": "Doliprane 1 g\nMopral 20 mg"}
+        valeurs.update(kw)
+        return une_ordonnance(**valeurs)
+
+    def stock_lac(self):
+        return [un_medicament("Doliprane", quantite=40), un_medicament("Mopral", "oméprazole", 0)]
+
+    def test_quand_la_pharmacie_peut_demander_l_accord(self):
+        o = self.ordonnance()
+        etats = stock.etat_des_lignes(o.lignes, self.stock_lac())
+        self.assertTrue(delivrance.accord_demandable(o, etats))
+        self.assertFalse(delivrance.accord_demandable(self.ordonnance(accord_partiel=self.A.EN_ATTENTE), etats))  # déjà demandé
+        self.assertFalse(delivrance.accord_demandable(self.ordonnance(statut=S.DELIVREE), etats))
+        tout = stock.etat_des_lignes(o.lignes, [un_medicament("Doliprane"), un_medicament("Mopral", "oméprazole", 5)])
+        self.assertFalse(delivrance.accord_demandable(o, tout))  # rien ne manque
+        rien = stock.etat_des_lignes(o.lignes, [])
+        self.assertFalse(delivrance.accord_demandable(o, rien))  # rien à délivrer : on renvoie plutôt l'ordonnance
+
+    def test_la_pharmacie_demande_l_accord(self):
+        o = self.ordonnance()
+        with mock.patch.object(Ordonnance, "save") as enregistrer:
+            self.appeler(views.ordonnance_demander_accord, PHARMACIE, o, stock_pharmacie=self.stock_lac())
+        self.assertEqual(o.accord_partiel, self.A.EN_ATTENTE)
+        enregistrer.assert_called_once_with(update_fields=["accord_partiel", "modifie_le"])
+        with self.assertRaises(PermissionDenied):
+            self.appeler(views.ordonnance_demander_accord, PATIENT, o)
+
+    def decider(self, o, donnees, choisie=None):
+        formulaire = mock.Mock(is_valid=mock.Mock(return_value=choisie is not None), cleaned_data={"pharmacie": choisie})
+        with mock.patch.object(views, "TransmissionForm", return_value=formulaire), mock.patch.object(Ordonnance, "save") as enregistrer:
+            reponse = self.appeler(views.ordonnance_decision, PATIENT, o, donnees=donnees)
+        return reponse, enregistrer
+
+    def test_le_patient_accepte_et_choisit_la_pharmacie_du_reste(self):
+        o, ennasr = self.ordonnance(accord_partiel=self.A.EN_ATTENTE), une_pharmacie(nom="Pharmacie Ennasr")
+        lac = o.pharmacie
+        reponse, enregistrer = self.decider(o, {"action": "accepter", "pharmacie": str(ennasr.pk)}, ennasr)
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual((o.accord_partiel, o.pharmacie_reste, o.pharmacie), (self.A.ACCEPTE, ennasr, lac))  # il retire ici
+        enregistrer.assert_called_once()
+
+    def test_le_patient_accepte_sans_choisir_tout_de_suite(self):
+        o = self.ordonnance(accord_partiel=self.A.EN_ATTENTE)
+        self.decider(o, {"action": "accepter"})
+        self.assertEqual((o.accord_partiel, o.pharmacie_reste), (self.A.ACCEPTE, None))
+
+    def test_le_patient_refuse_et_tout_part_dans_l_autre_pharmacie(self):
+        o, ennasr = self.ordonnance(accord_partiel=self.A.EN_ATTENTE), une_pharmacie(nom="Pharmacie Ennasr")
+        self.decider(o, {"action": "refuser", "pharmacie": str(ennasr.pk)}, ennasr)
+        self.assertEqual((o.pharmacie, o.statut, o.accord_partiel), (ennasr, S.TRANSMISE, self.A.NON_DEMANDE))
+        self.assertEqual(o.lignes, ["Doliprane 1 g", "Mopral 20 mg"])  # l'ordonnance complète
+        self.assertIn("Transférée par le patient", o.note_pharmacien)
+
+    def test_refus_sans_pharmacie_ou_avec_la_meme_rien_ne_change(self):
+        o = self.ordonnance(accord_partiel=self.A.EN_ATTENTE)
+        _, enregistrer = self.decider(o, {"action": "refuser"})
+        enregistrer.assert_not_called()
+        _, enregistrer = self.decider(o, {"action": "refuser", "pharmacie": str(o.pharmacie.pk)}, o.pharmacie)
+        enregistrer.assert_not_called()
+        self.assertEqual(o.accord_partiel, self.A.EN_ATTENTE)
+
+    def test_aucune_decision_sans_demande_ni_hors_espace_patient(self):
+        o = self.ordonnance()
+        _, enregistrer = self.decider(o, {"action": "accepter"})
+        enregistrer.assert_not_called()
+        with self.assertRaises(PermissionDenied):
+            self.appeler(views.ordonnance_decision, PHARMACIE, self.ordonnance(accord_partiel=self.A.EN_ATTENTE), donnees={"action": "accepter"})
+
+    def test_le_choix_du_patient_s_appuie_sur_les_stocks(self):
+        o = self.ordonnance(accord_partiel=self.A.EN_ATTENTE)
+        complete = {"pharmacie": une_pharmacie(nom="Pharmacie Ennasr"), "medicaments": ["Doliprane", "Mopral"], "nombre": 2, "complete": True}
+        partielle = {"pharmacie": une_pharmacie(nom="Pharmacie Centrale"), "medicaments": ["Doliprane"], "nombre": 1, "complete": False}
+        with mock.patch.object(Medicament.objects, "filter", return_value=self.stock_lac()), \
+                mock.patch.object(delivrance, "pharmacies_disponibles", side_effect=[[complete], [complete, partielle]]) as chercher:
+            choix = views._choix_du_patient(o)
+        self.assertEqual((choix["servies"], choix["manquants"]), (["Doliprane 1 g"], ["Mopral 20 mg"]))
+        self.assertEqual(chercher.call_args_list[0].args[0], ["Mopral 20 mg"])  # pour le reste : seulement les manquants
+        self.assertEqual([d["pharmacie"].nom for d in choix["pour_tout"]], ["Pharmacie Ennasr"])  # pour tout : celles qui ont tout
+
+    def test_la_pharmacie_ne_delivre_qu_apres_l_accord(self):
+        o = self.ordonnance()
+        page = DelivrancePagesTests()
+        for accord, attendu, absent in (
+            (self.A.NON_DEMANDE, "Demander l'accord du patient (1 sur 2 disponible)", "Délivrer les médicaments disponibles"),
+            (self.A.EN_ATTENTE, "En attente de la réponse du patient", "Délivrer les médicaments disponibles"),
+            (self.A.ACCEPTE, "Délivrer les médicaments disponibles (1 sur 2)", "Demander l'accord"),
+        ):
+            o.accord_partiel = accord
+            etats = stock.etat_des_lignes(o.lignes, self.stock_lac())
+            servies = len(delivrance.lignes_servies(etats))
+            html = page.rendre(PHARMACIE, o, etats=etats, manquants=stock.lignes_en_rupture(etats), servies=servies,
+                               accord_demandable=delivrance.accord_demandable(o, etats),
+                               peut_avancer=servies > 0 and accord == self.A.ACCEPTE)
+            with self.subTest(accord=accord):
+                self.assertIn(attendu, html)
+                self.assertNotIn(absent, html)
+
+    def test_page_de_choix_du_patient_accessible(self):
+        o = self.ordonnance(accord_partiel=self.A.EN_ATTENTE)
+        ennasr = une_pharmacie(nom="Pharmacie Ennasr", de_garde=True)
+        decision = {
+            "servies": ["Doliprane 1 g"], "manquants": ["Mopral 20 mg"],
+            "pour_le_reste": [{"pharmacie": ennasr, "medicaments": ["Mopral"], "nombre": 1, "complete": True}],
+            "pour_tout": [{"pharmacie": ennasr, "medicaments": ["Doliprane", "Mopral"], "nombre": 2, "complete": True}],
+        }
+        html = DelivrancePagesTests().rendre(PATIENT, o, decision=decision)
+        for texte in ("n'a pas tous vos médicaments", "Retirer ici ce qui est disponible", "Accepter, le reste chez Pharmacie Ennasr",
+                      "Accepter, je choisirai plus tard", "Tout prendre dans une autre pharmacie", "Tout envoyer à Pharmacie Ennasr"):
+            self.assertIn(texte, html)
+        self.assertIn('name="action" value="refuser"', html)
+        self.assertEqual(verifier_html(html), [])
+        sans = dict(decision, pour_tout=[])
+        self.assertIn("Aucune autre pharmacie n'a tous vos médicaments", DelivrancePagesTests().rendre(PATIENT, o, decision=sans))
+
+    def test_la_liste_signale_la_reponse_attendue(self):
+        o = self.ordonnance(accord_partiel=self.A.EN_ATTENTE)
+        html = render_to_string("pharmacies/ordonnances.html", {"page": [o]}, PagesTests.requete(self, PATIENT))
+        self.assertIn("Votre réponse est attendue", html)

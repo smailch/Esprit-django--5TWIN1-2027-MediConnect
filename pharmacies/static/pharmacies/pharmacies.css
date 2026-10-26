@@ -33,6 +33,10 @@
 .stk-ok { background: var(--u4); }
 .stk-inconnu { background: var(--a-raise); color: var(--a-muted); border: 1px solid var(--a-line2); }
 
+/* Délivrance partielle : les deux choix du patient */
+.decision { border-left: 4px solid var(--u3); }
+.choix { padding: 1rem; border: 1px solid var(--a-line); border-radius: 0.75rem; background: var(--a-bg); }
+
 /* Remplaçants proposés en cas de rupture */
 .rx-suggestions { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.5rem; }
 .rx-suggestions:empty { display: none; } /* pas les zones aria-live : masquées, elles ne seraient pas annoncées */

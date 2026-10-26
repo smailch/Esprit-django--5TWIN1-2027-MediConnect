@@ -202,16 +202,20 @@ def ordonnance_detail(request, pk):
     allergies = []
     if request.espace != PATIENT:
         allergies = Allergie.objects.filter(patient=ordonnance.patient, active=True).order_by("substance")
-    rupture, etats, manquants, disponibles = None, [], [], []
+    rupture, etats, manquants, disponibles, decision = None, [], [], [], None
+    accord = Ordonnance.Accord
     if request.espace == PHARMACIE:
         # Chaque ligne confrontée au stock réel de la pharmacie : la rupture se constate, elle ne se déclare pas.
         etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
         manquants = stock.lignes_en_rupture(etats)
         if ordonnance.est_en_traitement:
             rupture = RuptureForm(lignes=ordonnance.lignes, initial={"medicament": manquants[0] if manquants else ""})
+    elif request.espace == PATIENT and ordonnance.accord_partiel == accord.EN_ATTENTE:
+        decision = _choix_du_patient(ordonnance)
     elif request.espace == PATIENT and ordonnance.est_transmissible:
         # Le patient voit où ses médicaments sont réellement en stock (utile surtout pour le reste d'une délivrance partielle).
         disponibles = delivrance.pharmacies_disponibles(ordonnance.lignes, exclure=ordonnance.pharmacie, ville=ordonnance.patient.ville)
+    servies = len(etats) - len(manquants)
     return render(request, "pharmacies/ordonnance_detail.html", {
         "ordonnance": ordonnance,
         "allergies": allergies,
@@ -219,12 +223,82 @@ def ordonnance_detail(request, pk):
         "rupture": rupture,
         "etats": etats,
         "manquants": manquants,
-        "servies": len(etats) - len(manquants),
-        # On ne délivre que si au moins un médicament est en stock.
-        "peut_avancer": bool(ordonnance.statut_suivant) and (ordonnance.statut_suivant != Ordonnance.Statut.DELIVREE or len(etats) > len(manquants)),
+        "servies": servies,
+        # Délivrer : au moins un médicament en stock et, s'il en manque, l'accord du patient pour une délivrance partielle.
+        "peut_avancer": bool(ordonnance.statut_suivant) and (
+            ordonnance.statut_suivant != Ordonnance.Statut.DELIVREE or (servies > 0 and (not manquants or ordonnance.accord_partiel == accord.ACCEPTE))
+        ),
+        "accord_demandable": request.espace == PHARMACIE and delivrance.accord_demandable(ordonnance, etats),
+        "decision": decision,
         "disponibles": disponibles,
         "reliquats": list(ordonnance.reliquats.all()) if ordonnance.statut == Ordonnance.Statut.DELIVREE else [],
     })
+
+
+def _choix_du_patient(ordonnance):
+    """Ce dont le patient a besoin pour répondre à une demande de délivrance partielle : ce que sa pharmacie a, ce qui
+    manque, où trouver le reste (s'il accepte) et où tout trouver (s'il refuse). D'après les stocks réels."""
+    etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
+    manquants = stock.lignes_en_rupture(etats)
+    ville = ordonnance.patient.ville
+    return {
+        "servies": delivrance.lignes_servies(etats),
+        "manquants": manquants,
+        "pour_le_reste": delivrance.pharmacies_disponibles(manquants, exclure=ordonnance.pharmacie, ville=ville),
+        "pour_tout": [d for d in delivrance.pharmacies_disponibles(ordonnance.lignes, exclure=ordonnance.pharmacie, ville=ville) if d["complete"]],
+    }
+
+
+@espace_requis(PHARMACIE)
+@require_POST
+def ordonnance_demander_accord(request, pk):
+    """Il manque des médicaments : la pharmacie demande au patient s'il accepte une délivrance partielle."""
+    ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
+    etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
+    if not delivrance.accord_demandable(ordonnance, etats):
+        messages.error(request, "Une délivrance partielle ne peut pas être proposée pour cette ordonnance.")
+    else:
+        ordonnance.accord_partiel = Ordonnance.Accord.EN_ATTENTE
+        ordonnance.save(update_fields=["accord_partiel", "modifie_le"])
+        messages.success(request, "Le patient a été sollicité : il choisira entre une délivrance partielle ici ou une autre pharmacie.")
+    return _redirection(request, "ordonnance_detail", ordonnance.pk)
+
+
+@espace_requis(PATIENT)
+@require_POST
+def ordonnance_decision(request, pk):
+    """Réponse du patient à une demande de délivrance partielle.
+
+    accepter : il retire ici ce qui est en stock ; le reste partira (éventuellement vers la pharmacie qu'il choisit).
+    refuser  : toute l'ordonnance est transférée à une autre pharmacie, qui reprend la préparation depuis le début."""
+    ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
+    if ordonnance.accord_partiel != Ordonnance.Accord.EN_ATTENTE or ordonnance.statut == Ordonnance.Statut.DELIVREE:
+        messages.error(request, "Aucune réponse n'est attendue pour cette ordonnance.")
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
+    action = request.POST.get("action")
+    choisie = None
+    if request.POST.get("pharmacie"):
+        form = TransmissionForm(request.POST)
+        if not form.is_valid() or form.cleaned_data["pharmacie"] == ordonnance.pharmacie:
+            messages.error(request, "Choisissez une autre pharmacie de la liste.")
+            return _redirection(request, "ordonnance_detail", ordonnance.pk)
+        choisie = form.cleaned_data["pharmacie"]
+    if action == "accepter":
+        ordonnance.accord_partiel, ordonnance.pharmacie_reste = Ordonnance.Accord.ACCEPTE, choisie
+        ordonnance.save(update_fields=["accord_partiel", "pharmacie_reste", "modifie_le"])
+        messages.success(request, f"C'est noté : retirez chez {ordonnance.pharmacie.nom} les médicaments disponibles. " + (
+            f"Le reste sera envoyé à {choisie.nom}." if choisie else "Vous enverrez le reste à la pharmacie de votre choix."
+        ))
+    elif action == "refuser" and choisie is not None:
+        ancienne = ordonnance.pharmacie.nom
+        ordonnance.pharmacie, ordonnance.statut = choisie, Ordonnance.Statut.TRANSMISE
+        ordonnance.accord_partiel, ordonnance.pharmacie_reste = Ordonnance.Accord.NON_DEMANDE, None
+        ordonnance.note_pharmacien = f"Transférée par le patient : {ancienne} n'avait pas tous les médicaments."[:300]
+        ordonnance.save(update_fields=["pharmacie", "statut", "accord_partiel", "pharmacie_reste", "note_pharmacien", "modifie_le"])
+        messages.success(request, f"Votre ordonnance complète a été envoyée à {choisie.nom}.")
+    else:
+        messages.error(request, "Choisissez la pharmacie qui préparera toute votre ordonnance.")
+    return _redirection(request, "ordonnance_detail", ordonnance.pk)
 
 
 # --- Rupture de stock : signalement et suggestion de remplaçants par l'IA ---------------------------------------
@@ -415,8 +489,9 @@ def ordonnance_renvoyer(request, pk):
         return _redirection(request, "ordonnance_detail", ordonnance.pk)
     nom = ordonnance.pharmacie.nom
     ordonnance.statut, ordonnance.pharmacie = Ordonnance.Statut.EMISE, None
+    ordonnance.accord_partiel, ordonnance.pharmacie_reste = Ordonnance.Accord.NON_DEMANDE, None
     ordonnance.note_pharmacien = f"Renvoyée par {nom} le {timezone.localdate():%d/%m/%Y} : médicaments non disponibles."[:300]
-    ordonnance.save(update_fields=["statut", "pharmacie", "note_pharmacien", "modifie_le"])
+    ordonnance.save(update_fields=["statut", "pharmacie", "accord_partiel", "pharmacie_reste", "note_pharmacien", "modifie_le"])
     messages.success(request, f"L'ordonnance {ordonnance.reference} a été rendue au patient.")
     return _redirection(request, "ordonnances")
 
