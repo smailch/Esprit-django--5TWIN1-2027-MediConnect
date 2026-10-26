@@ -12,11 +12,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
-from patients.models import Mesure
 
-from . import ia_soin, notifications
+from . import dossier, ia_soin, notifications
 from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
-from .models import Infirmier, InterventionDomicile, NiveauAlerte, TypeSoin
+from .models import Infirmier, InterventionDomicile, NiveauAlerte, TypeSoin, passage_en_conflit, prochain_creneau_libre
 
 Statut = InterventionDomicile.Statut
 
@@ -40,6 +39,24 @@ def _intervention(request, infirmier, pk):
 
 def _message_erreur(erreur):
     return " ".join(erreur.messages)
+
+
+def _prochain_quart_d_heure():
+    maintenant = timezone.localtime().replace(second=0, microsecond=0)
+    return maintenant + datetime.timedelta(minutes=15 - maintenant.minute % 15)
+
+
+def _conflit_de_planning(infirmier, quand, exclure=None):
+    """Message si l'infirmier a déjà un passage à moins de 30 minutes de `quand`, sinon None."""
+    autres = InterventionDomicile.objects.passages_autour(infirmier, quand, exclure)
+    conflit = passage_en_conflit(quand, autres)
+    if conflit is None:
+        return None
+    libre = timezone.localtime(prochain_creneau_libre(quand, autres))
+    return (
+        f"Vous avez déjà un passage à {timezone.localtime(conflit):%H:%M} ce jour-là. "
+        f"Prochain créneau libre : {libre:%d/%m à %H:%M}."
+    )
 
 
 def lien_patient(request, intervention):
@@ -160,7 +177,12 @@ def intervention(request, pk):
         # Le patient n'est identifié en détail qu'une fois la demande acceptée.
         contexte["allergies"] = [a for a in intervention.patient.allergies.all() if a.active]
     elif intervention.statut == Statut.DEMANDEE:
-        contexte["form"] = PassageForm(intervention=intervention)
+        form = PassageForm(intervention=intervention)
+        # L'heure proposée tient compte du planning : jamais sur un passage déjà accepté.
+        proposee = max(timezone.make_aware(form.initial["date_prevue"]), _prochain_quart_d_heure())
+        autres = InterventionDomicile.objects.passages_autour(infirmier, proposee)
+        form.initial["date_prevue"] = prochain_creneau_libre(proposee, autres)
+        contexte["form"] = form
     return render(request, "infirmiers/intervention.html", contexte)
 
 
@@ -170,6 +192,8 @@ def accepter(request, pk):
     infirmier = _infirmier_connecte(request)
     intervention = _intervention(request, infirmier, pk)
     form = PassageForm(request.POST, intervention=intervention)
+    if form.is_valid() and (conflit := _conflit_de_planning(infirmier, form.cleaned_data["date_prevue"])):
+        form.add_error("date_prevue", conflit)
     if form.is_valid():
         try:
             intervention.accepter(infirmier, form.cleaned_data["date_prevue"])
@@ -200,11 +224,15 @@ def _mon_intervention(request, pk):
 
 @login_required
 def replanifier(request, pk):
-    _, intervention = _mon_intervention(request, pk)
+    infirmier, intervention = _mon_intervention(request, pk)
     if intervention.statut != Statut.ACCEPTEE:
         messages.error(request, "Cette intervention ne peut plus être replanifiée.")
         return redirect("infirmiers:intervention", pk=pk)
     form = PassageForm(request.POST if request.method == "POST" else None, intervention=intervention)
+    if request.method == "POST" and form.is_valid():
+        conflit = _conflit_de_planning(infirmier, form.cleaned_data["date_prevue"], exclure=intervention.pk)
+        if conflit:
+            form.add_error("date_prevue", conflit)
     if request.method == "POST" and form.is_valid():
         ancien = intervention.date_prevue
         try:
@@ -220,36 +248,12 @@ def replanifier(request, pk):
     return render(request, "infirmiers/replanifier.html", {"intervention": intervention, "form": form})
 
 
-_MESURES_SUIVIES = {
-    Mesure.Type.TEMPERATURE: "temperature",
-    Mesure.Type.TENSION: "tension_systolique",
-    Mesure.Type.FREQUENCE: "frequence_cardiaque",
-    Mesure.Type.SATURATION: "saturation_oxygene",
-}
-
-
-def _historique(intervention):
-    """Relevés précédents du patient, du plus ancien au plus récent : constantes des passages infirmiers
-    déjà terminés et mesures saisies par le patient lui-même."""
-    releves = [
-        (i.realisee_le, i.releves())
-        for i in InterventionDomicile.objects.filter(patient=intervention.patient, statut=Statut.REALISEE).exclude(pk=intervention.pk)
-        if i.realisee_le and i.constantes is not None
-    ]
-    for m in Mesure.objects.filter(patient=intervention.patient, type__in=list(_MESURES_SUIVIES)):
-        valeurs = {_MESURES_SUIVIES[m.type]: m.valeur}
-        if m.type == Mesure.Type.TENSION and m.valeur2 is not None:
-            valeurs["tension_diastolique"] = m.valeur2
-        releves.append((m.mesure_le, valeurs))
-    return [valeurs for _, valeurs in sorted(releves, key=lambda r: r[0])]
-
-
 def _analyser(intervention, infirmier, texte, constantes=None):
     user = intervention.patient.user
     return ia_soin.analyser(
         texte,
         constantes=constantes,
-        historique=_historique(intervention),
+        historique=dossier.historique(intervention),
         noms_patient=(user.first_name, user.last_name),
         identifiant=f"infirmier:{infirmier.pk}",
     )
@@ -291,6 +295,7 @@ def terminer(request, pk):
                 form.add_error(None, _message_erreur(erreur))
             else:
                 intervention.save()
+                dossier.enregistrer_mesures(intervention)  # les constantes rejoignent « Mes mesures » du patient
                 notifications.compte_rendu_disponible(intervention, lien_patient(request, intervention))
                 if analyse.niveau == NiveauAlerte.SIGNALER:
                     messages.warning(request, "Compte rendu enregistré. Des signes d'alerte sont à signaler au médecin.")

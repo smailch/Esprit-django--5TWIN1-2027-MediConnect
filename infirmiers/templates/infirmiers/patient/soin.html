@@ -61,6 +61,7 @@
         {% if d.constantes.frequence_cardiaque is not None %}<div><dt>Pouls</dt><dd>{{ d.constantes.frequence_cardiaque }} /min</dd></div>{% endif %}
         {% if d.constantes.saturation_oxygene is not None %}<div><dt>Saturation</dt><dd>{{ d.constantes.saturation_oxygene }} %</dd></div>{% endif %}
       </dl>
+      <p class="muted mt-4 text-sm">Ces mesures ont été ajoutées à <a href="{% url 'patients:mesures' %}" class="link">vos mesures de santé</a>, avec celles que vous saisissez vous-même.</p>
       {% endif %}
     </section>
     {% endif %}

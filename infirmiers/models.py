@@ -1,3 +1,5 @@
+import datetime
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -110,7 +112,35 @@ class Infirmier(models.Model):
             raise ValidationError({"user": "Ce compte n'a pas le rôle « infirmier »."})
 
 
+DUREE_PASSAGE = datetime.timedelta(minutes=30)  # temps réservé pour un passage (soin et trajet)
+
+
+def passage_en_conflit(quand, autres):
+    """Premier des passages `autres` (dates et heures) à moins de DUREE_PASSAGE de `quand`, ou None."""
+    return next((autre for autre in sorted(autres) if abs(autre - quand) < DUREE_PASSAGE), None)
+
+
+def prochain_creneau_libre(quand, autres):
+    """`quand` s'il est libre, sinon la première heure qui suit sans chevauchement."""
+    conflit = passage_en_conflit(quand, autres)
+    while conflit is not None:
+        quand = conflit + DUREE_PASSAGE
+        conflit = passage_en_conflit(quand, autres)
+    return quand
+
+
 class InterventionQuerySet(models.QuerySet):
+    def passages_autour(self, infirmier, quand, exclure=None):
+        """Heures des passages déjà acceptés par cet infirmier dans les 12 heures autour de `quand`."""
+        marge = datetime.timedelta(hours=12)
+        passages = self.filter(
+            infirmier=infirmier, statut=InterventionDomicile.Statut.ACCEPTEE,
+            date_prevue__gt=quand - marge, date_prevue__lt=quand + marge,
+        )
+        if exclure is not None:
+            passages = passages.exclude(pk=exclure)
+        return [p.date_prevue for p in passages]
+
     def demandes_pour(self, infirmier):
         """Demandes en attente que cet infirmier peut accepter : dans ses villes et parmi ses soins."""
         zone = models.Q()
