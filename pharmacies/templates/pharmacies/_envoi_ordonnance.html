@@ -5,13 +5,13 @@
   <a class="link ml-1" href="{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}">{{ ordonnance.reference }}</a>
   <span class="muted">· {{ ordonnance.get_statut_display|lower }}{% if ordonnance.pharmacie %} · {{ ordonnance.pharmacie.nom }}{% endif %}</span>
 </p>
-{% elif medicaments %}
+{% elif a_prescription %}
 <form method="post" action="{% url 'pharmacies:ordonnance_envoyer' consultation.pk %}" class="mt-4 max-w-3xl">
   {% csrf_token %}
   <input type="hidden" name="next" value="{{ retour }}">
   <button type="submit" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="file-text" class="h-4 w-4"></i>Envoyer l'ordonnance au patient</button>
-  <p class="muted mt-2 text-sm">Les médicaments de la rubrique « Ordonnance » partent dans « Mes ordonnances » du patient ; il choisit la pharmacie qui la préparera.</p>
+  <p class="muted mt-2 text-sm">L'assistant lit la prescription et n'en garde que les médicaments (ni examens ni soins) : ils partent dans « Mes ordonnances » du patient, qui choisit sa pharmacie. Vous pourrez les vérifier et les corriger.</p>
 </form>
 {% else %}
-<p class="muted mt-4 max-w-3xl text-sm">Aucun médicament prescrit : pas d'ordonnance à envoyer au patient.</p>
+<p class="muted mt-4 max-w-3xl text-sm">Aucune prescription : pas d'ordonnance à envoyer au patient.</p>
 {% endif %}

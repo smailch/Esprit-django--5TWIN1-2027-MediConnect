@@ -18,7 +18,8 @@ def bouton_envoi_ordonnance(context, consultation):
     return {
         "consultation": consultation,
         "ordonnance": deja,
-        "medicaments": prescriptions.medicaments_de(consultation) if deja is None else "",
+        # Simple présence d'un texte : l'IA n'est appelée qu'au clic, jamais à l'affichage de la page.
+        "a_prescription": deja is None and prescriptions.a_une_prescription(consultation),
         "retour": request.get_full_path() if request is not None else "",
         "csrf_token": context.get("csrf_token"),
         "request": request,

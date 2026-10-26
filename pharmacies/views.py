@@ -16,7 +16,7 @@ from core.utils import objet_ou_404
 from patients import ia_client
 from patients.models import Allergie, Consultation
 
-from . import delivrance, ia_substitution, prescriptions, remplacements, stats, stock
+from . import delivrance, ia_extraction, ia_substitution, prescriptions, remplacements, stats, stock
 from .forms import (
     FiltreOrdonnancesForm,
     FiltrePharmaciesForm,
@@ -452,6 +452,17 @@ def remplacement_decision(request, pk, remplacement_pk):
     return _redirection(request, "ordonnance_detail", ordonnance.pk)
 
 
+def _comment_extrait(extraction):
+    """Comment les médicaments ont été extraits, dit au médecin (transparence et métrique de l'IA)."""
+    nombre = f"{len(extraction.lignes)} médicament{'s' if len(extraction.lignes) > 1 else ''}"
+    if extraction.source == ia_extraction.IA:
+        return f"{nombre} extrait{'s' if len(extraction.lignes) > 1 else ''} par l'IA" + (
+            ", réponse déjà connue" if extraction.en_cache else f" en {extraction.duree_ms} ms")
+    if extraction.statut == "non_consentie":
+        return f"{nombre}, extraction sans IA : le patient n'a pas activé l'IA"
+    return f"{nombre}, extraction sans IA" + (f" ({ia_client.MESSAGES[extraction.statut]})" if extraction.statut in ia_client.MESSAGES else "")
+
+
 def _retour(request, defaut):
     """Adresse de retour envoyée par la page d'origine (?next=), acceptée seulement si elle reste sur ce site."""
     suivante = request.POST.get("next", "")
@@ -467,15 +478,15 @@ def ordonnance_envoyer(request, consultation_pk):
     et choisit sa pharmacie. Les médicaments sont lus dans la consultation (pas de nouvelle saisie)."""
     consultation = objet_ou_404(_consultations_du_prescripteur(request), pk=consultation_pk)
     try:
-        ordonnance = prescriptions.envoyer(consultation)
+        ordonnance, extraction = prescriptions.envoyer(consultation, identifiant=f"prescripteur:{request.user.pk}")
     except ValueError as erreur:
         messages.error(request, str(erreur))
         defaut = reverse("pharmacies:ordonnances", current_app=getattr(request.resolver_match, "namespace", None))
     else:
         messages.success(
             request,
-            f"Ordonnance {ordonnance.reference} envoyée à {consultation.patient} : il la retrouve dans « Mes ordonnances » "
-            "et choisit la pharmacie qui la préparera.",
+            f"Ordonnance {ordonnance.reference} envoyée à {consultation.patient} ({_comment_extrait(extraction)}) : "
+            "il la retrouve dans « Mes ordonnances » et choisit sa pharmacie. Vérifiez les médicaments sur l'ordonnance.",
         )
         defaut = reverse("pharmacies:ordonnance_detail", args=[ordonnance.pk], current_app=getattr(request.resolver_match, "namespace", None))
     return redirect(_retour(request, defaut))
