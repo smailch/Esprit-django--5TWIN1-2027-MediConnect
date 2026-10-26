@@ -9,3 +9,4 @@ comptes_test.txt
 .claude/
 db.sqlite3
 staticfiles/
+venv/
