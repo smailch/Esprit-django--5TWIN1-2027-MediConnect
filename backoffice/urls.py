@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_comptes
 
 app_name = "backoffice"
 
@@ -24,4 +24,7 @@ urlpatterns = [
     path("medecins/<str:pk>/disponibilite/", views.medecin_disponibilite, name="medecin_disponibilite"),
     path("medecins/<str:pk>/", views.medecin_detail, name="medecin_detail"),
     path("symptomes/", views.symptomes, name="symptomes"),
+    path("comptes/", views_comptes.ComptesView.as_view(), name="comptes"),
+    path("comptes/journal/", views_comptes.JournalConnexionsView.as_view(), name="journal_connexions"),
+    path("comptes/<str:pk>/<str:action>/", views_comptes.CompteActionView.as_view(), name="compte_action"),
 ]

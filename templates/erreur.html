@@ -1,0 +1,17 @@
+{% extends "core/auth_layout.html" %}
+{% comment %}
+Cadre commun des pages d'erreur (400, 403, 404, 500). Il ne dépend ni de la requête ni de l'utilisateur :
+la page 500 est affichée sans contexte, quand quelque chose a déjà échoué.
+{% endcomment %}
+
+{% block title %}{% block code %}{% endblock %} — MediConnect{% endblock %}
+
+{% block page %}
+<p class="muted text-sm">Erreur {% block code_court %}{% endblock %}</p>
+<h1 class="auth-title mt-1">{% block titre %}{% endblock %}</h1>
+<p class="mt-4 text-sm">{% block explication %}{% endblock %}</p>
+<div class="mt-8 flex flex-wrap gap-3">
+  <a href="{% url 'home' %}" class="abtn abtn-primary">Retour à l'accueil</a>
+  {% block actions %}{% endblock %}
+</div>
+{% endblock %}

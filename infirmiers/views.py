@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import dossier, ia_soin, notifications, tournee as calcul_tournee
+from . import dossier, ia_soin, notifications, taches, tournee as calcul_tournee
 from .forms import AnnulationForm, CompteRenduForm, HeureSerieForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, NiveauAlerte, TypeSoin, passage_en_conflit, prochain_creneau_libre
 
@@ -432,6 +432,7 @@ def terminer(request, pk):
                 intervention.save()
                 dossier.enregistrer_mesures(intervention)  # les constantes rejoignent « Mes mesures » du patient
                 notifications.compte_rendu_disponible(intervention, lien_patient(request, intervention))
+                taches.programmer_relecture(intervention)  # IA en panne à l'instant : nouvelle lecture en arrière-plan
                 if analyse.niveau == NiveauAlerte.SIGNALER:
                     messages.warning(request, "Compte rendu enregistré. Des signes d'alerte sont à signaler au médecin.")
                 else:

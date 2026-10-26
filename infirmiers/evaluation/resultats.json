@@ -1,0 +1,241 @@
+{
+  "date": "2026-10-27T00:16+01:00",
+  "corpus": 60,
+  "regles": {
+    "n": 60,
+    "exactitude": 0.65,
+    "f1_macro": 0.64,
+    "par_niveau": {
+      "ras": {
+        "precision": 0.526,
+        "rappel": 1.0,
+        "f1": 0.69,
+        "support": 20
+      },
+      "surveiller": {
+        "precision": 0.75,
+        "rappel": 0.45,
+        "f1": 0.563,
+        "support": 20
+      },
+      "signaler": {
+        "precision": 1.0,
+        "rappel": 0.5,
+        "f1": 0.667,
+        "support": 20
+      }
+    },
+    "matrice": {
+      "lignes = attendu, colonnes = prédit": [
+        "ras",
+        "surveiller",
+        "signaler"
+      ],
+      "valeurs": [
+        [
+          20,
+          0,
+          0
+        ],
+        [
+          11,
+          9,
+          0
+        ],
+        [
+          7,
+          3,
+          10
+        ]
+      ]
+    },
+    "alertes_manquees": 7,
+    "fausses_alertes": 0,
+    "erreurs": [
+      {
+        "texte": "Douleur au genou cotée à 7/10, gêne pour se lever. Antalgique pris à 7 h.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Chevilles gonflées en fin de journée, plus qu'hier. Patient sous diurétique.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Lèvres sèches, urines foncées et peu abondantes, boit à peine un verre par jour.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Les pieds ont doublé de volume depuis lundi d'après son épouse, chaussures trop serrées.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "A glissé dans la salle de bain ce matin, s'est rattrapé au lavabo, petite douleur à la hanche.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Chaud au toucher, 38,6 au thermomètre auriculaire, pas d'appétit.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Ne finit plus ses assiettes, a perdu 2 kg en deux semaines.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Dit avoir très mal au dos depuis hier, a du mal à se tourner dans le lit.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Saute régulièrement les comprimés du soir, dit qu'elle ne s'en souvient pas.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Jambe droite plus grosse que la gauche, légèrement douloureuse au mollet.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Fatigue marquée, reste au lit toute la journée, a peu bu.",
+        "attendu": "surveiller",
+        "predit": "ras"
+      },
+      {
+        "texte": "Ne sait plus quel jour on est, appelle sa fille par le prénom de sa sœur, d'habitude bien orientée.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "La cicatrice a vilaine mine : gonflée, luisante, et du liquide verdâtre en sort quand on appuie.",
+        "attendu": "signaler",
+        "predit": "surveiller"
+      },
+      {
+        "texte": "Respire vite et fort, n'arrive pas à finir ses phrases, tire sur le cou pour respirer.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "Très endormi, difficile à réveiller, répond par des grognements. D'habitude vif.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "Du sang rouge dans les selles ce matin et ce soir, patient sous anticoagulant.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "S'est effondré dans la cuisine, sa femme l'a trouvé par terre, il ne se souvient pas de la chute.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "Tension mesurée à 195/110 à deux reprises, maux de tête violents et vision floue.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "Autour de l'ulcère, la peau est devenue écarlate et brûlante sur une large zone, avec de la fièvre.",
+        "attendu": "signaler",
+        "predit": "surveiller"
+      },
+      {
+        "texte": "Souffle court même assis, sifflements, saturation à 90 %.",
+        "attendu": "signaler",
+        "predit": "surveiller"
+      },
+      {
+        "texte": "Vomit tout ce qu'il avale depuis hier soir, n'urine plus, très faible.",
+        "attendu": "signaler",
+        "predit": "ras"
+      }
+    ]
+  },
+  "ia": {
+    "n": 60,
+    "exactitude": 0.95,
+    "f1_macro": 0.949,
+    "par_niveau": {
+      "ras": {
+        "precision": 0.952,
+        "rappel": 1.0,
+        "f1": 0.976,
+        "support": 20
+      },
+      "surveiller": {
+        "precision": 0.909,
+        "rappel": 1.0,
+        "f1": 0.952,
+        "support": 20
+      },
+      "signaler": {
+        "precision": 1.0,
+        "rappel": 0.85,
+        "f1": 0.919,
+        "support": 20
+      }
+    },
+    "matrice": {
+      "lignes = attendu, colonnes = prédit": [
+        "ras",
+        "surveiller",
+        "signaler"
+      ],
+      "valeurs": [
+        [
+          20,
+          0,
+          0
+        ],
+        [
+          0,
+          20,
+          0
+        ],
+        [
+          1,
+          2,
+          17
+        ]
+      ]
+    },
+    "alertes_manquees": 1,
+    "fausses_alertes": 0,
+    "temps_ms": {
+      "moyenne": 686,
+      "mediane": 423,
+      "p95": 1887,
+      "max": 7076
+    },
+    "statuts_ia": {
+      "ok": 59,
+      "delai": 1
+    },
+    "erreurs": [
+      {
+        "texte": "Ne sait plus quel jour on est, appelle sa fille par le prénom de sa sœur, d'habitude bien orientée.",
+        "attendu": "signaler",
+        "predit": "ras"
+      },
+      {
+        "texte": "S'est effondré dans la cuisine, sa femme l'a trouvé par terre, il ne se souvient pas de la chute.",
+        "attendu": "signaler",
+        "predit": "surveiller"
+      },
+      {
+        "texte": "Vomit tout ce qu'il avale depuis hier soir, n'urine plus, très faible.",
+        "attendu": "signaler",
+        "predit": "surveiller"
+      }
+    ],
+    "fournisseur": "groq (qwen/qwen3.8-27b)"
+  }
+}

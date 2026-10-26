@@ -16,7 +16,7 @@ from ia import decision as decision_ia, modele as modele_ia, specialite as speci
 
 from medecins import annuaire
 
-from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, mesures_stats, notifications, planning, suivi, visio as salle_visio
+from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, mesures_stats, notifications, planning, suivi, taches, visio as salle_visio
 from .forms import (
     OrientationForm,
     AllergieForm,
@@ -768,7 +768,8 @@ _LIENS_ANALYSE = {
 def analyse(request):
     """Analyse automatique du dossier : ce que l'assistant a repéré, et pourquoi."""
     patient = _patient_connecte(request)
-    resultat = analyse_service.analyser_patient(patient, ia=analyse_service.COMPLET)
+    # Avec Celery, l'IA relit le dossier en arrière-plan : la page s'affiche tout de suite (voir patients/taches.py).
+    resultat, ia_en_cours = taches.analyse_avec_ia_differee(patient)
     liens = {cle: reverse(nom) for cle, nom in _LIENS_ANALYSE.items()}
 
     def avec_lien(points):
@@ -776,12 +777,21 @@ def analyse(request):
 
     return render(request, "patients/analyse_dossier.html", {
         "analyse": resultat,
+        "ia_en_cours": ia_en_cours,
         "groupes": [
             ("Important", "important", avec_lien(resultat.importants)),
             ("À surveiller", "attention", avec_lien(resultat.attentions)),
             ("Pour compléter ou vérifier", "info", avec_lien(resultat.infos)),
         ],
     })
+
+
+@login_required
+def analyse_etat(request):
+    """Suivi de l'analyse IA lancée en arrière-plan (interrogé par la page toutes les 2 s)."""
+    patient = _patient_connecte(request)
+    marque = taches.etat(patient.pk)
+    return JsonResponse({"en_cours": marque.get("etat") == "en_cours", "statut": marque.get("statut", "")})
 
 
 # --- IA : consentement du patient -------------------------------------------------------------------------

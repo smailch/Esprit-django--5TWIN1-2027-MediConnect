@@ -1,0 +1,55 @@
+# Intégration continue : à chaque push et à chaque Pull Request, sur une machine neuve avec MongoDB et Redis.
+# Vérifie les réglages de production, les migrations, toute la suite de tests et la couverture.
+name: Tests
+
+on:
+  push:
+    branches: [preprod, main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8.0
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping: 1}).ok'"
+          --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      MONGODB_URI: mongodb://localhost:27017
+      MONGODB_TEST_URI: mongodb://localhost:27017
+      DJANGO_SECRET_KEY: ci-cle-de-test-uniquement-pas-pour-la-production-0123456789
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Réglages de production (check --deploy)
+        env:
+          DJANGO_ENV: production
+          DJANGO_DEBUG: "False"
+          DJANGO_ALLOWED_HOSTS: mediconnect.exemple.tn
+          DJANGO_SECRET_KEY: ci-cle-de-production-factice-tres-longue-et-aleatoire-0123456789abcdef
+        run: python manage.py check --deploy --fail-level WARNING
+      - name: Migrations à jour
+        run: python manage.py makemigrations --check --dry-run
+      - name: Tests et couverture
+        run: |
+          coverage run manage.py test --noinput
+          coverage report
+          coverage html
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-couverture
+          path: htmlcov/

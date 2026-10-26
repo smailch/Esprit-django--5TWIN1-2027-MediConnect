@@ -1,0 +1,86 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Comptes — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Comptes</h1>
+    <p class="muted mt-2 text-sm">Tous les utilisateurs, tous rôles confondus : validation des professionnels et activation des comptes.</p>
+  </div>
+  <a href="{% url 'backoffice:journal_connexions' %}" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="scroll-text" class="h-4 w-4"></i>Journal des connexions</a>
+</header>
+
+<section class="kpi-grid mt-8" aria-label="Chiffres des comptes">
+  <a class="panel kpi" href="{% url 'backoffice:comptes' %}"><p class="kpi-num">{{ chiffres.total }}</p><p class="kpi-label">Comptes</p></a>
+  <a class="panel kpi {% if chiffres.a_valider %}kpi-warn{% endif %}" href="?statut=a_valider"><p class="kpi-num">{{ chiffres.a_valider }}</p><p class="kpi-label">Professionnels à valider</p></a>
+  <a class="panel kpi" href="?statut=desactive"><p class="kpi-num">{{ chiffres.desactives }}</p><p class="kpi-label">Comptes désactivés</p></a>
+  <a class="panel kpi {% if chiffres.echecs_24h %}kpi-alert{% endif %}" href="{% url 'backoffice:journal_connexions' %}?evenement=echec"><p class="kpi-num">{{ chiffres.echecs_24h }}</p><p class="kpi-label">Connexions refusées (24 h)</p></a>
+</section>
+
+<form method="get" class="panel panel-pad mt-6" role="search" aria-label="Rechercher et filtrer les comptes">
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="sm:col-span-2">{% with field=filtre.q %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.role %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.statut %}{% include "core/_champ.html" %}{% endwith %}</div>
+  </div>
+  <div class="mt-5 flex flex-wrap gap-2">
+    <button type="submit" class="abtn abtn-primary">Filtrer</button>
+    {% if filtres_actifs %}<a href="{% url 'backoffice:comptes' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  </div>
+  <p class="muted mt-4 text-xs">{% for libelle, nombre in par_role %}{{ libelle }} : {{ nombre }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+</form>
+
+<section class="panel mt-6" aria-label="Liste des comptes">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Compte</th><th scope="col">Rôle</th><th scope="col">Statut</th>
+          <th scope="col">Dernière connexion</th><th scope="col">Inscrit le</th><th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in comptes %}
+        <tr>
+          <td>
+            <span class="font-medium">{{ c.get_full_name|default:c.username }}</span>
+            <span class="muted block text-xs">{{ c.username }}{% if c.email %} · {{ c.email }}{% endif %}</span>
+          </td>
+          <td>{{ c.get_role_display }}{% if c.is_superuser %} <span class="muted text-xs">(super-utilisateur)</span>{% endif %}</td>
+          <td>
+            {% if not c.is_active %}<span class="st st-annule">Désactivé</span>
+            {% elif c.est_professionnel and not c.est_valide %}<span class="st st-en_attente">À valider</span>
+            {% else %}<span class="st st-termine">Actif</span>{% endif %}
+          </td>
+          <td>{{ c.last_login|date:"d/m/Y H:i"|default:"Jamais" }}</td>
+          <td>{{ c.date_joined|date:"d/m/Y" }}</td>
+          <td class="num">
+            {% if c.pk != user.pk %}
+            <div class="flex flex-wrap justify-end gap-2">
+              {% if c.est_professionnel and c.role != 'laboratoire' %}
+              <form method="post" action="{% url 'backoffice:compte_action' c.pk c.est_valide|yesno:'retirer,valider' %}">
+                {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="abtn {% if c.est_valide %}abtn-ghost{% else %}abtn-primary{% endif %}" aria-label="{% if c.est_valide %}Retirer la validation de{% else %}Valider{% endif %} {{ c.username }}">{% if c.est_valide %}Retirer la validation{% else %}Valider{% endif %}</button>
+              </form>
+              {% endif %}
+              <form method="post" action="{% url 'backoffice:compte_action' c.pk c.is_active|yesno:'desactiver,reactiver' %}">
+                {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="abtn {% if c.is_active %}abtn-danger{% else %}abtn-outline{% endif %}" aria-label="{% if c.is_active %}Désactiver{% else %}Réactiver{% endif %} le compte {{ c.username }}">{% if c.is_active %}Désactiver{% else %}Réactiver{% endif %}</button>
+              </form>
+            </div>
+            {% else %}<span class="muted text-xs">Votre compte</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="muted">{% if filtres_actifs %}Aucun compte ne correspond à ces critères.{% else %}Aucun compte.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<p class="muted mt-3 text-xs">Désactiver un compte bloque sa connexion sans rien supprimer. Les demandes en attente d'un patient sont annulées ; les passages à venir d'un infirmier retournent aux autres infirmiers de sa zone, et chaque patient est prévenu.</p>
+
+{% include "backoffice/_pager.html" %}
+{% endblock %}

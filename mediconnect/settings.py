@@ -11,8 +11,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,16 +22,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+def _liste(nom, defaut=''):
+    """Variable d'environnement « a,b,c » -> ['a', 'b', 'c']."""
+    return [v.strip() for v in os.environ.get(nom, defaut).split(',') if v.strip()]
 
-# SECURITY WARNING: keep the secret key used in production secret!
+
+# --- Environnement : développement (défaut) ou production (DJANGO_ENV=production) -------------------------
+# En production, le serveur refuse de démarrer si DEBUG est actif ou si la clé secrète est celle d'exemple.
+# Checklist : https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/ (python manage.py check --deploy)
+PRODUCTION = os.environ.get('DJANGO_ENV', 'developpement') == 'production'
+TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
+
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-insecure-key')
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False' if PRODUCTION else 'True') == 'True'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+if PRODUCTION:
+    if DEBUG:
+        raise ImproperlyConfigured("DJANGO_DEBUG doit valoir False en production.")
+    if SECRET_KEY in ('', 'dev-insecure-key', 'change-me') or len(SECRET_KEY) < 40:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY doit être une clé secrète longue et aléatoire en production.")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = _liste('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
+# Origines HTTPS autorisées à poster un formulaire (domaine Vercel ou Railway), ex. https://mediconnect.vercel.app
+CSRF_TRUSTED_ORIGINS = _liste('DJANGO_CSRF_TRUSTED_ORIGINS')
 
 
 # Application definition
@@ -61,6 +76,7 @@ MIGRATION_MODULES = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # fichiers statiques servis par Django lui-même en production
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -99,6 +115,9 @@ DATABASES = {
         'NAME': os.environ.get('MONGODB_NAME', 'mediconnect'),
     },
 }
+if TESTS:
+    # Les tests créent puis suppriment leur propre base (test_mediconnect) : jamais sur le cluster partagé de l'équipe.
+    DATABASES['default']['HOST'] = os.environ.get('MONGODB_TEST_URI', 'mongodb://localhost:27017')
 
 
 # Password validation
@@ -137,6 +156,18 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # rempli par « collectstatic » au déploiement
+if not PRODUCTION:
+    # En développement, `staticfiles/` n'existe pas (collectstatic n'est lancé qu'au déploiement) : WhiteNoise le signale
+    # à chaque démarrage. Rien à corriger : runserver sert les fichiers depuis `static/`.
+    import warnings
+
+    warnings.filterwarnings('ignore', message='No directory at', module='whitenoise.base')
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage' if PRODUCTION
+                    else 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -147,6 +178,72 @@ DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 LOGIN_URL = 'core:connexion'
 LOGIN_REDIRECT_URL = 'home'  # repli ; la destination réelle dépend du rôle (core.views.ConnexionView)
 LOGOUT_REDIRECT_URL = 'home'
+
+# Protection contre la force brute : après CONNEXION_ESSAIS_MAX échecs pour un même identifiant (ou une même
+# adresse IP), la connexion est refusée pendant CONNEXION_BLOCAGE_MINUTES (voir core/securite.py).
+CONNEXION_ESSAIS_MAX = int(os.environ.get('CONNEXION_ESSAIS_MAX', '5'))
+CONNEXION_BLOCAGE_MINUTES = int(os.environ.get('CONNEXION_BLOCAGE_MINUTES', '15'))
+
+# Session : un dossier médical ne reste pas ouvert indéfiniment sur un poste partagé.
+SESSION_COOKIE_AGE = int(os.environ.get('SESSION_DUREE_HEURES', '8')) * 3600
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # le jeton CSRF est lu par le JavaScript des appels fetch (pharmacies)
+X_FRAME_OPTIONS = 'DENY'
+CSRF_FAILURE_VIEW = 'core.views.echec_csrf'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+
+if PRODUCTION:
+    # Derrière le proxy HTTPS de Railway (et de Vercel) : le protocole d'origine arrive dans X-Forwarded-Proto.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = os.environ.get('DJANGO_USE_X_FORWARDED_HOST', 'True') == 'True'
+    SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SSL_REDIRECT', 'True') == 'True'
+    SECURE_REDIRECT_EXEMPT = [r'^sante/$']  # sonde de santé interne de Railway (HTTP)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_HSTS_SECONDES', str(30 * 24 * 3600)))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = False  # les domaines *.vercel.app et *.railway.app ne nous appartiennent pas
+    # W021 (« preload » HSTS) : choix assumé, inscrire un domaine qui n'est pas le nôtre dans la liste des navigateurs
+    # serait irréversible pour son propriétaire. Toutes les autres vérifications de « check --deploy » passent.
+    SILENCED_SYSTEM_CHECKS = ['security.W021']
+
+# Journalisation : erreurs serveur et événements de sécurité (connexions refusées, comptes bloqués) dans la
+# console, que Railway conserve dans ses journaux.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'simple': {'format': '{asctime} {levelname} {name} : {message}', 'style': '{'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'simple'}},
+    'root': {'handlers': ['console'], 'level': 'WARNING'},
+    'loggers': {
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+        'mediconnect': {'handlers': ['console'], 'level': os.environ.get('MEDICONNECT_LOG', 'INFO'), 'propagate': False},
+    },
+}
+if TESTS:  # échecs de connexion et refus CSRF provoqués exprès par les tests : inutile de les afficher
+    LOGGING['loggers']['mediconnect.securite'] = {'handlers': [], 'level': 'CRITICAL', 'propagate': False}
+    LOGGING['loggers']['django.security.csrf'] = {'handlers': [], 'level': 'CRITICAL', 'propagate': False}
+
+# --- Cache, Celery et Redis ---------------------------------------------------------------------------------
+# Avec REDIS_URL (Railway, Docker) : cache partagé entre les processus (quota et cache de l'IA, blocage des
+# connexions) et tâches de fond Celery (e-mails, analyses IA longues).
+# Sans REDIS_URL (poste de développement) : cache en mémoire et tâches exécutées tout de suite, comme avant.
+REDIS_URL = '' if TESTS else os.environ.get('REDIS_URL', '')
+if REDIS_URL:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': REDIS_URL}}
+else:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+CELERY_BROKER_URL = REDIS_URL or 'memory://'
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_ALWAYS_EAGER = not REDIS_URL  # pas de courtier : la tâche s'exécute dans la requête
+CELERY_TASK_EAGER_PROPAGATES = False
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_TIME_LIMIT = 120
+CELERY_TIMEZONE = 'Africa/Tunis'
 
 
 # --- Intelligence artificielle (facultative, désactivée par défaut) ---------------------------------------

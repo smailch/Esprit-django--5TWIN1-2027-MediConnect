@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import AdminUserCreationForm, UserChangeForm
 
-from .models import User
+from .models import JournalConnexion, User
 
 
 # Avec un modèle d'utilisateur personnalisé, les formulaires de l'admin doivent
@@ -44,3 +44,19 @@ class UserAdmin(DjangoUserAdmin):
     def retirer_validation(self, request, queryset):
         nombre = queryset.update(est_valide=False)
         self.message_user(request, f"Validation retirée pour {nombre} compte(s).")
+
+
+@admin.register(JournalConnexion)
+class JournalConnexionAdmin(admin.ModelAdmin):
+    """Lecture seule : le journal des accès ne se modifie pas."""
+
+    list_display = ("quand", "evenement", "identifiant", "adresse_ip")
+    list_filter = ("evenement",)
+    search_fields = ("identifiant", "adresse_ip")
+    date_hierarchy = "quand"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
