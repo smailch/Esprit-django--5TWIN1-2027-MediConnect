@@ -1,0 +1,31 @@
+/* ==========================================================================
+   MediConnect : module pharmacies (complète app.css sans le modifier)
+   Mêmes variables et mêmes composants (.st, .stepper, .panel) : seuls les statuts d'ordonnance sont ajoutés.
+   ========================================================================== */
+
+.st-emise { color: var(--a-muted); }
+.st-transmise { color: #FDE047; border-color: rgba(250, 204, 21, 0.45); }
+.st-en_preparation { color: var(--a-accent); border-color: rgba(45, 212, 191, 0.55); }
+.st-prete { color: #86EFAC; border-color: rgba(74, 222, 128, 0.6); font-weight: 500; }
+.st-delivree { color: #86EFAC; border-color: rgba(74, 222, 128, 0.3); }
+.st-annulee { color: var(--a-muted); text-decoration: line-through; }
+
+/* Lignes de l'ordonnance : une par médicament, numérotées */
+.rx-lignes { margin: 0; padding: 0; list-style: none; counter-reset: rx; }
+.rx-lignes li {
+  counter-increment: rx; display: flex; gap: 0.85rem; align-items: baseline;
+  padding: 0.8rem 1.25rem; border-bottom: 1px solid var(--a-line); font-size: 0.95rem;
+}
+.rx-lignes li:last-child { border-bottom: 0; }
+.rx-lignes li::before {
+  content: counter(rx); flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 9999px; background: var(--a-raise); color: var(--a-accent);
+  font-size: 0.75rem; font-weight: 500;
+}
+
+.stepper { flex-wrap: wrap; row-gap: 0.75rem; }
+.ref { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.02em; }
+
+@media (forced-colors: active) {
+  .st-prete, .st-transmise, .st-en_preparation { border: 1px solid ButtonText; }
+}

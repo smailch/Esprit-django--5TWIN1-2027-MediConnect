@@ -1,0 +1,55 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}{{ pharmacie.nom }} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'pharmacies:pharmacies' %}" class="link text-sm">← Toutes les pharmacies</a>
+    <h1 class="page-title mt-2">{{ pharmacie.nom }}</h1>
+    <p class="muted mt-2 text-sm">{{ pharmacie.ville }}{% if pharmacie.de_garde %} · <span class="sev sev-info">De garde</span>{% endif %}</p>
+  </div>
+  {% if proprietaire %}
+  <div class="item-actions">
+    <a href="{% url 'pharmacies:pharmacie_modifier' pharmacie.pk %}" class="abtn abtn-outline">Modifier la fiche</a>
+    {% if request.espace == "admin" %}
+    <a href="{% url 'pharmacies:pharmacie_supprimer' pharmacie.pk %}" class="abtn abtn-danger">Supprimer</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</header>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+  <section class="panel panel-pad lg:col-span-5" aria-labelledby="titre-coord">
+    <h2 id="titre-coord" class="section-title">Coordonnées</h2>
+    <dl class="dl mt-4">
+      <div class="wide"><dt>Adresse</dt><dd>{{ pharmacie.adresse }}, {{ pharmacie.ville }}</dd></div>
+      <div><dt>Téléphone</dt><dd><a class="link" href="tel:{{ pharmacie.telephone|cut:' ' }}">{{ pharmacie.telephone }}</a></dd></div>
+      <div><dt>Horaires</dt><dd>{{ pharmacie.horaires|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  {% if proprietaire %}
+  <section class="panel lg:col-span-7" aria-labelledby="titre-en-cours">
+    <h2 id="titre-en-cours" class="section-title px-5 pt-5">Ordonnances en cours <span class="count">{{ en_cours|length }}</span></h2>
+    <div class="table-wrap mt-3">
+      <table class="tbl tbl-compact">
+        <thead><tr><th scope="col">Référence</th><th scope="col">Patient</th><th scope="col">Statut</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+          {% for o in en_cours %}
+          <tr>
+            <td class="ref">{{ o.reference }}</td>
+            <td>{{ o.patient }}</td>
+            <td><span class="st st-{{ o.statut }}">{{ o.get_statut_display }}</span></td>
+            <td class="num"><a class="abtn abtn-outline" href="{% url 'pharmacies:ordonnance_detail' o.pk %}">Ouvrir<span class="sr-only"> l'ordonnance {{ o.reference }}</span></a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="muted">Aucune ordonnance en cours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
