@@ -1,0 +1,31 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}Supprimer une ordonnance — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}" class="link text-sm">← Ordonnance {{ ordonnance.reference }}</a>
+    <h1 class="page-title mt-2">Supprimer cette ordonnance ?</h1>
+  </div>
+</header>
+
+<section class="panel panel-pad mt-8 max-w-2xl" aria-labelledby="titre-confirmation">
+  <h2 id="titre-confirmation" class="item-name">{{ ordonnance.reference }} · {{ ordonnance.patient }}</h2>
+  <p class="muted mt-1 text-sm">Du {{ ordonnance.date_emission|date:"d/m/Y" }} · {{ ordonnance.lignes|length }} médicament{{ ordonnance.lignes|length|pluralize }} · {{ ordonnance.get_statut_display|lower }}</p>
+
+  {% if ordonnance.pharmacie %}
+  <p class="alert alert-warn mt-4" role="note">Elle a déjà été envoyée à {{ ordonnance.pharmacie.nom }}. Si elle est seulement erronée, préférez l'annuler : la pharmacie gardera la trace.</p>
+  {% else %}
+  <p class="muted mt-4 text-sm">Cette action est définitive.</p>
+  {% endif %}
+
+  <div class="mt-6 flex flex-wrap gap-3">
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="abtn abtn-danger abtn-lg">Oui, supprimer</button>
+    </form>
+    <a href="{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}" class="abtn abtn-outline abtn-lg">Non, la garder</a>
+  </div>
+</section>
+{% endblock %}

@@ -6,9 +6,9 @@ e-mail quand elle change. Le médecin garde toujours la décision finale.
 
 **Technologies** : Python 3.13, Django 5.2, MongoDB Atlas (`django-mongodb-backend`), scikit-learn, Tailwind CSS.
 
-> Ce dépôt contient le module patient et le back-office. Les modules des autres membres de l'équipe (médecins, infirmiers,
-> laboratoires, pharmacies) sont sur leurs propres branches. En attendant le module médecins, la liste des médecins est
-> fictive (`patients/medecins_test.py`) : il suffira de garder les mêmes clés pour la remplacer.
+> Ce dépôt réunit les modules de l'équipe : patients et back-office (Ismail), médecins avec consultations, visio et compte
+> rendu PDF, e-mail ou WhatsApp (Mourad), infirmiers et soins à domicile (Walid), pharmacies et ordonnances (Ahmed). Le module
+> laboratoires reste à intégrer. Les médecins proposés aux patients sont ceux du module médecins (`medecins/annuaire.py`).
 
 ---
 
@@ -195,7 +195,6 @@ patients/                module patient
   notifications.py         e-mails au patient
   analyse_dossier.py       analyse du dossier par règles
   ia_*.py                  IA de langage facultative et ses garde-fous
-  medecins_test.py         médecins fictifs (à remplacer par le module médecins)
   templates/patients/      pages et e-mails
 ia/                      modèles d'apprentissage automatique
   modele.py, donnees.py, lexique.py          lecture du texte du triage

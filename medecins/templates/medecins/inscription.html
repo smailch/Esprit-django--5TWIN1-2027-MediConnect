@@ -1,0 +1,50 @@
+{% extends "core/auth_layout.html" %}
+
+{% block title %}Créer un compte médecin — MediConnect{% endblock %}
+
+{% block auth_link %}
+<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>
+{% endblock %}
+
+{% block page %}
+<h1 class="auth-title">Créer un compte médecin</h1>
+<p class="muted mt-2 text-sm">Votre file s'ouvre après validation par un administrateur.</p>
+
+<form method="post" novalidate class="mt-6 space-y-8">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Votre compte</legend>
+    {% for field in form %}
+      {% if field.name == "username" or field.name == "first_name" or field.name == "last_name" or field.name == "email" or field.name == "password1" or field.name == "password2" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Exercice</legend>
+    {% for field in form %}
+      {% if field.name == "specialite" or field.name == "ville" or field.name == "telephone" or field.name == "numero_ordre" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="auth-fieldset space-y-5">
+    <legend>Horaires</legend>
+    {% for field in form %}
+      {% if field.name|slice:":6" == "plage_" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit" class="abtn abtn-primary abtn-lg abtn-block">Créer mon compte</button>
+</form>
+{% endblock %}

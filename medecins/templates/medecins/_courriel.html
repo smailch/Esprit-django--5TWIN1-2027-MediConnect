@@ -1,0 +1,9 @@
+{% if courriel %}
+<form method="post" action="{% url 'medecins:envoyer_courriel' consultation.pk %}" class="mt-4 max-w-3xl">
+  {% csrf_token %}
+  <button type="submit" class="abtn abtn-outline">Envoyer le PDF par e-mail</button>
+  <p class="muted mt-2 text-sm">Le compte rendu en PDF part à {{ email }}.</p>
+</form>
+{% else %}
+<p class="muted mt-4 max-w-3xl text-sm">Ce patient n'a pas d'adresse e-mail pour recevoir le PDF.</p>
+{% endif %}

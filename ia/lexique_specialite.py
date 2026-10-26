@@ -2,7 +2,7 @@
 
 Chaque spécialité a des « unités » : une façon de dire un symptôme ou un motif qui oriente vers elle, avec son poids
 (fréquence relative). Les phrases sont écrites pour la démonstration, pas des propos de vrais patients. Les noms des
-spécialités sont ceux de la liste des médecins du projet (patients/medecins_test.py).
+spécialités sont ceux de la liste des médecins du projet (médecins de démonstration : medecins/management/commands/charger_medecins.py).
 """
 
 MEDECINE_GENERALE = "Médecine générale"

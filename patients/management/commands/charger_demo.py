@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from patients import medecins_test
+from medecins import annuaire
 from patients.models import (
     Allergie,
     AutoEvaluation,
@@ -117,7 +117,10 @@ class Command(BaseCommand):
         catalogue = {s.nom: s for s in Symptome.objects.all()}
         maintenant = timezone.now()
         for ident, med_id, noms, auto, temp, texte, statut, heures, niveau_medecin in DEMANDES:
-            medecin = medecins_test.trouver(med_id)
+            medecin = annuaire.trouver(med_id)
+            if medecin is None:
+                self.stdout.write(self.style.ERROR(f"Médecin {med_id} introuvable : lancez d'abord charger_medecins."))
+                continue
             symptomes = [
                 {"nom": s.nom, "poids": s.poids, "drapeau_rouge": s.drapeau_rouge, "niveau_minimal": s.niveau_minimal}
                 for s in (catalogue[n] for n in noms if n in catalogue)

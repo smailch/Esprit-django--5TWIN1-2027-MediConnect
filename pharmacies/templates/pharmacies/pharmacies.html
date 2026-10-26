@@ -1,0 +1,58 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}Pharmacies — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    {% include "pharmacies/_surtitre.html" %}
+    <h1 class="page-title mt-1">{% if request.espace == "pharmacie" %}Annuaire des pharmacies{% else %}Pharmacies{% endif %}</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Les pharmacies partenaires de MediConnect. {% if request.espace == "patient" %}Choisissez-en une pour y envoyer votre ordonnance.{% endif %}</p>
+  </div>
+  {% if request.espace == "admin" %}
+  <a href="{% url 'pharmacies:pharmacie_creer' %}" class="abtn abtn-primary">
+    <i aria-hidden="true" data-lucide="plus" class="h-4 w-4"></i>Ajouter une pharmacie
+  </a>
+  {% endif %}
+</header>
+
+<form method="get" class="panel panel-pad mt-8" role="search" aria-label="Rechercher une pharmacie">
+  <div class="grid gap-4 sm:grid-cols-3 sm:items-end">
+    <div class="sm:col-span-2">
+      <label for="{{ filtre.q.id_for_label }}" class="f-label">{{ filtre.q.label }}</label>
+      <input type="search" id="{{ filtre.q.id_for_label }}" name="q" value="{{ filtre.q.value|default_if_none:'' }}" class="field" placeholder="Ex. Tunis">
+    </div>
+    <label class="check-row" for="{{ filtre.de_garde.id_for_label }}">{{ filtre.de_garde }}<span>{{ filtre.de_garde.label }}</span></label>
+  </div>
+  <div class="mt-5 flex flex-wrap gap-2">
+    <button type="submit" class="abtn abtn-primary">Rechercher</button>
+    {% if filtres_actifs %}<a href="{% url 'pharmacies:pharmacies' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  </div>
+</form>
+
+<section class="mt-6" aria-labelledby="titre-liste">
+  <h2 id="titre-liste" class="section-title">Résultats <span class="count">{{ page.paginator.count }}</span></h2>
+  {% if page %}
+  <ul class="panel mt-4">
+    {% for p in page %}
+    <li class="item-row">
+      <div>
+        <p class="item-name">{{ p.nom }}</p>
+        <p class="muted mt-1 text-sm">{{ p.adresse }}, {{ p.ville }} · {{ p.telephone }}{% if p.horaires %} · {{ p.horaires }}{% endif %}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        {% if p.de_garde %}<span class="sev sev-info">De garde</span>{% endif %}
+        <a href="{% url 'pharmacies:pharmacie_detail' p.pk %}" class="abtn abtn-outline">Voir<span class="sr-only"> la pharmacie {{ p.nom }}</span></a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="panel panel-pad mt-4 text-center">
+    <p class="muted text-sm">{% if filtres_actifs %}Aucune pharmacie ne correspond à ces critères.{% else %}Aucune pharmacie n'est encore inscrite.{% endif %}</p>
+  </div>
+  {% endif %}
+</section>
+
+{% include "backoffice/_pager.html" %}
+{% endblock %}

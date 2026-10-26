@@ -5,7 +5,7 @@
 {% block nav %}
 {% if user.is_authenticated and user.patient %}
 {% with page=request.resolver_match.url_name %}
-<a href="{% url 'patients:tableau_de_bord' %}" class="nav-item" {% if page == 'tableau_de_bord' %}aria-current="page"{% endif %}>
+<a href="{% url 'patients:tableau_de_bord' %}" class="nav-item" {% if page == 'tableau_de_bord' or page == 'visio' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="layout-dashboard" class="h-5 w-5"></i><span>Tableau de bord</span>
 </a>
 <a href="{% url 'patients:medecins' %}" class="nav-item" {% if page == 'medecins' or page == 'orientation' or page == 'symptomes' or page == 'resultat' %}aria-current="page"{% endif %}>

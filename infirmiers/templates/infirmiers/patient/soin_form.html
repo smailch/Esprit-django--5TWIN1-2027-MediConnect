@@ -11,6 +11,9 @@
   </div>
 </header>
 
+{% if prescription %}
+<p class="note mt-6 max-w-3xl"><i aria-hidden="true" data-lucide="stethoscope" class="h-4 w-4"></i><span>Pré-rempli d'après la prescription de {{ prescription.consultation.medecin_nom }} du {{ prescription.consultation.date|date:"d/m/Y" }}. Vérifiez le type de soin, la répétition, l'adresse et la date.</span></p>
+{% endif %}
 <form method="post" novalidate class="mt-8 max-w-3xl space-y-8">
   {% csrf_token %}
   {% include "infirmiers/_erreurs.html" %}

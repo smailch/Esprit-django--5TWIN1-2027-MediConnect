@@ -16,5 +16,12 @@ urlpatterns = [
     path("patients/<str:pk>/desactiver/", views.patient_desactiver, name="patient_desactiver"),
     path("patients/<str:pk>/reactiver/", views.patient_reactiver, name="patient_reactiver"),
     path("patients/<str:pk>/", views.patient_detail, name="patient_detail"),
+    path("medecins/", views.medecins, name="medecins"),
+    path("medecins/<str:pk>/valider/", views.medecin_valider, name="medecin_valider"),
+    path("medecins/<str:pk>/retirer/", views.medecin_retirer, name="medecin_retirer"),
+    path("medecins/<str:pk>/desactiver/", views.medecin_desactiver, name="medecin_desactiver"),
+    path("medecins/<str:pk>/reactiver/", views.medecin_reactiver, name="medecin_reactiver"),
+    path("medecins/<str:pk>/disponibilite/", views.medecin_disponibilite, name="medecin_disponibilite"),
+    path("medecins/<str:pk>/", views.medecin_detail, name="medecin_detail"),
     path("symptomes/", views.symptomes, name="symptomes"),
 ]

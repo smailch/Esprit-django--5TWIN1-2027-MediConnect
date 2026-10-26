@@ -16,7 +16,7 @@ from core.views import ConnexionView
 from patients import ia_client
 from patients.models import ConstantesVitales, Mesure, Patient
 
-from . import alertes, dossier, ia_soin, notifications, tournee as calcul_tournee, views, views_admin, views_patient
+from . import alertes, dossier, ia_soin, notifications, prescriptions, tournee as calcul_tournee, views, views_admin, views_patient
 from .forms import AnnulationForm, CompteRenduForm, DemandeSoinForm, HeureSerieForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, TypeSoin, passage_en_conflit, prochain_creneau_libre
 
@@ -1092,3 +1092,52 @@ class TourneeTests(SimpleTestCase):
     def test_deja_optimale(self):
         a, b = self.passage("Tunis", 9), self.passage("Tunis", 9, 30)
         self.assertTrue(calcul_tournee.est_identique(calcul_tournee.actuelle([b, a]), calcul_tournee.proposer([a, b], "Tunis", a.date_prevue)))
+
+
+# --- Soins prescrits par le médecin (module medecins) --------------------------------------------------------
+
+
+class PrescriptionsTests(SimpleTestCase):
+    def test_type_de_soin_devine(self):
+        cas = {
+            "Injection de Lovenox 0,4 ml chaque soir": TypeSoin.INJECTION,
+            "Pansement de l'ulcère de jambe, un jour sur deux": TypeSoin.PANSEMENT,
+            "Prise de sang à jeun : NFS et ferritine": TypeSoin.PRELEVEMENT,
+            "Perfusion d'antibiotique": TypeSoin.PERFUSION,
+            "Surveillance de la tension matin et soir": TypeSoin.SURVEILLANCE,
+            "Aide à la toilette": TypeSoin.HYGIENE,
+            "Kinésithérapie respiratoire": TypeSoin.AUTRE,
+        }
+        for texte, attendu in cas.items():
+            with self.subTest(texte):
+                self.assertEqual(prescriptions.deviner_type_soin(texte), attendu)
+
+    def test_repetition_devinee(self):
+        cas = {
+            "Injection chaque soir pendant 10 jours": ("1", 10),
+            "Pansement tous les 2 jours pendant 3 semaines": ("2", 11),
+            "Prise de sang une fois par semaine pendant 4 semaines": ("7", 4),
+            "Injection pendant 60 jours": ("1", 30),  # plafonné au maximum d'une série
+            "Une injection de vaccin": ("", None),
+        }
+        for texte, attendu in cas.items():
+            with self.subTest(texte):
+                self.assertEqual(prescriptions.deviner_repetition(texte), attendu)
+
+    def test_valeurs_initiales_du_formulaire(self):
+        prescription = mock.Mock(contenu="  Injection de Lovenox chaque soir pendant 10 jours. ", consultation_id="c1")
+        self.assertEqual(prescriptions.valeurs_initiales(prescription), {
+            "type_soin": TypeSoin.INJECTION, "description": "Injection de Lovenox chaque soir pendant 10 jours.",
+            "consultation": "c1", "repetition": "1", "nombre_passages": 10,
+        })
+
+    def test_prescription_d_un_autre_patient_ignoree(self):
+        patient = Patient(pk=ObjectId())
+        prescription = mock.Mock()
+        prescription.consultation.patient_id = ObjectId()
+        with mock.patch("medecins.models.Prescription.objects.select_related") as requete:
+            requete.return_value.get.return_value = prescription
+            self.assertIsNone(views_patient._prescription_du_patient("x", patient))
+            prescription.consultation.patient_id = patient.pk
+            self.assertIs(views_patient._prescription_du_patient("x", patient), prescription)
+        self.assertIsNone(views_patient._prescription_du_patient("", patient))

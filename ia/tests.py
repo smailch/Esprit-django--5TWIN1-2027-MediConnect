@@ -266,9 +266,9 @@ class SpecialiteDonneesTests(SimpleTestCase):
         self.assertIn(ls.PEDIATRIE, specialite.CLASSES)
 
     def test_les_specialites_du_modele_sont_celles_de_la_liste_des_medecins_ou_prevues(self):
-        from patients import medecins_test
+        from medecins.management.commands.charger_medecins import DEMONSTRATION
 
-        for nom in medecins_test.specialites():
+        for nom in {m["specialite"] for m in DEMONSTRATION}:
             if nom != "Urgences":  # les urgences passent par l'alerte, pas par une spécialité conseillée
                 self.assertIn(nom, specialite.CLASSES)
 

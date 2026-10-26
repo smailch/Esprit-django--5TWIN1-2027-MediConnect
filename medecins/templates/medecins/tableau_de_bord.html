@@ -1,0 +1,81 @@
+{% extends "medecins/layout.html" %}
+{% load suivi_filtres %}
+
+{% block title %}File d'attente — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Bonjour {{ medecin.nom_affiche }}</h1>
+    <p class="muted mt-2 text-sm">{{ medecin.specialite }} · {{ medecin.ville }}. Les patients sont classés par urgence, pas par ordre d'arrivée.</p>
+  </div>
+</header>
+
+{% if en_consultation %}
+<section class="mt-8" aria-labelledby="titre-en-cours">
+  <h2 id="titre-en-cours" class="section-title">En consultation <span class="count">{{ en_consultation|length }}</span></h2>
+  <ul class="mt-4 grid gap-4 lg:grid-cols-2">
+    {% for d in en_consultation %}
+    <li class="panel panel-pad req req-{{ d.niveau_effectif }}">
+      <p class="req-doctor">{{ d.patient }}</p>
+      <p class="muted mt-1 text-sm">Niveau {{ d.niveau_effectif }} · commencée</p>
+      <p class="mt-4 flex flex-wrap gap-2">
+        <a href="{% url 'medecins:visio' d.pk %}" class="abtn abtn-primary">Reprendre la visio</a>
+        <a href="{% url 'medecins:synthese' d.pk %}" class="abtn abtn-outline">Synthèse</a>
+        <a href="{% url 'medecins:compte_rendu' d.pk %}" class="abtn abtn-outline">Compte rendu</a>
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="mt-8" aria-labelledby="titre-calendrier">
+  <h2 id="titre-calendrier" class="section-title">Calendrier <span class="count">{{ agenda_total }}</span></h2>
+  <p class="muted mt-2 text-sm">Les patients déjà dans votre file, du plus proche au plus lointain. L'heure d'un rendez-vous fixé est celle choisie par le patient. Les autres sont placés à l'heure estimée de prise en charge.</p>
+  {% if agenda %}
+  <div class="agenda">
+    {% for jour in agenda %}
+    <section class="panel agenda-jour" aria-labelledby="jour-{{ forloop.counter }}">
+      <h3 id="jour-{{ forloop.counter }}" class="agenda-date section-title">{{ jour.jour|date:"l j F Y" }}</h3>
+      <ol class="agenda-liste">
+        {% for e in jour.evenements %}
+        <li class="agenda-ligne">
+          <time class="agenda-heure" datetime="{{ e.heure|date:'c' }}">{{ e.heure|date:"H:i" }}</time>
+          <div class="agenda-corps">
+            <p class="item-name"><a href="{% url 'medecins:synthese' e.demande.pk %}" class="link">{{ e.demande.patient }}</a></p>
+            <p class="muted mt-1 text-xs">{% if e.fixe %}Rendez-vous fixé{% else %}File · place {{ e.demande.place.0 }} sur {{ e.demande.place.1 }}{% endif %}</p>
+          </div>
+          <span class="lv lv-{{ e.demande.niveau_effectif }}">Niveau {{ e.demande.niveau_effectif }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="panel panel-pad muted mt-4 text-sm">Aucun patient dans la file.</p>
+  {% endif %}
+</section>
+
+<h2 class="section-title mt-8">File d'attente par urgence <span class="count">{{ file|length }}</span></h2>
+<ol class="mt-4 grid gap-4 lg:grid-cols-2">
+  {% for d in file %}
+  <li class="panel req req-{{ d.niveau_effectif }}">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="req-doctor">{{ d.place.0 }}ᵉ · {{ d.patient }}</p>
+      <span class="lv lv-{{ d.niveau_effectif }}">Niveau {{ d.niveau_effectif }}</span>
+    </div>
+    <p class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <span class="sev {{ d.delai.etat|classe_etat }}">{{ d.delai.libelle }}</span>
+      <span class="muted">{% if d.protegee %}protégée · {% endif %}{{ d.place.0 }} sur {{ d.place.1 }}</span>
+    </p>
+    <p class="muted mt-1 text-xs">Reçue le {{ d.cree_le|date:"d/m/Y à H:i" }}</p>
+    <p class="mt-3 text-sm">{{ d.explication }}</p>
+    <p class="mt-4"><a href="{% url 'medecins:synthese' d.pk %}" class="abtn abtn-primary">Voir la synthèse</a></p>
+  </li>
+  {% empty %}
+  <li class="panel panel-pad muted text-sm lg:col-span-2">Aucun patient en attente.</li>
+  {% endfor %}
+</ol>
+{% endblock %}

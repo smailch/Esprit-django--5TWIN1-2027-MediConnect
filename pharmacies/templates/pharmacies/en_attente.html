@@ -1,0 +1,26 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}Compte en attente — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace pharmacie</p>
+    <h1 class="page-title mt-1">Votre compte est presque prêt</h1>
+  </div>
+</header>
+
+<section class="panel panel-pad mt-8 max-w-2xl" aria-labelledby="titre-etape">
+  <h2 id="titre-etape" class="section-title">
+    {% if sans_fiche %}Fiche de la pharmacie à créer{% else %}En attente de validation{% endif %}
+  </h2>
+  <p class="muted mt-3 text-sm">
+    {% if sans_fiche %}
+    Votre compte est validé, mais aucune pharmacie ne lui est encore rattachée. Un administrateur doit créer la fiche de votre officine (nom, adresse, horaires).
+    {% else %}
+    Pour protéger les patients, un administrateur vérifie chaque pharmacie avant qu'elle puisse recevoir des ordonnances. Vous recevrez l'accès dès que votre compte sera validé.
+    {% endif %}
+  </p>
+  <p class="note mt-4"><i aria-hidden="true" data-lucide="info" class="h-4 w-4"></i><span>Une question ? Contactez l'administrateur de MediConnect.</span></p>
+</section>
+{% endblock %}

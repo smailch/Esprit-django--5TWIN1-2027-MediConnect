@@ -1,0 +1,44 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}{% if ordonnance %}Modifier l'ordonnance{% else %}Rédiger une ordonnance{% endif %} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    {% if ordonnance %}
+    <a href="{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}" class="link text-sm">← Ordonnance {{ ordonnance.reference }}</a>
+    {% else %}
+    <a href="{% url 'pharmacies:ordonnances' %}" class="link text-sm">← Ordonnances</a>
+    {% endif %}
+    <h1 class="page-title mt-2">{% if ordonnance %}Modifier l'ordonnance{% else %}Rédiger une ordonnance{% endif %}</h1>
+    {% if consultation %}
+    <p class="muted mt-2 text-sm">Pour {{ consultation.patient }} · consultation du {{ consultation.date|date:"d/m/Y" }} avec {{ consultation.medecin_nom }}</p>
+    {% endif %}
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not ordonnance and consultation.prescription %}
+  <p class="note"><i aria-hidden="true" data-lucide="info" class="h-4 w-4"></i><span>La liste est préremplie avec la prescription du compte rendu : vérifiez-la, une ligne par médicament.</span></p>
+  {% endif %}
+
+  {% with field=form.medicaments %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.instructions %}{% include "core/_champ.html" %}{% endwith %}
+  <div class="grid gap-6 sm:grid-cols-2">
+    {% with field=form.date_emission %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.valide_jusqu_au %}{% include "core/_champ.html" %}{% endwith %}
+  </div>
+
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+    <a href="{% if ordonnance %}{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}{% else %}{% url 'pharmacies:ordonnances' %}{% endif %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+{% endblock %}
