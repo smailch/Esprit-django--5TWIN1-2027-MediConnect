@@ -8,9 +8,14 @@
     <p class="muted text-sm">Espace administrateur</p>
     <h1 class="page-title mt-1">Tableau de bord</h1>
   </div>
-  <a href="{% url 'backoffice:rendez_vous' %}" class="abtn abtn-primary">
-    <i aria-hidden="true" data-lucide="calendar-check" class="h-4 w-4"></i>Voir les rendez-vous
-  </a>
+  <div class="flex flex-wrap gap-3">
+    <a href="{% url 'infirmiers:alertes' %}" class="abtn abtn-outline">
+      <i aria-hidden="true" data-lucide="siren" class="h-4 w-4"></i>Alertes des soins à domicile
+    </a>
+    <a href="{% url 'backoffice:rendez_vous' %}" class="abtn abtn-primary">
+      <i aria-hidden="true" data-lucide="calendar-check" class="h-4 w-4"></i>Voir les rendez-vous
+    </a>
+  </div>
 </header>
 
 <section class="kpi-grid mt-8" aria-label="Chiffres clés">
