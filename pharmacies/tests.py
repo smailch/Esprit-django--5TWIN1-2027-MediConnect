@@ -624,3 +624,184 @@ class AdministrationEtDemoTests(SimpleTestCase):
         self.assertNotIn('set_password("', source)
         self.assertNotEqual(demo.PREFIXE, "demo_")  # la démo des patients ne supprime pas celle-ci
         self.assertEqual(len({statut for statut, *_ in demo.ORDONNANCES}), 3)  # trois statuts différents
+
+
+# --- Tableau de bord de la pharmacie -------------------------------------------------------------------------
+
+
+from core.views import ConnexionView  # noqa: E402
+
+from . import stats  # noqa: E402
+
+MAINTENANT = timezone.now()
+
+
+def une_ordonnance_recue(statut, il_y_a_jours=0, medicaments="Amoxicilline 1 g, 7 jours", patient_id=None, delivree_il_y_a=None):
+    """Ordonnance en mémoire telle que la pharmacie la reçoit (dates posées à la main)."""
+    o = une_ordonnance(statut=statut, medicaments=medicaments)
+    o.modifie_le = MAINTENANT - datetime.timedelta(days=il_y_a_jours)
+    o.delivree_le = MAINTENANT - datetime.timedelta(days=delivree_il_y_a) if delivree_il_y_a is not None else None
+    if patient_id is not None:
+        o.patient_id = patient_id
+    return o
+
+
+class StatistiquesPharmacieTests(SimpleTestCase):
+    def ordonnances(self):
+        p1, p2 = ObjectId(), ObjectId()
+        return [
+            une_ordonnance_recue(S.TRANSMISE, 2),
+            une_ordonnance_recue(S.TRANSMISE, 0),
+            une_ordonnance_recue(S.EN_PREPARATION, 1),
+            une_ordonnance_recue(S.PRETE, 5),
+            une_ordonnance_recue(S.PRETE, 1),
+            une_ordonnance_recue(S.DELIVREE, patient_id=p1, delivree_il_y_a=0, medicaments="Paracétamol 1 g\nAmoxicilline 500 mg"),
+            une_ordonnance_recue(S.DELIVREE, patient_id=p1, delivree_il_y_a=2),
+            une_ordonnance_recue(S.DELIVREE, patient_id=p2, delivree_il_y_a=40),
+            une_ordonnance_recue(S.ANNULEE, medicaments="Ibuprofène 400 mg"),
+        ]
+
+    def test_chiffres_cles(self):
+        k = stats.chiffres_cles(self.ordonnances(), aujourdhui=timezone.localdate())
+        self.assertEqual((k["a_preparer"], k["en_preparation"], k["pretes"]), (2, 1, 2))
+        self.assertEqual(k["delivrees_aujourdhui"], 1)
+        self.assertEqual(k["total"], 9)
+        self.assertEqual(k["patients_servis"], 2)  # deux patients différents, même si l'un est venu deux fois
+        self.assertEqual(k["taux_delivrance"], 75)  # 3 délivrées sur 4 terminées (1 annulée)
+
+    def test_pas_de_division_par_zero(self):
+        k = stats.chiffres_cles([])
+        self.assertIsNone(k["taux_delivrance"])
+        self.assertEqual(k["total"], 0)
+        self.assertTrue(all(b["pourcentage"] == 0 for b in stats.repartition_par_statut([])))
+
+    def test_repartition_relative_a_la_plus_grande_barre(self):
+        barres = {b["cle"]: b for b in stats.repartition_par_statut(self.ordonnances())}
+        self.assertEqual(barres[S.DELIVREE]["pourcentage"], 100)
+        self.assertEqual(barres[S.EN_PREPARATION]["pourcentage"], 33)
+        self.assertNotIn(S.EMISE, barres)  # une ordonnance émise n'a pas encore de pharmacie
+
+    def test_sept_derniers_jours_du_plus_ancien_au_plus_recent(self):
+        jours = stats.delivrees_par_jour(self.ordonnances(), aujourdhui=timezone.localdate())
+        self.assertEqual(len(jours), 7)
+        self.assertEqual(jours[-1]["cle"], timezone.localdate())
+        self.assertEqual(jours[-1]["nombre"], 1)
+        self.assertEqual(sum(j["nombre"] for j in jours), 2)  # celle d'il y a 40 jours est hors de la fenêtre
+
+    def test_nom_du_medicament(self):
+        self.assertEqual(stats.nom_du_medicament("amoxicilline 1 g, matin et soir"), "Amoxicilline")
+        self.assertEqual(stats.nom_du_medicament("Sérum physiologique, lavage"), "Sérum physiologique")
+        self.assertEqual(stats.nom_du_medicament("500 mg"), "")
+
+    def test_medicaments_frequents_hors_ordonnances_annulees(self):
+        frequents = {b["libelle"]: b["nombre"] for b in stats.medicaments_frequents(self.ordonnances())}
+        self.assertEqual(frequents["Amoxicilline"], 8)
+        self.assertEqual(frequents["Paracétamol"], 1)
+        self.assertNotIn("Ibuprofène", frequents)
+
+    def test_file_du_comptoir_la_plus_ancienne_d_abord(self):
+        file = stats.a_traiter(self.ordonnances())
+        self.assertEqual([o.statut for o in file], [S.TRANSMISE, S.EN_PREPARATION, S.TRANSMISE])
+        self.assertTrue(all(a.modifie_le <= b.modifie_le for a, b in zip(file, file[1:])))
+
+    def test_ordonnances_pretes_a_relancer(self):
+        relances = stats.a_relancer(self.ordonnances(), maintenant=MAINTENANT)
+        self.assertEqual(len(relances), 1)  # prête depuis 5 jours ; celle d'hier n'est pas encore à relancer
+
+
+class ConnexionPharmacieTests(SimpleTestCase):
+    def destination(self, **attributs):
+        vue = ConnexionView()
+        vue.request = RequestFactory().get("/comptes/connexion/")
+        vue.request.user = un_user(**attributs)
+        return vue.get_default_redirect_url()
+
+    def test_une_pharmacie_arrive_sur_son_tableau_de_bord(self):
+        self.assertEqual(self.destination(role="pharmacie"), "/pharmacies/tableau-de-bord/")
+        self.assertEqual(self.destination(role="pharmacie", est_valide=False), "/pharmacies/tableau-de-bord/")
+
+    def test_les_autres_roles_ne_changent_pas(self):
+        self.assertEqual(self.destination(role="patient"), "/patients/tableau-de-bord/")
+        self.assertEqual(self.destination(role="admin"), "/backoffice/")
+
+
+class TableauDeBordVueTests(SimpleTestCase):
+    def appeler(self, user, espace, fiche=None, ordonnances=()):
+        requete = RequestFactory().get("/pharmacies/tableau-de-bord/")
+        requete.user = user
+        with mock.patch.object(views, "espace_de", return_value=espace), \
+                mock.patch.object(views, "pharmacie_de", return_value=fiche), \
+                mock.patch.object(Ordonnance.objects, "filter") as filtre, \
+                mock.patch.object(views, "render") as rendre:
+            filtre.return_value.select_related.return_value = list(ordonnances)
+            views.tableau_de_bord(requete)
+        return rendre.call_args.args[1], rendre.call_args.args[2], filtre
+
+    def test_la_pharmacie_ne_voit_que_ses_ordonnances(self):
+        fiche = une_pharmacie()
+        gabarit, contexte, filtre = self.appeler(un_user(role="pharmacie"), PHARMACIE, fiche, [une_ordonnance_recue(S.TRANSMISE)])
+        self.assertEqual(gabarit, "pharmacies/tableau_de_bord.html")
+        filtre.assert_called_once_with(pharmacie=fiche)
+        self.assertEqual(contexte["kpis"]["a_preparer"], 1)
+        for cle in ("pharmacie", "a_traiter", "a_relancer", "repartition", "semaine", "frequents"):
+            self.assertIn(cle, contexte)
+
+    def test_compte_non_valide_ou_sans_fiche_explique_l_attente(self):
+        gabarit, contexte, _ = self.appeler(un_user(role="pharmacie", est_valide=False), "")
+        self.assertEqual(gabarit, "pharmacies/en_attente.html")
+        self.assertFalse(contexte["sans_fiche"])
+        _, contexte, _ = self.appeler(un_user(role="pharmacie"), "", fiche=None)
+        self.assertTrue(contexte["sans_fiche"])
+
+    def test_les_autres_comptes_sont_refuses(self):
+        for role, espace in (("patient", PATIENT), ("medecin", MEDECIN)):
+            with self.subTest(role=role), self.assertRaises(PermissionDenied):
+                self.appeler(un_user(role=role), espace)
+
+    def test_anonyme_renvoye_vers_la_connexion(self):
+        reponse = self.client.get("/pharmacies/tableau-de-bord/")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(reponse["Location"].startswith("/comptes/connexion/?next=/pharmacies/tableau-de-bord/"))
+
+
+class TableauDeBordPageTests(SimpleTestCase):
+    def requete(self, espace):
+        requete = RequestFactory().get("/pharmacies/tableau-de-bord/")
+        requete.user = SimpleNamespace(is_authenticated=True, first_name="Hela", username="h", get_full_name=lambda: "Hela B")
+        requete.espace = espace
+        requete.resolver_match = SimpleNamespace(url_name="tableau_de_bord")
+        return requete
+
+    def rendre(self, ordonnances):
+        fiche = une_pharmacie(de_garde=True, horaires="8 h – 20 h")
+        fiche.cree_le = MAINTENANT
+        return render_to_string("pharmacies/tableau_de_bord.html", {
+            "pharmacie": fiche,
+            "kpis": stats.chiffres_cles(ordonnances),
+            "a_traiter": stats.a_traiter(ordonnances),
+            "a_relancer": stats.a_relancer(ordonnances),
+            "repartition": stats.repartition_par_statut(ordonnances),
+            "semaine": stats.delivrees_par_jour(ordonnances),
+            "frequents": stats.medicaments_frequents(ordonnances),
+            "jours_relance": stats.JOURS_AVANT_RELANCE,
+        }, self.requete(PHARMACIE))
+
+    def test_informations_generales_et_chiffres(self):
+        html = self.rendre([une_ordonnance_recue(S.TRANSMISE, 1), une_ordonnance_recue(S.PRETE, 6)])
+        for texte in ("Pharmacie du Lac", "Informations générales", "8 h – 20 h", "À préparer", "Taux de délivrance",
+                      "Délivrées sur 7 jours", "Médicaments les plus demandés", "Amoxicilline"):
+            self.assertIn(texte, html)
+        self.assertIn("Pensez à rappeler le patient", html)
+        self.assertIn("?statut=transmise", html)  # chaque chiffre mène à la liste filtrée
+
+    def test_le_menu_marque_le_tableau_de_bord(self):
+        html = self.rendre([])
+        self.assertIn("Rien à préparer pour le moment", html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn("Tableau de bord</span>", html)
+
+    def test_pages_du_tableau_de_bord_accessibles(self):
+        self.assertEqual(verifier_html(self.rendre([une_ordonnance_recue(S.TRANSMISE), une_ordonnance_recue(S.PRETE, 6)])), [])
+        attente = render_to_string("pharmacies/en_attente.html", {"sans_fiche": False}, self.requete(""))
+        self.assertIn("En attente de validation", attente)
+        self.assertEqual(verifier_html(attente), [])

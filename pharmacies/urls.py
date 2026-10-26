@@ -7,6 +7,7 @@ app_name = "pharmacies"
 # Les adresses fixes (ma-pharmacie/, ordonnances/…) passent avant « <pk>/ », qui les capturerait sinon.
 urlpatterns = [
     path("", views.pharmacies, name="pharmacies"),
+    path("tableau-de-bord/", views.tableau_de_bord, name="tableau_de_bord"),
     path("nouvelle/", views.pharmacie_creer, name="pharmacie_creer"),
     path("ma-pharmacie/", views.ma_pharmacie, name="ma_pharmacie"),
     path("ordonnances/", views.ordonnances, name="ordonnances"),

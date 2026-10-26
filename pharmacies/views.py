@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -8,15 +9,45 @@ from django.views.decorators.http import require_POST
 from core.utils import objet_ou_404
 from patients.models import Allergie, Consultation
 
+from . import stats
 from .forms import FiltreOrdonnancesForm, FiltrePharmaciesForm, OrdonnanceForm, PharmacieForm, TransmissionForm
 from .models import Ordonnance, Pharmacie
-from .permissions import ADMIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_requis, patient_de, pharmacie_de
+from .permissions import ADMIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_de, espace_requis, patient_de, pharmacie_de
 
 PAR_PAGE = 12
 
 
 def _page(request, liste):
     return Paginator(liste, PAR_PAGE).get_page(request.GET.get("page"))
+
+
+# --- Tableau de bord de la pharmacie (page d'arrivée après la connexion) ---------------------------------------
+
+@login_required
+def tableau_de_bord(request):
+    """Informations générales et statistiques simples de la pharmacie connectée.
+
+    Un compte « pharmacie » pas encore validé (ou sans fiche) arrive aussi ici après la connexion : il voit une page
+    qui lui explique pourquoi il doit attendre, plutôt qu'une erreur 403."""
+    request.espace = espace_de(request.user)
+    if request.espace != PHARMACIE:
+        if getattr(request.user, "role", None) != PHARMACIE:
+            raise PermissionDenied("Cette page ne fait pas partie de votre espace.")
+        return render(request, "pharmacies/en_attente.html", {
+            "sans_fiche": request.user.est_valide and pharmacie_de(request.user) is None,
+        })
+    pharmacie = pharmacie_de(request.user)
+    ordonnances = list(Ordonnance.objects.filter(pharmacie=pharmacie).select_related("patient__user"))
+    return render(request, "pharmacies/tableau_de_bord.html", {
+        "pharmacie": pharmacie,
+        "kpis": stats.chiffres_cles(ordonnances),
+        "a_traiter": stats.a_traiter(ordonnances),
+        "a_relancer": stats.a_relancer(ordonnances),
+        "repartition": stats.repartition_par_statut(ordonnances),
+        "semaine": stats.delivrees_par_jour(ordonnances),
+        "frequents": stats.medicaments_frequents(ordonnances),
+        "jours_relance": stats.JOURS_AVANT_RELANCE,
+    })
 
 
 # --- Annuaire des pharmacies : liste, fiche, ajout, modification, suppression -------------------------

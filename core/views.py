@@ -30,6 +30,8 @@ class ConnexionView(LoginView):
             return reverse("backoffice:tableau_de_bord")
         if role == user.Role.PATIENT:
             return reverse("patients:tableau_de_bord")
+        if role == user.Role.PHARMACIE:  # validée ou non : le tableau de bord explique l'attente de validation
+            return reverse("pharmacies:tableau_de_bord")
         return reverse("home")
 
 
