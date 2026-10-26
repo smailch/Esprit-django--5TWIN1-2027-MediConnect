@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 
 from core.forms import StyledFormMixin
 
-from .models import Medicament, Ordonnance, Pharmacie
+from .models import Medicament, Ordonnance, Pharmacie, Remplacement
 
 User = get_user_model()
 
@@ -75,9 +75,11 @@ class RuptureForm(StyledFormMixin, forms.Form):
 
     medicament = forms.ChoiceField(label="Médicament en rupture")
     remplacant = forms.CharField(
-        label="Remplaçant retenu (facultatif)", required=False, max_length=100,
-        help_text="Choisissez une suggestion ou écrivez-le vous-même. Vérifiez le dosage et prévenez le patient.",
+        label="Remplaçant à proposer au patient", required=False, max_length=100,
+        help_text="Choisissez une suggestion ou écrivez-le vous-même. Le patient l'accepte ou le refuse ; vérifiez le dosage.",
     )
+    # D'où vient le remplaçant (stock, IA, table, saisie) : renseigné par la page quand on clique sur « Utiliser ».
+    source = forms.ChoiceField(choices=Remplacement.Source.choices, required=False, widget=forms.HiddenInput)
 
     def __init__(self, *args, lignes=(), **kwargs):
         super().__init__(*args, **kwargs)

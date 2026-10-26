@@ -16,6 +16,8 @@
   var erreur = formulaire.querySelector("[data-erreur]");
   var liste = formulaire.querySelector("[data-liste]");
   var remplacant = formulaire.querySelector("input[name='remplacant']");
+  var source = formulaire.querySelector("input[name='source']");  // stock, ia, local ou saisie : gardé dans la trace
+  remplacant.addEventListener("input", function () { source.value = "saisie"; });
   var jeton = formulaire.querySelector("input[name='csrfmiddlewaretoken']").value;
 
   function vider() {
@@ -54,6 +56,7 @@
       utiliser.appendChild(element("span", "sr-only", " " + s.nom));
       utiliser.addEventListener("click", function () {
         remplacant.value = s.nom;
+        source.value = s.source || "saisie";
         remplacant.focus();
       });
       ligne.appendChild(texte);

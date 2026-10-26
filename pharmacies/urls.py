@@ -26,6 +26,7 @@ urlpatterns = [
     path("ordonnances/<str:pk>/renvoyer/", views.ordonnance_renvoyer, name="ordonnance_renvoyer"),
     path("ordonnances/<str:pk>/demander-accord/", views.ordonnance_demander_accord, name="ordonnance_demander_accord"),
     path("ordonnances/<str:pk>/decision/", views.ordonnance_decision, name="ordonnance_decision"),
+    path("ordonnances/<str:pk>/remplacements/<str:remplacement_pk>/decision/", views.remplacement_decision, name="remplacement_decision"),
     path("ordonnances/<str:pk>/substitution/", views.ordonnance_substitution, name="ordonnance_substitution"),
     path("<str:pk>/", views.pharmacie_detail, name="pharmacie_detail"),
     path("<str:pk>/modifier/", views.pharmacie_modifier, name="pharmacie_modifier"),

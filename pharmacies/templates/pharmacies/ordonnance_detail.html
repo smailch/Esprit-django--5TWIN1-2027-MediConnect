@@ -36,6 +36,30 @@
 <p class="toast mt-6" role="status">Vos médicaments sont prêts : vous pouvez passer les retirer chez {{ o.pharmacie.nom }}.</p>
 {% endif %}
 
+{% if espace == "patient" %}
+{% for r in remplacements %}{% if r.statut == "propose" %}
+<section class="panel panel-pad mt-6 decision" aria-labelledby="titre-remplacement-{{ forloop.counter }}">
+  <h2 id="titre-remplacement-{{ forloop.counter }}" class="section-title">Votre pharmacie propose un remplaçant</h2>
+  <p class="mt-2 text-sm"><strong class="font-medium">{{ r.ligne_origine }}</strong> n'est pas disponible chez {{ o.pharmacie.nom }}.</p>
+  <p class="mt-1 text-sm">Elle vous propose à la place : <strong class="font-medium">{{ r.remplacant }}</strong>, avec le même dosage et la même façon de le prendre.</p>
+  {% if r.alerte_allergie %}
+  <p class="alert alert-warn mt-3" role="note">Ce médicament fait partie des {{ r.alerte_allergie }}, comme le médicament prescrit, alors que vous y êtes allergique : parlez-en au pharmacien avant d'accepter.</p>
+  {% endif %}
+  <div class="mt-4 flex flex-wrap gap-3">
+    <form method="post" action="{% url 'pharmacies:remplacement_decision' o.pk r.pk %}">
+      {% csrf_token %}<input type="hidden" name="action" value="accepter">
+      <button type="submit" class="abtn abtn-primary">Accepter {{ r.remplacant }}</button>
+    </form>
+    <form method="post" action="{% url 'pharmacies:remplacement_decision' o.pk r.pk %}">
+      {% csrf_token %}<input type="hidden" name="action" value="refuser">
+      <button type="submit" class="abtn abtn-outline">Refuser<span class="sr-only"> {{ r.remplacant }}</span></button>
+    </form>
+  </div>
+  <p class="muted mt-3 text-xs">Si vous refusez, votre ordonnance ne change pas : vous pourrez retirer ailleurs le médicament prescrit.</p>
+</section>
+{% endif %}{% endfor %}
+{% endif %}
+
 {% if decision %}
 <section class="panel panel-pad mt-6 decision" aria-labelledby="titre-decision">
   <h2 id="titre-decision" class="section-title">{{ o.pharmacie.nom }} n'a pas tous vos médicaments</h2>
@@ -157,6 +181,23 @@
     </section>
     {% endif %}
 
+    {% if remplacements %}
+    <section class="panel panel-pad" aria-labelledby="titre-remplacements">
+      <h2 id="titre-remplacements" class="section-title">Remplacements <span class="count">{{ remplacements|length }}</span></h2>
+      <ul class="mt-4 space-y-3">
+        {% for r in remplacements %}
+        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>
+            <strong class="font-medium">{{ r.remplacant }}</strong> à la place de {{ r.ligne_origine }}
+            <span class="muted block text-xs">Proposé le {{ r.propose_le|date:"d/m/Y H:i" }} · {{ r.get_source_display }}{% if r.decide_le %} · réponse le {{ r.decide_le|date:"d/m/Y H:i" }}{% endif %}{% if r.alerte_allergie %} · allergie : {{ r.alerte_allergie }}{% endif %}</span>
+          </span>
+          <span class="sev {% if r.statut == 'accepte' %}stk-ok{% elif r.statut == 'refuse' %}stk-inconnu{% else %}stk-bas{% endif %}">{{ r.get_statut_display }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
     {% if o.note_pharmacien %}
     <p class="alert alert-warn" role="note"><strong class="font-medium">Note de la pharmacie :</strong> {{ o.note_pharmacien }}</p>
     {% endif %}
@@ -180,8 +221,12 @@
         </div>
 
         {% with field=rupture.remplacant %}{% include "core/_champ.html" %}{% endwith %}
+        {{ rupture.source }}
 
-        <button type="submit" class="abtn abtn-primary">Signaler la rupture</button>
+        <div class="flex flex-wrap gap-3">
+          <button type="submit" name="action" value="proposer" class="abtn abtn-primary">Proposer ce remplaçant au patient</button>
+          <button type="submit" name="action" value="signaler" class="abtn abtn-ghost">Signaler la rupture sans remplaçant</button>
+        </div>
       </form>
     </section>
     {% endif %}
