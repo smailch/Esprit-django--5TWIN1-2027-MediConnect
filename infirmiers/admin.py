@@ -33,10 +33,29 @@ class InfirmierAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ("user",)
     inlines = [InterventionInline]
+    actions = ["valider_comptes", "retirer_validation"]
 
     @admin.display(boolean=True, description="Compte validé")
     def compte_valide(self, obj):
         return obj.user.est_valide
+
+    def _valider(self, request, queryset, valeur):
+        # Une requête par compte : MongoDB ne met pas à jour une collection en filtrant sur une autre.
+        nombre = 0
+        for infirmier in queryset.select_related("user"):
+            if infirmier.user.est_valide != valeur:
+                infirmier.user.est_valide = valeur
+                infirmier.user.save(update_fields=["est_valide"])
+                nombre += 1
+        return nombre
+
+    @admin.action(description="Valider les comptes sélectionnés (numéro d'Ordre vérifié)")
+    def valider_comptes(self, request, queryset):
+        self.message_user(request, f"{self._valider(request, queryset, True)} compte(s) validé(s).")
+
+    @admin.action(description="Retirer la validation des comptes sélectionnés")
+    def retirer_validation(self, request, queryset):
+        self.message_user(request, f"Validation retirée pour {self._valider(request, queryset, False)} compte(s).")
 
 
 @admin.register(InterventionDomicile)
