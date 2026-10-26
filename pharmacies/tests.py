@@ -599,11 +599,11 @@ class PagesTests(SimpleTestCase):
                 self.assertEqual(html.count('aria-current="page"'), 1)
 
     def test_l_administrateur_retrouve_le_menu_du_back_office(self):
-        for page, onglet in (("ordonnances", "/backoffice/pharmacies/ordonnances/"), ("pharmacies", "/backoffice/pharmacies/")):
+        for page in ("ordonnances", "pharmacies"):  # toutes les pages du module mettent « Pharmacies » en surbrillance
             html = render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(ADMIN, page))
             with self.subTest(page=page):
-                self.assertEqual(html.count('class="nav-item"'), 8)  # menu du back-office, module médecins compris
-                self.assertIn(f'href="{onglet}" class="nav-item" aria-current="page"', html)
+                self.assertEqual(html.count('class="nav-item"'), 7)  # menu du back-office, sans onglet « Ordonnances »
+                self.assertIn('href="/backoffice/pharmacies/" class="nav-item" aria-current="page"', html)
                 self.assertIn('href="/backoffice/rendez-vous/"', html)
                 self.assertNotIn('href="/pharmacies/', html)  # tous les liens restent dans le back-office
 
@@ -1982,7 +1982,7 @@ class MenusParRoleTests(SimpleTestCase):
             PATIENT: ["Tableau de bord", "Rendez-vous", "Mon dossier", "Mes ordonnances", "Mon profil"],
             PHARMACIE: ["Tableau de bord", "Ordonnances reçues", "Stock", "Ma pharmacie", "Annuaire"],
             MEDECIN: ["File d'attente", "Consultations", "Ordonnances", "Pharmacies", "Mon profil"],
-            ADMIN: ["Tableau de bord", "Rendez-vous", "File d'attente", "Patients", "Médecins", "Pharmacies", "Ordonnances", "Paramètres"],
+            ADMIN: ["Tableau de bord", "Rendez-vous", "File d'attente", "Patients", "Médecins", "Pharmacies", "Paramètres"],
         }
         for espace, onglets in attendus.items():
             menu = self.menu(espace)
