@@ -34,12 +34,9 @@
 <a href="{% url 'pharmacies:pharmacies' %}" class="nav-item" {% if page == 'pharmacies' or page == 'pharmacie_detail' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="map-pin" class="h-5 w-5"></i><span>Annuaire</span>
 </a>
+{% elif espace == "admin" %}
+{% include "backoffice/_nav.html" %}{# l'administrateur garde le menu du back-office #}
 {% else %}
-{% if espace == "admin" %}
-<a href="{% url 'backoffice:tableau_de_bord' %}" class="nav-item">
-  <i aria-hidden="true" data-lucide="layout-dashboard" class="h-5 w-5"></i><span>Administration</span>
-</a>
-{% endif %}
 <a href="{% url 'pharmacies:ordonnances' %}" class="nav-item" {% if 'ordonnance' in page %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Ordonnances</span>
 </a>
