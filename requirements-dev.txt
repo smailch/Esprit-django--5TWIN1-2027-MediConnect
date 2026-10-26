@@ -1,0 +1,3 @@
+# Outils de développement et de vérification (en plus de requirements.txt)
+-r requirements.txt
+coverage>=7.6  # rapport de couverture des tests : coverage run manage.py test && coverage report
