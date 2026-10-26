@@ -293,6 +293,26 @@ class DecorateurTests(SimpleTestCase):
     def test_l_espace_est_transmis_a_la_vue(self):
         self.assertEqual(self.appeler(un_user(is_staff=True), ADMIN, MEDECIN).espace, ADMIN)
 
+    def par_l_entree(self, user, entree, methode="get"):
+        @espace_requis(ADMIN, MEDECIN)
+        def vue(request):
+            return SimpleNamespace(espace=request.espace)
+
+        requete = getattr(RequestFactory(), methode)("/pharmacies/ordonnances/?statut=prete")
+        requete.user, requete.resolver_match = user, SimpleNamespace(namespace=entree)
+        return vue(requete)
+
+    def test_l_administrateur_est_ramene_dans_le_back_office(self):
+        reponse = self.par_l_entree(un_user(is_staff=True), "pharmacies")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse["Location"], "/backoffice/pharmacies/ordonnances/?statut=prete")  # filtres gardés
+        self.assertEqual(self.par_l_entree(un_user(is_staff=True), "backoffice_pharmacies").espace, ADMIN)
+
+    def test_l_entree_du_back_office_est_reservee_a_l_administrateur(self):
+        with self.assertRaises(PermissionDenied):
+            self.par_l_entree(un_user(role="medecin"), "backoffice_pharmacies")
+        self.assertEqual(self.par_l_entree(un_user(role="medecin"), "pharmacies").espace, MEDECIN)
+
 
 class UrlsTests(SimpleTestCase):
     def test_adresses(self):
@@ -310,8 +330,18 @@ class UrlsTests(SimpleTestCase):
         self.assertIs(resolve("/pharmacies/nouvelle/").func, views.pharmacie_creer)
         self.assertIs(resolve("/pharmacies/abc/").func, views.pharmacie_detail)
 
+    def test_entree_administrateur_dans_le_back_office(self):
+        self.assertEqual(reverse("backoffice_pharmacies:pharmacies"), "/backoffice/pharmacies/")
+        self.assertEqual(reverse("pharmacies:ordonnances", current_app="backoffice_pharmacies"), "/backoffice/pharmacies/ordonnances/")
+        self.assertEqual(reverse("pharmacies:ordonnances"), "/pharmacies/ordonnances/")  # entrée par défaut
+        correspondance = resolve("/backoffice/pharmacies/ordonnances/")
+        self.assertIs(correspondance.func, views.ordonnances)
+        self.assertEqual(correspondance.namespace, "backoffice_pharmacies")
+        self.assertEqual(resolve("/backoffice/patients/").url_name, "patients")  # le back-office n'est pas masqué
+
     def test_visiteur_anonyme_renvoye_vers_la_connexion(self):
-        for url in ("/pharmacies/", "/pharmacies/ordonnances/", "/pharmacies/ordonnances/abc/", "/pharmacies/abc/modifier/"):
+        for url in ("/pharmacies/", "/pharmacies/ordonnances/", "/pharmacies/ordonnances/abc/", "/pharmacies/abc/modifier/",
+                    "/backoffice/pharmacies/", "/backoffice/pharmacies/ordonnances/"):
             with self.subTest(url=url):
                 reponse = self.client.get(url)
                 self.assertEqual(reponse.status_code, 302)
@@ -504,7 +534,8 @@ class PagesTests(SimpleTestCase):
         requete = RequestFactory().get("/pharmacies/")
         requete.user = SimpleNamespace(is_authenticated=True, first_name="Hela", username="h", get_full_name=lambda: "Hela B")
         requete.espace = espace
-        requete.resolver_match = SimpleNamespace(url_name=page, namespace="pharmacies")
+        # l'administrateur passe par l'entrée du back-office, les autres comptes par /pharmacies/
+        requete.resolver_match = SimpleNamespace(url_name=page, namespace="backoffice_pharmacies" if espace == ADMIN else "pharmacies")
         return requete
 
     def detail(self, espace, **kw):
@@ -564,12 +595,21 @@ class PagesTests(SimpleTestCase):
                 self.assertEqual(html.count('aria-current="page"'), 1)
 
     def test_l_administrateur_retrouve_le_menu_du_back_office(self):
-        for page, onglet in (("ordonnances", "/pharmacies/ordonnances/"), ("pharmacies", "/pharmacies/")):
+        for page, onglet in (("ordonnances", "/backoffice/pharmacies/ordonnances/"), ("pharmacies", "/backoffice/pharmacies/")):
             html = render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(ADMIN, page))
             with self.subTest(page=page):
                 self.assertEqual(html.count('class="nav-item"'), 7)
                 self.assertIn(f'href="{onglet}" class="nav-item" aria-current="page"', html)
                 self.assertIn('href="/backoffice/rendez-vous/"', html)
+                self.assertNotIn('href="/pharmacies/', html)  # tous les liens restent dans le back-office
+
+    def test_aucun_commentaire_de_gabarit_affiche(self):
+        """Un commentaire {# … #} sur plusieurs lignes s'afficherait tel quel dans la page."""
+        for espace in (ADMIN, MEDECIN, PHARMACIE, PATIENT):
+            html = render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(espace))
+            with self.subTest(espace=espace):
+                self.assertNotIn("{#", html)
+                self.assertNotIn("#}", html)
 
     def test_le_prescripteur_voit_les_consultations_a_traiter(self):
         consultation = Consultation(patient=un_patient(), medecin_nom="Dr X", resume="…", date=timezone.now())

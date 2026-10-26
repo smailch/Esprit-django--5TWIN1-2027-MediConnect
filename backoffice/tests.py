@@ -271,8 +271,9 @@ class GabaritsTests(SimpleTestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         for lien in ("/backoffice/rendez-vous/", "/backoffice/file-attente/", "/backoffice/patients/", "/backoffice/parametres/"):
             self.assertIn(f'href="{lien}"', html)
-        self.assertIn('href="/pharmacies/"', html)  # module pharmacies (pharmacies et ordonnances)
-        self.assertIn('href="/pharmacies/ordonnances/"', html)
+        self.assertIn('href="/backoffice/pharmacies/"', html)  # module pharmacies (pharmacies et ordonnances)
+        self.assertIn('href="/backoffice/pharmacies/ordonnances/"', html)
+        self.assertNotIn("{#", html)  # aucun commentaire de gabarit affiché
         self.assertEqual(html.count('class="nav-item"'), 7)  # sur mobile, la barre défile (voir .rail-nav dans app.css)
 
     def test_les_tableaux_ont_des_en_tetes_accessibles(self):

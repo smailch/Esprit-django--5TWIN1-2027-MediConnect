@@ -4,6 +4,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
@@ -19,6 +20,12 @@ PAR_PAGE = 12
 
 def _page(request, liste):
     return Paginator(liste, PAR_PAGE).get_page(request.GET.get("page"))
+
+
+def _redirection(request, nom, *args):
+    """Redirige en restant dans la même entrée du module : /pharmacies/ ou /backoffice/pharmacies/ (administrateur)."""
+    entree = getattr(getattr(request, "resolver_match", None), "namespace", None)
+    return redirect(reverse(f"pharmacies:{nom}", args=args, current_app=entree))
 
 
 # --- Tableau de bord de la pharmacie (page d'arrivée après la connexion) ---------------------------------------
@@ -100,7 +107,7 @@ def pharmacie_creer(request):
     if request.method == "POST" and form.is_valid():
         pharmacie = form.save()
         messages.success(request, f"La pharmacie « {pharmacie.nom} » a été ajoutée.")
-        return redirect("pharmacies:pharmacie_detail", pk=pharmacie.pk)
+        return _redirection(request, "pharmacie_detail", pharmacie.pk)
     return render(request, "pharmacies/pharmacie_form.html", {"form": form, "pharmacie": None})
 
 
@@ -115,7 +122,7 @@ def pharmacie_modifier(request, pk):
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "La fiche de la pharmacie a été mise à jour.")
-        return redirect("pharmacies:pharmacie_detail", pk=pharmacie.pk)
+        return _redirection(request, "pharmacie_detail", pharmacie.pk)
     return render(request, "pharmacies/pharmacie_form.html", {"form": form, "pharmacie": pharmacie})
 
 
@@ -128,11 +135,11 @@ def pharmacie_supprimer(request, pk):
     if request.method == "POST":
         if en_cours:
             messages.error(request, f"Impossible : {en_cours} ordonnance(s) sont encore en cours dans cette pharmacie.")
-            return redirect("pharmacies:pharmacie_detail", pk=pharmacie.pk)
+            return _redirection(request, "pharmacie_detail", pharmacie.pk)
         nom = pharmacie.nom
         pharmacie.delete()
         messages.success(request, f"La pharmacie « {nom} » a été supprimée.")
-        return redirect("pharmacies:pharmacies")
+        return _redirection(request, "pharmacies")
     return render(request, "pharmacies/pharmacie_supprimer.html", {"pharmacie": pharmacie, "en_cours": en_cours})
 
 
@@ -198,7 +205,7 @@ def ordonnance_creer(request, consultation_pk):
         if form.is_valid():
             ordonnance = form.save()
             messages.success(request, f"L'ordonnance {ordonnance.reference} a été créée. Le patient peut la transmettre à sa pharmacie.")
-            return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+            return _redirection(request, "ordonnance_detail", ordonnance.pk)
     else:
         form = OrdonnanceForm(instance=ordonnance, initial={"medicaments": consultation.prescription})  # prérempli
     return render(request, "pharmacies/ordonnance_form.html", {"form": form, "ordonnance": None, "consultation": consultation})
@@ -209,12 +216,12 @@ def ordonnance_modifier(request, pk):
     ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
     if not ordonnance.est_modifiable:
         messages.error(request, "La pharmacie a commencé la préparation : l'ordonnance ne peut plus être modifiée.")
-        return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
     form = OrdonnanceForm(request.POST if request.method == "POST" else None, instance=ordonnance)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "L'ordonnance a été mise à jour.")
-        return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
     return render(request, "pharmacies/ordonnance_form.html", {
         "form": form, "ordonnance": ordonnance, "consultation": ordonnance.consultation,
     })
@@ -226,12 +233,12 @@ def ordonnance_supprimer(request, pk):
     ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
     if not ordonnance.est_supprimable:
         messages.error(request, "Une ordonnance préparée ou délivrée est conservée : annulez-la plutôt.")
-        return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
     if request.method == "POST":
         reference = ordonnance.reference
         ordonnance.delete()
         messages.success(request, f"L'ordonnance {reference} a été supprimée.")
-        return redirect("pharmacies:ordonnances")
+        return _redirection(request, "ordonnances")
     return render(request, "pharmacies/ordonnance_supprimer.html", {"ordonnance": ordonnance})
 
 
@@ -243,7 +250,7 @@ def ordonnance_annuler(request, pk):
         ordonnance.statut = Ordonnance.Statut.ANNULEE
         ordonnance.save(update_fields=["statut", "modifie_le"])
         messages.success(request, "L'ordonnance est annulée : la pharmacie ne la délivrera pas.")
-    return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+    return _redirection(request, "ordonnance_detail", ordonnance.pk)
 
 
 @espace_requis(PATIENT)
@@ -252,7 +259,7 @@ def ordonnance_transmettre(request, pk):
     ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
     if not ordonnance.est_transmissible:
         messages.error(request, "Cette ordonnance ne peut plus être envoyée à une pharmacie.")
-        return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
     form = TransmissionForm(
         request.POST if request.method == "POST" else None,
         initial={"pharmacie": ordonnance.pharmacie_id},
@@ -262,7 +269,7 @@ def ordonnance_transmettre(request, pk):
         ordonnance.statut = Ordonnance.Statut.TRANSMISE
         ordonnance.save(update_fields=["pharmacie", "statut", "modifie_le"])
         messages.success(request, f"Votre ordonnance a été envoyée à {ordonnance.pharmacie.nom}.")
-        return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
     return render(request, "pharmacies/ordonnance_transmettre.html", {"form": form, "ordonnance": ordonnance})
 
 
@@ -277,4 +284,4 @@ def ordonnance_avancer(request, pk):
         messages.error(request, str(erreur))
     else:
         messages.success(request, f"Ordonnance {ordonnance.reference} : {Ordonnance.Statut(nouveau).label.lower()}.")
-    return redirect("pharmacies:ordonnance_detail", pk=ordonnance.pk)
+    return _redirection(request, "ordonnance_detail", ordonnance.pk)

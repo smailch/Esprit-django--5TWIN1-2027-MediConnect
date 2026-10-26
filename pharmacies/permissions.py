@@ -7,10 +7,12 @@ from functools import wraps
 
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.shortcuts import redirect
 
 from backoffice.permissions import est_administrateur
 
 ADMIN, MEDECIN, PHARMACIE, PATIENT = "admin", "medecin", "pharmacie", "patient"
+ENTREE_ADMIN = "backoffice_pharmacies"  # espace de noms du module monté dans le back-office (mediconnect/urls.py)
 PRESCRIPTEURS = (ADMIN, MEDECIN)
 TOUS = (ADMIN, MEDECIN, PHARMACIE, PATIENT)
 
@@ -59,6 +61,12 @@ def espace_requis(*autorises):
             if espace not in autorises:
                 en_attente = getattr(request.user, "role", None) == PHARMACIE and not request.user.est_valide
                 raise PermissionDenied(MESSAGE_EN_ATTENTE if en_attente else "Cette page ne fait pas partie de votre espace.")
+            # L'administrateur travaille dans le back-office (/backoffice/pharmacies/), les autres comptes sous /pharmacies/.
+            entree = getattr(getattr(request, "resolver_match", None), "namespace", None)
+            if entree == ENTREE_ADMIN and espace != ADMIN:
+                raise PermissionDenied("Espace réservé aux administrateurs.")
+            if entree == "pharmacies" and espace == ADMIN and request.method in ("GET", "HEAD"):
+                return redirect("/backoffice" + request.get_full_path())
             request.espace = espace
             return vue(request, *args, **kwargs)
 
