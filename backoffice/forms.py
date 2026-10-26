@@ -231,3 +231,75 @@ class FiltreMedecinForm(forms.Form):
         if not self.is_valid():
             return {}
         return {nom: str(valeur).strip() for nom, valeur in self.cleaned_data.items() if valeur not in (None, "")}
+
+
+class FiltreCompteForm(forms.Form):
+    """Recherche et filtres de la page « Comptes » (tous les utilisateurs, tous rôles confondus)."""
+
+    STATUTS = (("", "Tous"), ("a_valider", "À valider"), ("actif", "Actifs"), ("desactive", "Désactivés"))
+
+    q = forms.CharField(label="Identifiant, nom ou e-mail", required=False, max_length=100)
+    role = forms.ChoiceField(label="Rôle", required=False)
+    statut = forms.ChoiceField(label="Statut", required=False, choices=STATUTS)
+
+    def __init__(self, *args, **kwargs):
+        from core.models import User
+
+        super().__init__(*args, **kwargs)
+        self.fields["role"].choices = [("", "Tous")] + [(v, l) for v, l in User.Role.choices if v != User.Role.LABORATOIRE]
+        for champ in self.fields.values():
+            champ.widget.attrs["class"] = "field"
+
+    def appliquer(self, comptes):
+        from core.models import User
+
+        d = self.cleaned_data
+        q = (d.get("q") or "").strip()
+        if q:
+            comptes = comptes.filter(
+                Q(username__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(email__icontains=q)
+            )
+        if d.get("role"):
+            comptes = comptes.filter(role=d["role"])
+        statut = d.get("statut")
+        if statut == "a_valider":
+            comptes = comptes.filter(est_valide=False, is_active=True, role__in=PROFESSIONNELS)
+        elif statut == "actif":
+            comptes = comptes.filter(is_active=True)
+        elif statut == "desactive":
+            comptes = comptes.filter(is_active=False)
+        return comptes
+
+    def parametres(self):
+        if not self.is_bound or not self.is_valid():
+            return {}
+        return {k: v for k, v in self.cleaned_data.items() if v}
+
+
+class FiltreJournalForm(forms.Form):
+    q = forms.CharField(label="Identifiant", required=False, max_length=150)
+    evenement = forms.ChoiceField(label="Événement", required=False)
+
+    def __init__(self, *args, **kwargs):
+        from core.models import JournalConnexion
+
+        super().__init__(*args, **kwargs)
+        self.fields["evenement"].choices = [("", "Tous")] + list(JournalConnexion.Evenement.choices)
+        for champ in self.fields.values():
+            champ.widget.attrs["class"] = "field"
+
+    def appliquer(self, entrees):
+        d = self.cleaned_data
+        if (d.get("q") or "").strip():
+            entrees = entrees.filter(identifiant__icontains=d["q"].strip())
+        if d.get("evenement"):
+            entrees = entrees.filter(evenement=d["evenement"])
+        return entrees
+
+    def parametres(self):
+        if not self.is_bound or not self.is_valid():
+            return {}
+        return {k: v for k, v in self.cleaned_data.items() if v}
+
+
+PROFESSIONNELS = ("medecin", "infirmier", "pharmacie")

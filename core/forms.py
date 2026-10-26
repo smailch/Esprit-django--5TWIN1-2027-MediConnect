@@ -2,6 +2,9 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, PasswordResetForm, SetPasswordForm
 
+from . import securite
+from .models import JournalConnexion
+
 INPUT_CLASSES = "field"  # style « verre » défini dans static/css/ui.css
 
 
@@ -34,6 +37,15 @@ class ConnexionForm(StyledFormMixin, AuthenticationForm):
         self.fields["password"].label = "Mot de passe"
         self._style_fields()
         self._autocompleter(username="username", password="current-password")
+
+    def clean(self):
+        """Refuse la connexion pendant le blocage qui suit trop d'échecs (voir core/securite.py), avant même de
+        vérifier le mot de passe : un attaquant ne peut plus deviner pendant ce temps."""
+        identifiant = self.cleaned_data.get("username")
+        if identifiant and securite.est_bloque(identifiant, securite.adresse_ip(self.request)):
+            securite.consigner(JournalConnexion.Evenement.BLOCAGE, self.request, identifiant=identifiant)
+            raise forms.ValidationError(securite.message_blocage(), code="bloque")
+        return super().clean()
 
 
 def email_deja_utilise(email, exclure_pk=None):
