@@ -14,7 +14,7 @@ from django.utils import timezone
 from core.utils import objet_ou_404
 from patients.models import Patient
 
-from . import notifications
+from . import notifications, prescriptions
 from .forms import AnnulationForm, DemandeSoinForm
 from .models import Infirmier, InterventionDomicile
 
@@ -33,6 +33,19 @@ def _ma_demande(request, pk):
     return objet_ou_404(InterventionDomicile.objects.select_related("infirmier__user", "consultation"), pk=pk, patient=patient)
 
 
+def _prescription_du_patient(pk, patient):
+    """La prescription de soin demandée dans l'adresse, si elle appartient bien à ce patient (sinon rien)."""
+    if not pk:
+        return None
+    from medecins.models import Prescription
+
+    try:
+        prescription = Prescription.objects.select_related("consultation").get(pk=pk, type=Prescription.Type.SOIN)
+    except (Prescription.DoesNotExist, ValidationError):
+        return None
+    return prescription if prescription.consultation.patient_id == patient.pk else None
+
+
 def infirmiers_disponibles(intervention):
     """Infirmiers validés et disponibles qui peuvent accepter cette demande (zone et soin)."""
     return [
@@ -47,13 +60,16 @@ def soins(request):
     toutes = list(InterventionDomicile.objects.filter(patient=patient).select_related("infirmier__user"))
     en_cours = sorted((i for i in toutes if i.est_modifiable), key=lambda i: (i.date_prevue is None, i.date_prevue or i.cree_le))
     closes = sorted((i for i in toutes if not i.est_modifiable), key=lambda i: i.modifie_le, reverse=True)
-    return render(request, "infirmiers/patient/soins.html", {"en_cours": en_cours, "closes": closes})
+    prescrits = [p for p in prescriptions.soins_prescrits(patient) if p["demande"] is None]
+    return render(request, "infirmiers/patient/soins.html", {"en_cours": en_cours, "closes": closes, "prescrits": prescrits})
 
 
 @login_required
 def soin_demander(request):
     patient = _patient_connecte(request)
-    form = DemandeSoinForm(request.POST if request.method == "POST" else None, patient=patient)
+    prescription = _prescription_du_patient(request.GET.get("prescription"), patient) if request.method == "GET" else None
+    initial = prescriptions.valeurs_initiales(prescription) if prescription else None
+    form = DemandeSoinForm(request.POST if request.method == "POST" else None, patient=patient, initial=initial)
     if request.method == "POST" and form.is_valid():
         demande = form.save()
         nombre = len(infirmiers_disponibles(demande))
@@ -66,7 +82,7 @@ def soin_demander(request):
         else:
             messages.warning(request, f"{quoi} est enregistrée, mais aucun infirmier ne se déplace encore à {demande.ville} pour ce soin.")
         return redirect("infirmiers:soin", pk=demande.pk)
-    return render(request, "infirmiers/patient/soin_form.html", {"form": form, "demande": None})
+    return render(request, "infirmiers/patient/soin_form.html", {"form": form, "demande": None, "prescription": prescription})
 
 
 @login_required

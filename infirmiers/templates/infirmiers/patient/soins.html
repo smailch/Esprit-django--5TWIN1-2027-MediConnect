@@ -13,6 +13,25 @@
   </a>
 </header>
 
+{% if prescrits %}
+<section class="panel mt-8" aria-labelledby="titre-prescrits">
+  <h2 id="titre-prescrits" class="section-title px-5 pt-5">Soins prescrits par votre médecin <span class="count">{{ prescrits|length }}</span></h2>
+  <p class="muted px-5 pt-1 text-sm">Votre médecin vous a prescrit des soins infirmiers à domicile. Demandez-les ici : le formulaire est déjà rempli, il ne vous reste qu'à vérifier l'adresse et la date.</p>
+  <ul class="mt-2">
+    {% for p in prescrits %}
+    <li class="item-row">
+      <div>
+        <p class="item-name">{{ p.prescription.contenu|truncatechars:140 }}</p>
+        <p class="muted mt-1 text-sm">{{ p.consultation.medecin_nom }} · consultation du {{ p.consultation.date|date:"d/m/Y" }}</p>
+      </div>
+      <a href="{% url 'infirmiers:soin_demander' %}?prescription={{ p.prescription.pk }}" class="abtn abtn-primary">Demander ce soin<span class="sr-only"> : {{ p.prescription.contenu|truncatechars:60 }}</span></a>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="pb-3"></div>
+</section>
+{% endif %}
+
 <div class="mt-10 grid gap-10 lg:grid-cols-12 lg:items-start">
   <section class="lg:col-span-8" aria-labelledby="titre-en-cours">
     <h2 id="titre-en-cours" class="section-title">En cours <span class="count">{{ en_cours|length }}</span></h2>
