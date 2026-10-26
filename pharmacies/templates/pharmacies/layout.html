@@ -8,17 +8,21 @@
 {% block nav %}
 {% with page=request.resolver_match.url_name espace=request.espace %}
 {% if espace == "patient" %}
+{# Mêmes onglets que l'espace patient (patients/layout.html), plus « Mes ordonnances » : le patient garde ses repères. #}
 <a href="{% url 'patients:tableau_de_bord' %}" class="nav-item">
   <i aria-hidden="true" data-lucide="layout-dashboard" class="h-5 w-5"></i><span>Tableau de bord</span>
 </a>
-<a href="{% url 'pharmacies:ordonnances' %}" class="nav-item" {% if 'ordonnance' in page %}aria-current="page"{% endif %}>
-  <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Mes ordonnances</span>
-</a>
-<a href="{% url 'pharmacies:pharmacies' %}" class="nav-item" {% if page == 'pharmacies' or page == 'pharmacie_detail' %}aria-current="page"{% endif %}>
-  <i aria-hidden="true" data-lucide="map-pin" class="h-5 w-5"></i><span>Pharmacies</span>
+<a href="{% url 'patients:medecins' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="calendar-plus" class="h-5 w-5"></i><span>Rendez-vous</span>
 </a>
 <a href="{% url 'patients:dossier' %}" class="nav-item">
   <i aria-hidden="true" data-lucide="clipboard-list" class="h-5 w-5"></i><span>Mon dossier</span>
+</a>
+<a href="{% url 'pharmacies:ordonnances' %}" class="nav-item" aria-current="page">
+  <i aria-hidden="true" data-lucide="file-text" class="h-5 w-5"></i><span>Mes ordonnances</span>
+</a>
+<a href="{% url 'patients:profil' %}" class="nav-item">
+  <i aria-hidden="true" data-lucide="user" class="h-5 w-5"></i><span>Mon profil</span>
 </a>
 {% elif espace == "pharmacie" %}
 <a href="{% url 'pharmacies:tableau_de_bord' %}" class="nav-item" {% if page == 'tableau_de_bord' %}aria-current="page"{% endif %}>

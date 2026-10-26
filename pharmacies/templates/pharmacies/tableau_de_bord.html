@@ -3,29 +3,30 @@
 {% block title %}Tableau de bord — {{ pharmacie.nom }} — MediConnect{% endblock %}
 
 {% block page %}
+{# En-tête : la pharmacie et ses informations générales, sur une ligne #}
 <header class="page-head">
   <div>
-    <p class="muted text-sm">Espace pharmacie</p>
+    {% include "pharmacies/_surtitre.html" %}
     <h1 class="page-title mt-1">{{ pharmacie.nom }}</h1>
-    <p class="muted mt-2 text-sm">{{ pharmacie.adresse }}, {{ pharmacie.ville }}{% if pharmacie.de_garde %} · <span class="sev sev-info">De garde</span>{% endif %}</p>
+    <p class="infos-ligne mt-3" aria-label="Informations générales">
+      <span><i aria-hidden="true" data-lucide="map-pin" class="h-4 w-4"></i>{{ pharmacie.adresse }}, {{ pharmacie.ville }}</span>
+      <span><i aria-hidden="true" data-lucide="phone" class="h-4 w-4"></i>{{ pharmacie.telephone }}</span>
+      <span><i aria-hidden="true" data-lucide="clock" class="h-4 w-4"></i>{{ pharmacie.horaires|default:"Horaires non renseignés" }}</span>
+      {% if pharmacie.de_garde %}<span class="sev sev-info">De garde</span>{% endif %}
+    </p>
   </div>
-  <a href="{% url 'pharmacies:ordonnances' %}" class="abtn abtn-primary">
-    <i aria-hidden="true" data-lucide="inbox" class="h-4 w-4"></i>Ordonnances reçues
-  </a>
+  <div class="item-actions">
+    <a href="{% url 'pharmacies:pharmacie_modifier' pharmacie.pk %}" class="abtn abtn-outline">Modifier la fiche</a>
+    <a href="{% url 'pharmacies:ordonnances' %}" class="abtn abtn-primary"><i aria-hidden="true" data-lucide="inbox" class="h-4 w-4"></i>Ordonnances reçues</a>
+  </div>
 </header>
 
+{# Aujourd'hui : ce qui attend la pharmacie (chaque chiffre mène à la liste filtrée) #}
 <section class="kpi-grid mt-8" aria-label="Ordonnances en cours">
   <a href="{% url 'pharmacies:ordonnances' %}?statut=transmise" class="panel kpi kpi-link {% if kpis.a_preparer %}kpi-warn{% endif %}"><p class="kpi-num">{{ kpis.a_preparer }}</p><p class="kpi-label">À préparer</p></a>
   <a href="{% url 'pharmacies:ordonnances' %}?statut=en_preparation" class="panel kpi kpi-link"><p class="kpi-num">{{ kpis.en_preparation }}</p><p class="kpi-label">En préparation</p></a>
   <a href="{% url 'pharmacies:ordonnances' %}?statut=prete" class="panel kpi kpi-link"><p class="kpi-num">{{ kpis.pretes }}</p><p class="kpi-label">Prêtes à retirer</p></a>
   <div class="panel kpi"><p class="kpi-num">{{ kpis.delivrees_aujourdhui }}</p><p class="kpi-label">Délivrées aujourd'hui</p></div>
-</section>
-
-<section class="kpi-grid mt-4" aria-label="Activité">
-  <div class="panel kpi"><p class="kpi-num">{{ kpis.delivrees_mois }}</p><p class="kpi-label">Délivrées ce mois-ci</p></div>
-  <div class="panel kpi"><p class="kpi-num">{{ kpis.total }}</p><p class="kpi-label">Ordonnances reçues au total</p></div>
-  <div class="panel kpi"><p class="kpi-num">{{ kpis.patients_servis }}</p><p class="kpi-label">Patients servis</p></div>
-  <div class="panel kpi"><p class="kpi-num">{% if kpis.taux_delivrance is None %}—{% else %}{{ kpis.taux_delivrance }} %{% endif %}</p><p class="kpi-label">Taux de délivrance</p></div>
 </section>
 
 {% if a_relancer %}
@@ -36,7 +37,8 @@
 </p>
 {% endif %}
 
-<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+{# Le travail du jour : à gauche les ordonnances, à droite le stock #}
+<div class="mt-6 grid gap-6 lg:grid-cols-12 lg:items-start">
   <section class="panel lg:col-span-7" aria-labelledby="titre-a-traiter">
     <div class="flex items-center justify-between gap-3 px-5 pt-5">
       <h2 id="titre-a-traiter" class="section-title">À traiter <span class="count">{{ a_traiter|length }}</span></h2>
@@ -61,46 +63,42 @@
     {% endif %}
   </section>
 
-  <section class="panel panel-pad lg:col-span-5" aria-labelledby="titre-infos">
-    <h2 id="titre-infos" class="section-title">Informations générales</h2>
-    <dl class="dl mt-4">
-      <div><dt>Téléphone</dt><dd>{{ pharmacie.telephone }}</dd></div>
-      <div><dt>Garde</dt><dd>{% if pharmacie.de_garde %}Oui{% else %}Non{% endif %}</dd></div>
-      <div class="wide"><dt>Horaires</dt><dd>{{ pharmacie.horaires|default:"Non renseignés" }}</dd></div>
-      <div class="wide"><dt>Compte</dt><dd>{{ user.username }} · <span class="sev sev-legere">Validé</span></dd></div>
-      <div class="wide"><dt>Inscrite le</dt><dd>{{ pharmacie.cree_le|date:"d/m/Y" }}</dd></div>
-    </dl>
-    <a href="{% url 'pharmacies:pharmacie_modifier' pharmacie.pk %}" class="abtn abtn-outline mt-5">Modifier la fiche</a>
+  <section class="panel lg:col-span-5" aria-labelledby="titre-stock">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
+      <h2 id="titre-stock" class="section-title">Stock à surveiller</h2>
+      <a href="{% url 'pharmacies:stock' %}" class="link text-sm">Gérer le stock</a>
+    </div>
+    <p class="muted px-5 text-sm">
+      {{ stock.references }} médicament{{ stock.references|pluralize }} référencé{{ stock.references|pluralize }} ·
+      <a class="link" href="{% url 'pharmacies:stock' %}?etat=rupture">{{ stock.rupture }} en rupture</a> ·
+      <a class="link" href="{% url 'pharmacies:stock' %}?etat=bas">{{ stock.bas }} en stock bas</a>
+    </p>
+    {% if stock.a_commander %}
+    <ul class="mt-2">
+      {% for m in stock.a_commander %}
+      <li class="item-row">
+        <span><strong class="font-medium">{{ m }}</strong><span class="muted block text-xs">{{ m.quantite }} boîte{{ m.quantite|pluralize }} · alerte à {{ m.seuil_alerte }}</span></span>
+        <span class="sev stk-{{ m.etat }}">{{ m.libelle_etat }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted px-5 pb-5 pt-3 text-sm">{% if stock.references %}Rien à commander : tout le stock est au-dessus des seuils d'alerte.{% else %}Votre stock est vide : <a class="link" href="{% url 'pharmacies:stock_creer' %}">ajoutez vos médicaments</a>.{% endif %}</p>
+    {% endif %}
   </section>
 </div>
 
-<section class="panel mt-6" aria-labelledby="titre-stock">
-  <div class="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
-    <h2 id="titre-stock" class="section-title">Stock à surveiller</h2>
-    <a href="{% url 'pharmacies:stock' %}" class="link text-sm">Gérer le stock</a>
-  </div>
-  <p class="muted px-5 text-sm">
-    {{ stock.references }} médicament{{ stock.references|pluralize }} référencé{{ stock.references|pluralize }} ·
-    <a class="link" href="{% url 'pharmacies:stock' %}?etat=rupture">{{ stock.rupture }} en rupture</a> ·
-    <a class="link" href="{% url 'pharmacies:stock' %}?etat=bas">{{ stock.bas }} en stock bas</a>
-  </p>
-  {% if stock.a_commander %}
-  <ul class="mt-2">
-    {% for m in stock.a_commander %}
-    <li class="item-row">
-      <span><strong class="font-medium">{{ m }}</strong><span class="muted"> · {{ m.quantite }} boîte{{ m.quantite|pluralize }} (alerte à {{ m.seuil_alerte }})</span></span>
-      <span class="sev stk-{{ m.etat }}">{{ m.libelle_etat }}</span>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="muted px-5 pb-5 pt-3 text-sm">{% if stock.references %}Rien à commander : tout le stock est au-dessus des seuils d'alerte.{% else %}Votre stock est vide : <a class="link" href="{% url 'pharmacies:stock_creer' %}">ajoutez vos médicaments</a>.{% endif %}</p>
-  {% endif %}
-</section>
-
-<div class="mt-6 grid gap-6 lg:grid-cols-3 lg:items-start">
-  <section class="panel panel-pad" aria-labelledby="titre-repartition">
-    <h2 id="titre-repartition" class="section-title">Par statut</h2>
+{# Statistiques : l'activité en chiffres, puis trois graphiques simples #}
+<div class="mt-6 grid gap-6 md:grid-cols-2 lg:items-start">
+  <section class="panel panel-pad" aria-labelledby="titre-activite">
+    <h2 id="titre-activite" class="section-title">Activité</h2>
+    <dl class="stat-grid stat-grid-2 mt-4">
+      <div class="stat"><dt>Délivrées ce mois-ci</dt><dd>{{ kpis.delivrees_mois }}</dd></div>
+      <div class="stat"><dt>Reçues au total</dt><dd>{{ kpis.total }}</dd></div>
+      <div class="stat"><dt>Patients servis</dt><dd>{{ kpis.patients_servis }}</dd></div>
+      <div class="stat"><dt>Taux de délivrance</dt><dd>{% if kpis.taux_delivrance is None %}—{% else %}{{ kpis.taux_delivrance }} %{% endif %}</dd></div>
+    </dl>
+    <h3 class="mt-6 text-sm font-medium">Par statut</h3>
     <ul class="bars">
       {% for b in repartition %}
       <li class="bar-row bar-row-rx">
@@ -112,35 +110,37 @@
     </ul>
   </section>
 
-  <section class="panel panel-pad" aria-labelledby="titre-semaine">
-    <h2 id="titre-semaine" class="section-title">Délivrées sur 7 jours</h2>
-    <ul class="bars">
-      {% for b in semaine %}
-      <li class="bar-row bar-row-rx">
-        <span class="bar-label">{{ b.libelle }}</span>
-        <span class="bar-track" aria-hidden="true"><span class="bar-fill bar-fill-rx" style="width: {{ b.pourcentage }}%"></span></span>
-        <span>{{ b.nombre }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
+  <div class="space-y-6">
+    <section class="panel panel-pad" aria-labelledby="titre-semaine">
+      <h2 id="titre-semaine" class="section-title">Délivrées sur 7 jours</h2>
+      <ul class="bars">
+        {% for b in semaine %}
+        <li class="bar-row bar-row-rx">
+          <span class="bar-label">{{ b.libelle }}</span>
+          <span class="bar-track" aria-hidden="true"><span class="bar-fill bar-fill-rx" style="width: {{ b.pourcentage }}%"></span></span>
+          <span>{{ b.nombre }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
 
-  <section class="panel panel-pad" aria-labelledby="titre-frequents">
-    <h2 id="titre-frequents" class="section-title">Médicaments les plus demandés</h2>
-    {% if frequents %}
-    <ul class="bars">
-      {% for b in frequents %}
-      <li class="bar-row bar-row-rx">
-        <span class="bar-label">{{ b.libelle }}</span>
-        <span class="bar-track" aria-hidden="true"><span class="bar-fill bar-fill-rx" style="width: {{ b.pourcentage }}%"></span></span>
-        <span>{{ b.nombre }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    <p class="muted mt-4 text-xs">Nombre d'ordonnances qui contiennent chaque médicament : utile pour prévoir le stock.</p>
-    {% else %}
-    <p class="muted mt-3 text-sm">Pas encore d'ordonnance reçue.</p>
-    {% endif %}
-  </section>
+    <section class="panel panel-pad" aria-labelledby="titre-frequents">
+      <h2 id="titre-frequents" class="section-title">Médicaments les plus demandés</h2>
+      {% if frequents %}
+      <ul class="bars">
+        {% for b in frequents %}
+        <li class="bar-row bar-row-rx">
+          <span class="bar-label">{{ b.libelle }}</span>
+          <span class="bar-track" aria-hidden="true"><span class="bar-fill bar-fill-rx" style="width: {{ b.pourcentage }}%"></span></span>
+          <span>{{ b.nombre }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="muted mt-4 text-xs">Nombre d'ordonnances qui contiennent chaque médicament : utile pour prévoir le stock.</p>
+      {% else %}
+      <p class="muted mt-3 text-sm">Pas encore d'ordonnance reçue.</p>
+      {% endif %}
+    </section>
+  </div>
 </div>
 {% endblock %}

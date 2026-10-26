@@ -5,6 +5,7 @@
 
 {% block page %}
 {% with o=ordonnance espace=request.espace %}
+{# 1. En-tête : de quoi il s'agit et où en est l'ordonnance #}
 <header class="page-head">
   <div>
     <a href="{% url 'pharmacies:ordonnances' %}" class="link text-sm">← {% if espace == "patient" %}Mes ordonnances{% else %}Toutes les ordonnances{% endif %}</a>
@@ -28,105 +29,19 @@
 <p class="alert alert-danger mt-6" role="note">Cette ordonnance a été annulée par le prescripteur : elle ne doit pas être délivrée.</p>
 {% endif %}
 
+{# 2. Messages d'état : un seul par situation #}
 {% if o.est_expiree and o.statut != "delivree" and o.statut != "annulee" %}
 <p class="alert alert-warn mt-6" role="note">Cette ordonnance a expiré le {{ o.valide_jusqu_au|date:"d/m/Y" }} : elle ne peut plus être délivrée. Demandez une nouvelle ordonnance à votre médecin.</p>
 {% endif %}
-
 {% if espace == "patient" and o.statut == "prete" %}
 <p class="toast mt-6" role="status">Vos médicaments sont prêts : vous pouvez passer les retirer chez {{ o.pharmacie.nom }}.</p>
 {% endif %}
-
-{% if espace == "patient" %}
-{% for r in remplacements %}{% if r.statut == "propose" %}
-<section class="panel panel-pad mt-6 decision" aria-labelledby="titre-remplacement-{{ forloop.counter }}">
-  <h2 id="titre-remplacement-{{ forloop.counter }}" class="section-title">Votre pharmacie propose un remplaçant</h2>
-  <p class="mt-2 text-sm"><strong class="font-medium">{{ r.ligne_origine }}</strong> n'est pas disponible chez {{ o.pharmacie.nom }}.</p>
-  <p class="mt-1 text-sm">Elle vous propose à la place : <strong class="font-medium">{{ r.remplacant }}</strong>, avec le même dosage et la même façon de le prendre.</p>
-  {% if r.alerte_allergie %}
-  <p class="alert alert-warn mt-3" role="note">Ce médicament fait partie des {{ r.alerte_allergie }}, comme le médicament prescrit, alors que vous y êtes allergique : parlez-en au pharmacien avant d'accepter.</p>
-  {% endif %}
-  <div class="mt-4 flex flex-wrap gap-3">
-    <form method="post" action="{% url 'pharmacies:remplacement_decision' o.pk r.pk %}">
-      {% csrf_token %}<input type="hidden" name="action" value="accepter">
-      <button type="submit" class="abtn abtn-primary">Accepter {{ r.remplacant }}</button>
-    </form>
-    <form method="post" action="{% url 'pharmacies:remplacement_decision' o.pk r.pk %}">
-      {% csrf_token %}<input type="hidden" name="action" value="refuser">
-      <button type="submit" class="abtn abtn-outline">Refuser<span class="sr-only"> {{ r.remplacant }}</span></button>
-    </form>
-  </div>
-  <p class="muted mt-3 text-xs">Si vous refusez, votre ordonnance ne change pas : vous pourrez retirer ailleurs le médicament prescrit.</p>
-</section>
-{% endif %}{% endfor %}
-{% endif %}
-
-{% if decision %}
-<section class="panel panel-pad mt-6 decision" aria-labelledby="titre-decision">
-  <h2 id="titre-decision" class="section-title">{{ o.pharmacie.nom }} n'a pas tous vos médicaments</h2>
-  <p class="mt-2 text-sm">
-    <span class="sev stk-ok">Disponible</span> {{ decision.servies|join:" · " }}<br>
-    <span class="sev stk-rupture mt-2">Manquant</span> {{ decision.manquants|join:" · " }}
-  </p>
-  <p class="muted mt-2 text-sm">Votre réponse est attendue : la pharmacie ne remettra rien sans votre accord.</p>
-
-  <div class="mt-5 grid gap-5 md:grid-cols-2">
-    <div class="choix">
-      <h3 class="item-name">Retirer ici ce qui est disponible</h3>
-      <p class="muted mt-1 text-sm">Le reste passe sur une nouvelle ordonnance, pour une autre pharmacie.</p>
-      <ul class="mt-3 space-y-2">
-        {% for d in decision.pour_le_reste %}
-        <li>
-          <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="accepter">
-            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
-            <button type="submit" class="abtn {% if forloop.first %}abtn-primary{% else %}abtn-outline{% endif %} abtn-block">Accepter, le reste chez {{ d.pharmacie.nom }}</button>
-          </form>
-          <p class="muted mt-1 text-xs">{{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %} · {% if d.complete %}a tout le reste{% else %}a {{ d.medicaments|join:", " }}{% endif %}</p>
-        </li>
-        {% endfor %}
-        <li>
-          <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="accepter">
-            <button type="submit" class="abtn abtn-ghost abtn-block">Accepter, je choisirai plus tard</button>
-          </form>
-        </li>
-      </ul>
-    </div>
-
-    <div class="choix">
-      <h3 class="item-name">Tout prendre dans une autre pharmacie</h3>
-      <p class="muted mt-1 text-sm">Votre ordonnance complète y est envoyée ; {{ o.pharmacie.nom }} ne la prépare plus.</p>
-      {% if decision.pour_tout %}
-      <ul class="mt-3 space-y-2">
-        {% for d in decision.pour_tout %}
-        <li>
-          <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="refuser">
-            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
-            <button type="submit" class="abtn abtn-outline abtn-block">Tout envoyer à {{ d.pharmacie.nom }}</button>
-          </form>
-          <p class="muted mt-1 text-xs">{{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %} · a tous vos médicaments</p>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted mt-3 text-sm">Aucune autre pharmacie n'a tous vos médicaments en stock pour le moment.</p>
-      {% endif %}
-    </div>
-  </div>
-</section>
-{% endif %}
-
 {% if o.ordonnance_origine and o.statut == "emise" %}
 <p class="alert alert-warn mt-6" role="note">
   <strong class="font-medium">Ordonnance à compléter.</strong> Ces médicaments n'étaient pas disponibles lors de la délivrance de
   <a class="link" href="{% url 'pharmacies:ordonnance_detail' o.ordonnance_origine.pk %}">{{ o.ordonnance_origine.reference }}</a>{% if espace == "patient" %} : envoyez-la à une pharmacie qui les a en stock{% endif %}.
 </p>
 {% endif %}
-
 {% for r in reliquats %}
 <p class="alert alert-warn mt-6" role="note">
   <strong class="font-medium">Délivrance partielle.</strong> Les médicaments non disponibles sont sur l'ordonnance
@@ -134,7 +49,95 @@
 </p>
 {% endfor %}
 
+{# 3. Patient : tout ce qui attend SA réponse, regroupé dans un seul bloc #}
+{% if espace == "patient" and decision or espace == "patient" and propositions %}
+<section class="panel panel-pad mt-6 decision reponse-attendue" aria-labelledby="titre-reponse">
+  <h2 id="titre-reponse" class="section-title">Votre réponse est attendue</h2>
+
+  {% for r in propositions %}
+  <div class="bloc mt-4">
+    <h3 class="item-name">Votre pharmacie propose un remplaçant</h3>
+    <p class="mt-2 text-sm"><strong class="font-medium">{{ r.ligne_origine }}</strong> n'est pas disponible chez {{ o.pharmacie.nom }}.</p>
+    <p class="mt-1 text-sm">Elle vous propose à la place : <strong class="font-medium">{{ r.remplacant }}</strong>, avec le même dosage et la même façon de le prendre.</p>
+    {% if r.alerte_allergie %}
+    <p class="alert alert-warn mt-3" role="note">Ce médicament fait partie des {{ r.alerte_allergie }}, comme le médicament prescrit, alors que vous y êtes allergique : parlez-en au pharmacien avant d'accepter.</p>
+    {% endif %}
+    <div class="mt-4 flex flex-wrap gap-3">
+      <form method="post" action="{% url 'pharmacies:remplacement_decision' o.pk r.pk %}">
+        {% csrf_token %}<input type="hidden" name="action" value="accepter">
+        <button type="submit" class="abtn abtn-primary">Accepter {{ r.remplacant }}</button>
+      </form>
+      <form method="post" action="{% url 'pharmacies:remplacement_decision' o.pk r.pk %}">
+        {% csrf_token %}<input type="hidden" name="action" value="refuser">
+        <button type="submit" class="abtn abtn-outline">Refuser<span class="sr-only"> {{ r.remplacant }}</span></button>
+      </form>
+    </div>
+    <p class="muted mt-3 text-xs">Si vous refusez, votre ordonnance ne change pas : vous pourrez retirer ailleurs le médicament prescrit.</p>
+  </div>
+  {% endfor %}
+
+  {% if decision %}
+  <div class="bloc mt-4">
+    <h3 class="item-name">{{ o.pharmacie.nom }} n'a pas tous vos médicaments</h3>
+    <p class="mt-2 text-sm">
+      <span class="sev stk-ok">Disponible</span> {{ decision.servies|join:" · " }}<br>
+      <span class="sev stk-rupture mt-2">Manquant</span> {{ decision.manquants|join:" · " }}
+    </p>
+    <p class="muted mt-2 text-sm">La pharmacie ne remettra rien sans votre accord.</p>
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      <div class="choix">
+        <h4 class="font-medium">Retirer ici ce qui est disponible</h4>
+        <p class="muted mt-1 text-sm">Le reste passe sur une nouvelle ordonnance, pour une autre pharmacie.</p>
+        <ul class="mt-3 space-y-2">
+          {% for d in decision.pour_le_reste %}
+          <li>
+            <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="accepter">
+              <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
+              <button type="submit" class="abtn abtn-wrap {% if forloop.first %}abtn-primary{% else %}abtn-outline{% endif %} abtn-block">Accepter, le reste chez {{ d.pharmacie.nom }}</button>
+            </form>
+            <p class="muted mt-1 text-xs">{{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %} · {% if d.complete %}a tout le reste{% else %}a {{ d.medicaments|join:", " }}{% endif %}</p>
+          </li>
+          {% endfor %}
+          <li>
+            <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="accepter">
+              <button type="submit" class="abtn abtn-ghost abtn-block">Accepter, je choisirai plus tard</button>
+            </form>
+          </li>
+        </ul>
+      </div>
+      <div class="choix">
+        <h4 class="font-medium">Tout prendre dans une autre pharmacie</h4>
+        <p class="muted mt-1 text-sm">Votre ordonnance complète y est envoyée ; {{ o.pharmacie.nom }} ne la prépare plus.</p>
+        {% if decision.pour_tout %}
+        <ul class="mt-3 space-y-2">
+          {% for d in decision.pour_tout %}
+          <li>
+            <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="refuser">
+              <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
+              <button type="submit" class="abtn abtn-wrap abtn-outline abtn-block">Tout envoyer à {{ d.pharmacie.nom }}</button>
+            </form>
+            <p class="muted mt-1 text-xs">{{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %} · a tous vos médicaments</p>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted mt-3 text-sm">Aucune autre pharmacie n'a tous vos médicaments en stock pour le moment.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 <div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+  {# 4. Colonne principale : le contenu de l'ordonnance et les outils de travail #}
   <div class="space-y-6 lg:col-span-8">
     <section class="panel" aria-labelledby="titre-medicaments">
       <h2 id="titre-medicaments" class="section-title px-5 pt-5">Médicaments <span class="count">{{ o.lignes|length }}</span></h2>
@@ -150,6 +153,12 @@
         {% for ligne in o.lignes %}<li>{{ ligne }}</li>{% endfor %}
         {% endif %}
       </ol>
+      {% if o.instructions %}
+      <div class="border-t border-gray-300/60 px-5 py-4">
+        <h3 class="text-sm font-medium">Instructions</h3>
+        <p class="muted mt-1 whitespace-pre-line text-sm">{{ o.instructions }}</p>
+      </div>
+      {% endif %}
       {% if manquants and o.statut != "delivree" and o.statut != "annulee" %}
       <p class="alert alert-danger mx-5 mb-5" role="note">
         {{ manquants|length }} médicament{{ manquants|length|pluralize }} absent{{ manquants|length|pluralize }} de votre stock.
@@ -158,49 +167,6 @@
       </p>
       {% endif %}
     </section>
-
-    {% if disponibles %}
-    <section class="panel panel-pad" aria-labelledby="titre-disponibles">
-      <h2 id="titre-disponibles" class="section-title">Où trouver vos médicaments</h2>
-      <p class="muted mt-1 text-sm">D'après le stock actuel des pharmacies partenaires{% if o.pharmacie %}, autres que {{ o.pharmacie.nom }}{% endif %}.</p>
-      <ul class="mt-4 space-y-2">
-        {% for d in disponibles %}
-        <li class="proposal">
-          <span class="text-sm">
-            <strong class="font-medium">{{ d.pharmacie.nom }}</strong><span class="muted"> · {{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %}</span>
-            <span class="muted block text-xs">{% if d.complete %}A tous vos médicaments{% else %}A {{ d.nombre }} médicament{{ d.nombre|pluralize }} sur {{ o.lignes|length }} : {{ d.medicaments|join:", " }}{% endif %}</span>
-          </span>
-          <form method="post" action="{% url 'pharmacies:ordonnance_transmettre' o.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
-            <button type="submit" class="abtn {% if forloop.first %}abtn-primary{% else %}abtn-outline{% endif %}">Envoyer ici<span class="sr-only"> : {{ d.pharmacie.nom }}</span></button>
-          </form>
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-
-    {% if remplacements %}
-    <section class="panel panel-pad" aria-labelledby="titre-remplacements">
-      <h2 id="titre-remplacements" class="section-title">Remplacements <span class="count">{{ remplacements|length }}</span></h2>
-      <ul class="mt-4 space-y-3">
-        {% for r in remplacements %}
-        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <span>
-            <strong class="font-medium">{{ r.remplacant }}</strong> à la place de {{ r.ligne_origine }}
-            <span class="muted block text-xs">Proposé le {{ r.propose_le|date:"d/m/Y H:i" }} · {{ r.get_source_display }}{% if r.decide_le %} · réponse le {{ r.decide_le|date:"d/m/Y H:i" }}{% endif %}{% if r.alerte_allergie %} · allergie : {{ r.alerte_allergie }}{% endif %}</span>
-          </span>
-          <span class="sev {% if r.statut == 'accepte' %}stk-ok{% elif r.statut == 'refuse' %}stk-inconnu{% else %}stk-bas{% endif %}">{{ r.get_statut_display }}</span>
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-
-    {% if o.note_pharmacien %}
-    <p class="alert alert-warn" role="note"><strong class="font-medium">Note de la pharmacie :</strong> {{ o.note_pharmacien }}</p>
-    {% endif %}
 
     {% if rupture %}
     <section class="panel panel-pad" aria-labelledby="titre-rupture">
@@ -231,57 +197,59 @@
     </section>
     {% endif %}
 
-    {% if o.instructions %}
-    <section class="panel panel-pad" aria-labelledby="titre-instructions">
-      <h2 id="titre-instructions" class="section-title">Instructions</h2>
-      <p class="mt-3 whitespace-pre-line text-sm">{{ o.instructions }}</p>
-    </section>
-    {% endif %}
-
-    {% if espace != "patient" %}
-    <section class="panel panel-pad" aria-labelledby="titre-allergies">
-      <h2 id="titre-allergies" class="section-title">Allergies du patient <span class="count">{{ allergies|length }}</span></h2>
-      {% if allergies %}
-      <ul class="mt-4 space-y-3">
-        {% for a in allergies %}
-        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <span><strong class="font-medium">{{ a.substance }}</strong><span class="muted"> · {{ a.get_type_display }}{% if a.reaction %} · {{ a.reaction }}{% endif %}</span></span>
-          <span class="sev sev-{{ a.gravite }}">{{ a.get_gravite_display }}</span>
+    {% if disponibles %}
+    <section class="panel panel-pad" aria-labelledby="titre-disponibles">
+      <h2 id="titre-disponibles" class="section-title">Où trouver vos médicaments</h2>
+      <p class="muted mt-1 text-sm">D'après le stock actuel des pharmacies partenaires{% if o.pharmacie %}, autres que {{ o.pharmacie.nom }}{% endif %}.</p>
+      <ul class="mt-4 space-y-2">
+        {% for d in disponibles %}
+        <li class="proposal">
+          <span class="text-sm">
+            <strong class="font-medium">{{ d.pharmacie.nom }}</strong><span class="muted"> · {{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %}</span>
+            <span class="muted block text-xs">{% if d.complete %}A tous vos médicaments{% else %}A {{ d.nombre }} médicament{{ d.nombre|pluralize }} sur {{ o.lignes|length }} : {{ d.medicaments|join:", " }}{% endif %}</span>
+          </span>
+          <form method="post" action="{% url 'pharmacies:ordonnance_transmettre' o.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
+            <button type="submit" class="abtn {% if forloop.first %}abtn-primary{% else %}abtn-outline{% endif %}">Envoyer ici<span class="sr-only"> : {{ d.pharmacie.nom }}</span></button>
+          </form>
         </li>
         {% endfor %}
       </ul>
-      {% else %}
-      <p class="muted mt-3 text-sm">Aucune allergie déclarée par le patient.</p>
-      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if historique %}
+    <section class="panel panel-pad" aria-labelledby="titre-remplacements">
+      <h2 id="titre-remplacements" class="section-title">Historique des remplacements <span class="count">{{ historique|length }}</span></h2>
+      <ul class="mt-4 space-y-3">
+        {% for r in historique %}
+        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>
+            <strong class="font-medium">{{ r.remplacant }}</strong> à la place de {{ r.ligne_origine }}
+            <span class="muted block text-xs">Proposé le {{ r.propose_le|date:"d/m/Y H:i" }} · {{ r.get_source_display }}{% if r.decide_le %} · réponse le {{ r.decide_le|date:"d/m/Y H:i" }}{% endif %}{% if r.alerte_allergie %} · allergie : {{ r.alerte_allergie }}{% endif %}</span>
+          </span>
+          <span class="sev {% if r.statut == 'accepte' %}stk-ok{% elif r.statut == 'refuse' %}stk-inconnu{% else %}stk-bas{% endif %}">{{ r.get_statut_display }}</span>
+        </li>
+        {% endfor %}
+      </ul>
     </section>
     {% endif %}
   </div>
 
-  <aside class="space-y-6 lg:col-span-4">
-    <section class="panel panel-pad" aria-labelledby="titre-infos">
-      <h2 id="titre-infos" class="section-title">Informations</h2>
-      <dl class="dl mt-4">
-        <div class="wide"><dt>Valable jusqu'au</dt><dd>{{ o.valide_jusqu_au|date:"d/m/Y"|default:"—" }}</dd></div>
-        <div class="wide"><dt>Pharmacie</dt><dd>{% if o.pharmacie %}<a class="link" href="{% url 'pharmacies:pharmacie_detail' o.pharmacie.pk %}">{{ o.pharmacie.nom }}</a>{% else %}Pas encore choisie{% endif %}</dd></div>
-        {% if o.delivree_le %}<div class="wide"><dt>Délivrée le</dt><dd>{{ o.delivree_le|date:"d/m/Y H:i" }}</dd></div>{% endif %}
-        {% if o.consultation %}<div class="wide"><dt>Consultation</dt><dd>{{ o.consultation.date|date:"d/m/Y" }}{% if o.consultation.diagnostic and espace != "pharmacie" %} · {{ o.consultation.diagnostic }}{% endif %}</dd></div>{% endif %}
-      </dl>
-    </section>
-
+  {# 5. Colonne latérale : ce qu'on peut faire, la sécurité du patient, puis les informations #}
+  <aside class="colonne-fixe space-y-6 lg:col-span-4">
+    {% if espace != "patient" or o.est_transmissible %}
     <section class="panel panel-pad" aria-labelledby="titre-actions">
       <h2 id="titre-actions" class="section-title">Actions</h2>
       <div class="mt-4 flex flex-col gap-3">
         {% if espace == "patient" %}
-          {% if o.est_transmissible %}
-          <a href="{% url 'pharmacies:ordonnance_transmettre' o.pk %}" class="abtn abtn-primary">{% if o.pharmacie %}Changer de pharmacie{% else %}Envoyer à une pharmacie{% endif %}</a>
-          {% else %}
-          <p class="muted text-sm">Aucune action possible pour le moment.</p>
-          {% endif %}
+          <a href="{% url 'pharmacies:ordonnance_transmettre' o.pk %}" class="abtn abtn-wrap abtn-primary">{% if o.pharmacie %}Changer de pharmacie{% else %}Envoyer à une pharmacie{% endif %}</a>
         {% elif espace == "pharmacie" %}
           {% if peut_avancer %}
           <form method="post" action="{% url 'pharmacies:ordonnance_avancer' o.pk %}">
             {% csrf_token %}
-            <button type="submit" class="abtn abtn-primary abtn-block">
+            <button type="submit" class="abtn abtn-wrap abtn-primary abtn-block">
               {% if o.statut == "transmise" %}Commencer la préparation{% elif o.statut == "en_preparation" %}Marquer comme prête{% elif manquants %}Délivrer les médicaments disponibles ({{ servies }} sur {{ o.lignes|length }}){% else %}Confirmer la délivrance{% endif %}
             </button>
           </form>
@@ -292,7 +260,7 @@
           {% if accord_demandable %}
           <form method="post" action="{% url 'pharmacies:ordonnance_demander_accord' o.pk %}">
             {% csrf_token %}
-            <button type="submit" class="abtn abtn-outline abtn-block">Demander l'accord du patient ({{ servies }} sur {{ o.lignes|length }} disponible{{ servies|pluralize }})</button>
+            <button type="submit" class="abtn abtn-wrap abtn-outline abtn-block">Demander l'accord du patient ({{ servies }} sur {{ o.lignes|length }} disponible{{ servies|pluralize }})</button>
           </form>
           {% elif manquants and o.accord_partiel == "attente" %}
           <p class="note"><i aria-hidden="true" data-lucide="hourglass" class="h-4 w-4"></i><span>En attente de la réponse du patient : délivrance partielle ici, ou ordonnance complète dans une autre pharmacie.</span></p>
@@ -316,8 +284,39 @@
           </form>
           {% endif %}
           {% if o.est_supprimable %}<a href="{% url 'pharmacies:ordonnance_supprimer' o.pk %}" class="abtn abtn-ghost">Supprimer</a>{% endif %}
+          {% if not o.est_modifiable and not o.est_annulable and not o.est_supprimable %}<p class="muted text-sm">Aucune action possible : l'ordonnance est conservée telle quelle.</p>{% endif %}
         {% endif %}
       </div>
+    </section>
+    {% endif %}
+
+    {% if espace != "patient" %}
+    <section class="panel panel-pad" aria-labelledby="titre-allergies">
+      <h2 id="titre-allergies" class="section-title">Allergies du patient <span class="count">{{ allergies|length }}</span></h2>
+      {% if allergies %}
+      <ul class="mt-4 space-y-3">
+        {% for a in allergies %}
+        <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span><strong class="font-medium">{{ a.substance }}</strong><span class="muted"> · {{ a.get_type_display }}{% if a.reaction %} · {{ a.reaction }}{% endif %}</span></span>
+          <span class="sev sev-{{ a.gravite }}">{{ a.get_gravite_display }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted mt-3 text-sm">Aucune allergie déclarée par le patient.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="panel panel-pad" aria-labelledby="titre-infos">
+      <h2 id="titre-infos" class="section-title">Informations</h2>
+      <dl class="dl mt-4">
+        <div class="wide"><dt>Pharmacie</dt><dd>{% if o.pharmacie %}<a class="link" href="{% url 'pharmacies:pharmacie_detail' o.pharmacie.pk %}">{{ o.pharmacie.nom }}</a>{% else %}Pas encore choisie{% endif %}</dd></div>
+        <div class="wide"><dt>Valable jusqu'au</dt><dd>{{ o.valide_jusqu_au|date:"d/m/Y"|default:"—" }}</dd></div>
+        {% if o.delivree_le %}<div class="wide"><dt>Délivrée le</dt><dd>{{ o.delivree_le|date:"d/m/Y H:i" }}</dd></div>{% endif %}
+        {% if o.consultation %}<div class="wide"><dt>Consultation</dt><dd>{{ o.consultation.date|date:"d/m/Y" }}{% if o.consultation.diagnostic and espace != "pharmacie" %} · {{ o.consultation.diagnostic }}{% endif %}</dd></div>{% endif %}
+        {% if o.note_pharmacien %}<div class="wide"><dt>Note de la pharmacie</dt><dd>{{ o.note_pharmacien }}</dd></div>{% endif %}
+      </dl>
     </section>
   </aside>
 </div>
