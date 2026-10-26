@@ -2,7 +2,7 @@ import datetime
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -40,6 +40,81 @@ class Pharmacie(models.Model):
         self.nom = " ".join((self.nom or "").split())
         if self.user_id is not None and self.user.role != self.user.Role.PHARMACIE:
             raise ValidationError({"user": "Ce compte n'a pas le rôle « pharmacie »."})
+
+
+class Medicament(models.Model):
+    """Un médicament du stock d'UNE pharmacie (chaque officine gère le sien).
+
+    La rupture n'est pas une case à cocher : un médicament est en rupture quand sa quantité tombe à zéro."""
+
+    class Forme(models.TextChoices):
+        COMPRIME = "comprime", "Comprimé"
+        GELULE = "gelule", "Gélule"
+        SIROP = "sirop", "Sirop"
+        SACHET = "sachet", "Sachet"
+        INHALATEUR = "inhalateur", "Inhalateur"
+        INJECTABLE = "injectable", "Injectable"
+        CREME = "creme", "Crème ou pommade"
+        AUTRE = "autre", "Autre"
+
+    RUPTURE, STOCK_BAS, DISPONIBLE = "rupture", "bas", "ok"
+
+    pharmacie = models.ForeignKey(Pharmacie, on_delete=models.CASCADE, related_name="medicaments")
+    nom = models.CharField(max_length=100, help_text="Nom commercial ou générique (ex. Doliprane, Amoxicilline Biogaran).")
+    principe_actif = models.CharField(max_length=100, blank=True, help_text="La molécule (ex. paracétamol) : sert à trouver les équivalents.")
+    dosage = models.CharField(max_length=50, blank=True, help_text="Ex. 1 g, 500 mg, 100 µg.")
+    forme = models.CharField(max_length=20, choices=Forme.choices, default=Forme.COMPRIME)
+    # MinValueValidator explicite : avec MongoDB, « Positive » ne suffit pas à refuser une valeur négative côté modèle.
+    quantite = models.PositiveIntegerField(
+        "Quantité en stock", default=0, validators=[MinValueValidator(0)], help_text="Nombre de boîtes. À zéro, le médicament est en rupture."
+    )
+    seuil_alerte = models.PositiveSmallIntegerField(
+        "Seuil d'alerte", default=5, validators=[MinValueValidator(0)],
+        help_text="En dessous ou à ce nombre de boîtes, le stock est signalé comme bas.",
+    )
+    prix = models.DecimalField("Prix (DT)", max_digits=8, decimal_places=3, null=True, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nom", "dosage"]
+        verbose_name = "médicament"
+        verbose_name_plural = "médicaments"
+        indexes = [models.Index(fields=["pharmacie", "quantite"])]
+
+    def __str__(self):
+        return f"{self.nom} {self.dosage}".strip()
+
+    @property
+    def etat(self):
+        if self.quantite == 0:
+            return self.RUPTURE
+        return self.STOCK_BAS if self.quantite <= self.seuil_alerte else self.DISPONIBLE
+
+    @property
+    def est_en_rupture(self):
+        return self.etat == self.RUPTURE
+
+    @property
+    def libelle_etat(self):
+        return {self.RUPTURE: "Rupture", self.STOCK_BAS: "Stock bas", self.DISPONIBLE: "En stock"}[self.etat]
+
+    def _doublon_existe(self):
+        """Le même médicament (nom et dosage, majuscules ignorées) existe-t-il déjà dans le stock de cette pharmacie ?"""
+        autres = Medicament.objects.filter(pharmacie=self.pharmacie, nom__iexact=self.nom, dosage__iexact=self.dosage)
+        if self.pk:
+            autres = autres.exclude(pk=self.pk)
+        return autres.exists()
+
+    def clean(self):
+        super().clean()
+        self.nom = " ".join((self.nom or "").split())
+        self.principe_actif = " ".join((self.principe_actif or "").split()).lower()
+        self.dosage = " ".join((self.dosage or "").split())
+        if self.prix is not None and self.prix < 0:
+            raise ValidationError({"prix": "Le prix ne peut pas être négatif."})
+        if self.nom and self.pharmacie_id is not None and self._doublon_existe():
+            raise ValidationError({"nom": "Ce médicament (même nom et même dosage) est déjà dans votre stock : modifiez sa quantité."})
 
 
 class Ordonnance(models.Model):

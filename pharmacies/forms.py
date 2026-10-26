@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 
 from core.forms import StyledFormMixin
 
-from .models import Ordonnance, Pharmacie
+from .models import Medicament, Ordonnance, Pharmacie
 
 User = get_user_model()
 
@@ -83,6 +83,41 @@ class RuptureForm(StyledFormMixin, forms.Form):
         super().__init__(*args, **kwargs)
         self.fields["medicament"].choices = [("", "Choisissez le médicament")] + [(ligne, ligne) for ligne in lignes]
         self._style_fields()
+
+
+class MedicamentForm(StyledFormMixin, forms.ModelForm):
+    """Ajout et modification d'un médicament du stock. La pharmacie est imposée par la vue (jamais saisie) :
+    impossible d'écrire dans le stock d'une autre officine."""
+
+    class Meta:
+        model = Medicament
+        fields = ("nom", "principe_actif", "dosage", "forme", "quantite", "seuil_alerte", "prix")
+        labels = {"nom": "Nom du médicament", "principe_actif": "Principe actif", "dosage": "Dosage", "forme": "Forme"}
+        widgets = {
+            "quantite": forms.NumberInput(attrs={"min": 0, "inputmode": "numeric"}),
+            "seuil_alerte": forms.NumberInput(attrs={"min": 0, "inputmode": "numeric"}),
+            "prix": forms.NumberInput(attrs={"min": 0, "step": "0.001", "inputmode": "decimal"}),
+        }
+
+    def __init__(self, *args, pharmacie, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Imposée ici pour que la règle du modèle (pas de doublon dans le même stock) s'applique.
+        self.instance.pharmacie = pharmacie
+        self._style_fields()
+
+
+class FiltreStockForm(forms.Form):
+    """Recherche dans le stock (envoyée en GET)."""
+
+    ETATS = (("", "Tous"), (Medicament.RUPTURE, "En rupture"), (Medicament.STOCK_BAS, "Stock bas"), (Medicament.DISPONIBLE, "Disponibles"))
+
+    q = forms.CharField(label="Nom ou principe actif", required=False, max_length=100)
+    etat = forms.ChoiceField(label="État du stock", required=False, choices=ETATS)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for champ in self.fields.values():
+            champ.widget.attrs["class"] = "field"
 
 
 class FiltreOrdonnancesForm(forms.Form):

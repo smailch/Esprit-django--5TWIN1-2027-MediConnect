@@ -17,6 +17,8 @@
   padding: 0.8rem 1.25rem; border-bottom: 1px solid var(--a-line); font-size: 0.95rem;
 }
 .rx-lignes li:last-child { border-bottom: 0; }
+.rx-ligne-stock { justify-content: space-between; flex-wrap: wrap; }
+.rx-ligne-stock > span:first-child { flex: 1; min-width: 12rem; }
 .rx-lignes li::before {
   content: counter(rx); flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 1.6rem; height: 1.6rem; border-radius: 9999px; background: var(--a-raise); color: var(--a-accent);
@@ -24,6 +26,12 @@
 }
 
 .stepper { flex-wrap: wrap; row-gap: 0.75rem; }
+
+/* État du stock : écrit en toutes lettres dans la pastille (la couleur seule ne suffit pas) */
+.stk-rupture { background: var(--u1); }
+.stk-bas { background: var(--u3); }
+.stk-ok { background: var(--u4); }
+.stk-inconnu { background: var(--a-raise); color: var(--a-muted); border: 1px solid var(--a-line2); }
 
 /* Remplaçants proposés en cas de rupture */
 .rx-suggestions { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.5rem; }

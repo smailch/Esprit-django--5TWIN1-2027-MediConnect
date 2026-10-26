@@ -74,6 +74,30 @@
   </section>
 </div>
 
+<section class="panel mt-6" aria-labelledby="titre-stock">
+  <div class="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
+    <h2 id="titre-stock" class="section-title">Stock à surveiller</h2>
+    <a href="{% url 'pharmacies:stock' %}" class="link text-sm">Gérer le stock</a>
+  </div>
+  <p class="muted px-5 text-sm">
+    {{ stock.references }} médicament{{ stock.references|pluralize }} référencé{{ stock.references|pluralize }} ·
+    <a class="link" href="{% url 'pharmacies:stock' %}?etat=rupture">{{ stock.rupture }} en rupture</a> ·
+    <a class="link" href="{% url 'pharmacies:stock' %}?etat=bas">{{ stock.bas }} en stock bas</a>
+  </p>
+  {% if stock.a_commander %}
+  <ul class="mt-2">
+    {% for m in stock.a_commander %}
+    <li class="item-row">
+      <span><strong class="font-medium">{{ m }}</strong><span class="muted"> · {{ m.quantite }} boîte{{ m.quantite|pluralize }} (alerte à {{ m.seuil_alerte }})</span></span>
+      <span class="sev stk-{{ m.etat }}">{{ m.libelle_etat }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted px-5 pb-5 pt-3 text-sm">{% if stock.references %}Rien à commander : tout le stock est au-dessus des seuils d'alerte.{% else %}Votre stock est vide : <a class="link" href="{% url 'pharmacies:stock_creer' %}">ajoutez vos médicaments</a>.{% endif %}</p>
+  {% endif %}
+</section>
+
 <div class="mt-6 grid gap-6 lg:grid-cols-3 lg:items-start">
   <section class="panel panel-pad" aria-labelledby="titre-repartition">
     <h2 id="titre-repartition" class="section-title">Par statut</h2>

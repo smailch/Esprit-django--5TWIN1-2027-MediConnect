@@ -12,9 +12,18 @@ from core.utils import objet_ou_404
 from patients import ia_client
 from patients.models import Allergie, Consultation
 
-from . import ia_substitution, stats
-from .forms import FiltreOrdonnancesForm, FiltrePharmaciesForm, OrdonnanceForm, PharmacieForm, RuptureForm, TransmissionForm
-from .models import Ordonnance, Pharmacie
+from . import ia_substitution, stats, stock
+from .forms import (
+    FiltreOrdonnancesForm,
+    FiltrePharmaciesForm,
+    FiltreStockForm,
+    MedicamentForm,
+    OrdonnanceForm,
+    PharmacieForm,
+    RuptureForm,
+    TransmissionForm,
+)
+from .models import Medicament, Ordonnance, Pharmacie
 from .permissions import ADMIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_de, espace_requis, patient_de, pharmacie_de
 
 PAR_PAGE = 12
@@ -50,6 +59,7 @@ def tableau_de_bord(request):
     return render(request, "pharmacies/tableau_de_bord.html", {
         "pharmacie": pharmacie,
         "kpis": stats.chiffres_cles(ordonnances),
+        "stock": stats.chiffres_stock(list(Medicament.objects.filter(pharmacie=pharmacie))),
         "a_traiter": stats.a_traiter(ordonnances),
         "a_relancer": stats.a_relancer(ordonnances),
         "repartition": stats.repartition_par_statut(ordonnances),
@@ -191,14 +201,20 @@ def ordonnance_detail(request, pk):
     allergies = []
     if request.espace != PATIENT:
         allergies = Allergie.objects.filter(patient=ordonnance.patient, active=True).order_by("substance")
-    rupture = None
-    if request.espace == PHARMACIE and ordonnance.est_en_traitement:
-        rupture = RuptureForm(lignes=ordonnance.lignes)
+    rupture, etats, manquants = None, [], []
+    if request.espace == PHARMACIE:
+        # Chaque ligne confrontée au stock réel de la pharmacie : la rupture se constate, elle ne se déclare pas.
+        etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
+        manquants = stock.lignes_en_rupture(etats)
+        if ordonnance.est_en_traitement:
+            rupture = RuptureForm(lignes=ordonnance.lignes, initial={"medicament": manquants[0] if manquants else ""})
     return render(request, "pharmacies/ordonnance_detail.html", {
         "ordonnance": ordonnance,
         "allergies": allergies,
         "etapes": [(s, Ordonnance.Statut(s).label) for s in Ordonnance.PARCOURS],
         "rupture": rupture,
+        "etats": etats,
+        "manquants": manquants,
     })
 
 
@@ -226,7 +242,16 @@ def ordonnance_substitution(request, pk):
         return JsonResponse({"ok": False, "erreur": "Choisissez d'abord le médicament en rupture."}, status=400)
     resultat = ia_substitution.suggerer(ligne, identifiant=f"pharmacie:{ordonnance.pharmacie_id}")
     substances = list(Allergie.objects.filter(patient=ordonnance.patient, active=True).values_list("substance", flat=True))
-    suggestions = ia_substitution.signaler_allergies(resultat.suggestions, resultat.principe_actif, substances)
+    medicaments = list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie))
+    principe = stock.principe_de(ligne, medicaments) or resultat.principe_actif
+    # D'abord ce que la pharmacie a réellement en rayon (même principe actif), calculé en local…
+    en_stock = [
+        {"nom": str(m), "type": "en_stock", "type_libelle": "Dans votre stock", "raison": f"Même principe actif : {m.principe_actif}.", "stock": m.quantite}
+        for m in stock.equivalents_en_stock(principe, medicaments, exclure=stock.trouver(ligne, medicaments))
+    ][:ia_substitution.MAX_SUGGESTIONS]
+    ia_substitution.signaler_allergies(en_stock, principe, substances)
+    # … puis les suggestions de l'IA (ou de la table locale), avec la quantité disponible ici.
+    suggestions = stock.annoter_stock(ia_substitution.signaler_allergies(resultat.suggestions, principe, substances), medicaments)
     message = MESSAGES_SOURCE[resultat.source]
     if resultat.source != ia_substitution.IA and resultat.statut in ia_client.MESSAGES:
         message += f" ({ia_client.MESSAGES[resultat.statut]})"
@@ -236,7 +261,8 @@ def ordonnance_substitution(request, pk):
         "source": resultat.source,
         "statut": resultat.statut,
         "message": message,
-        "principe_actif": resultat.principe_actif,
+        "principe_actif": principe,
+        "en_stock": en_stock,
         "suggestions": suggestions,
         "duree_ms": resultat.duree_ms,
         "en_cache": resultat.en_cache,
@@ -351,5 +377,72 @@ def ordonnance_avancer(request, pk):
     except ValueError as erreur:
         messages.error(request, str(erreur))
     else:
-        messages.success(request, f"Ordonnance {ordonnance.reference} : {Ordonnance.Statut(nouveau).label.lower()}.")
+        message = f"Ordonnance {ordonnance.reference} : {Ordonnance.Statut(nouveau).label.lower()}."
+        if nouveau == Ordonnance.Statut.DELIVREE:  # les boîtes remises sortent du stock
+            etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
+            retirees = stock.retirer_du_stock(etats)
+            message += f" {retirees} boîte(s) retirée(s) du stock." if retirees else ""
+        messages.success(request, message)
     return _redirection(request, "ordonnance_detail", ordonnance.pk)
+
+
+# --- Stock de la pharmacie : liste, ajout, modification, suppression ---------------------------------------------
+
+def _mon_medicament(request, pk):
+    """Un médicament du stock de la pharmacie connectée ; celui d'une autre pharmacie répond 404."""
+    return objet_ou_404(Medicament, pk=pk, pharmacie=pharmacie_de(request.user))
+
+
+@espace_requis(PHARMACIE)
+def stock_liste(request):
+    medicaments = list(Medicament.objects.filter(pharmacie=pharmacie_de(request.user)))
+    chiffres = stats.chiffres_stock(medicaments)  # sur tout le stock, avant les filtres
+    filtre = FiltreStockForm(request.GET or None)
+    if filtre.is_valid():
+        q = stock.normaliser(filtre.cleaned_data["q"])
+        if q:
+            medicaments = [m for m in medicaments if q in stock.normaliser(f"{m.nom} {m.principe_actif}")]
+        if filtre.cleaned_data["etat"]:
+            medicaments = [m for m in medicaments if m.etat == filtre.cleaned_data["etat"]]
+    parametres = request.GET.copy()
+    parametres.pop("page", None)
+    return render(request, "pharmacies/stock.html", {
+        "page": _page(request, medicaments),
+        "filtre": filtre,
+        "chiffres": chiffres,
+        "parametres": parametres.urlencode(),
+        "filtres_actifs": any(v for v in parametres.values()),
+    })
+
+
+@espace_requis(PHARMACIE)
+def stock_creer(request):
+    form = MedicamentForm(request.POST if request.method == "POST" else None, pharmacie=pharmacie_de(request.user))
+    if request.method == "POST" and form.is_valid():
+        medicament = form.save()
+        messages.success(request, f"« {medicament} » a été ajouté au stock.")
+        return _redirection(request, "stock")
+    return render(request, "pharmacies/medicament_form.html", {"form": form, "medicament": None})
+
+
+@espace_requis(PHARMACIE)
+def stock_modifier(request, pk):
+    medicament = _mon_medicament(request, pk)
+    form = MedicamentForm(request.POST if request.method == "POST" else None, instance=medicament, pharmacie=medicament.pharmacie)
+    if request.method == "POST" and form.is_valid():
+        medicament = form.save()
+        messages.success(request, f"« {medicament} » a été mis à jour" + (" : il est maintenant en rupture." if medicament.est_en_rupture else "."))
+        return _redirection(request, "stock")
+    return render(request, "pharmacies/medicament_form.html", {"form": form, "medicament": medicament})
+
+
+@espace_requis(PHARMACIE)
+def stock_supprimer(request, pk):
+    """GET : demande de confirmation ; POST : suppression (le médicament n'est plus référencé dans cette pharmacie)."""
+    medicament = _mon_medicament(request, pk)
+    if request.method == "POST":
+        nom = str(medicament)
+        medicament.delete()
+        messages.success(request, f"« {nom} » a été retiré du stock.")
+        return _redirection(request, "stock")
+    return render(request, "pharmacies/medicament_supprimer.html", {"medicament": medicament})

@@ -21,7 +21,7 @@ from patients.models import Allergie, Consultation, Patient
 
 from . import permissions, views
 from .forms import OrdonnanceForm, PharmacieForm, TransmissionForm
-from .models import DUREE_VALIDITE_JOURS, MAX_LIGNES, Ordonnance, Pharmacie
+from .models import DUREE_VALIDITE_JOURS, MAX_LIGNES, Medicament, Ordonnance, Pharmacie
 from .permissions import ADMIN, MEDECIN, MESSAGE_EN_ATTENTE, PATIENT, PHARMACIE, espace_de, espace_requis
 
 User = get_user_model()
@@ -781,6 +781,7 @@ class TableauDeBordVueTests(SimpleTestCase):
         with mock.patch.object(views, "espace_de", return_value=espace), \
                 mock.patch.object(views, "pharmacie_de", return_value=fiche), \
                 mock.patch.object(Ordonnance.objects, "filter") as filtre, \
+                mock.patch.object(Medicament.objects, "filter", return_value=[]), \
                 mock.patch.object(views, "render") as rendre:
             filtre.return_value.select_related.return_value = list(ordonnances)
             views.tableau_de_bord(requete)
@@ -821,12 +822,13 @@ class TableauDeBordPageTests(SimpleTestCase):
         requete.resolver_match = SimpleNamespace(url_name="tableau_de_bord", namespace="pharmacies")
         return requete
 
-    def rendre(self, ordonnances):
+    def rendre(self, ordonnances, medicaments=()):
         fiche = une_pharmacie(de_garde=True, horaires="8 h – 20 h")
         fiche.cree_le = MAINTENANT
         return render_to_string("pharmacies/tableau_de_bord.html", {
             "pharmacie": fiche,
             "kpis": stats.chiffres_cles(ordonnances),
+            "stock": stats.chiffres_stock(list(medicaments)),
             "a_traiter": stats.a_traiter(ordonnances),
             "a_relancer": stats.a_relancer(ordonnances),
             "repartition": stats.repartition_par_statut(ordonnances),
@@ -1005,12 +1007,13 @@ class IaSubstitutionTests(SimpleTestCase):
 
 
 class SubstitutionVueTests(SimpleTestCase):
-    def appeler(self, vue, espace, ordonnance, methode="post", donnees=None, allergies=()):
+    def appeler(self, vue, espace, ordonnance, methode="post", donnees=None, allergies=(), stock_pharmacie=()):
         requete = avec_messages(getattr(RequestFactory(), methode)("/pharmacies/", donnees or {}))
         requete.user = un_user(role=espace)
         with mock.patch.object(permissions, "espace_de", return_value=espace), \
                 mock.patch.object(views, "objet_ou_404", return_value=ordonnance), \
                 mock.patch.object(views, "ordonnances_visibles"), \
+                mock.patch.object(Medicament.objects, "filter", return_value=list(stock_pharmacie)), \
                 mock.patch.object(Allergie.objects, "filter") as filtre:
             filtre.return_value.values_list.return_value = list(allergies)
             return vue(requete, ordonnance.pk)
@@ -1110,3 +1113,265 @@ class SubstitutionPageTests(SimpleTestCase):
         self.assertNotIn(".innerHTML", js)  # le texte reçu n'est jamais interprété comme du HTML
         for attendu in ("textContent", "X-CSRFToken", "aria-busy", "AbortController", "fetch("):
             self.assertIn(attendu, js)
+        self.assertIn("en_stock", js)  # les équivalents du stock passent avant les suggestions de l'IA
+
+
+# --- Stock de médicaments ---------------------------------------------------------------------------------------
+
+
+from decimal import Decimal  # noqa: E402
+
+from . import stock  # noqa: E402
+from .forms import MedicamentForm  # noqa: E402
+
+
+def un_medicament(nom="Doliprane", principe="paracétamol", quantite=10, seuil=5, dosage="1 g", pharmacie=None, **kw):
+    m = Medicament(pharmacie=pharmacie or une_pharmacie(), nom=nom, principe_actif=principe, quantite=quantite,
+                   seuil_alerte=seuil, dosage=dosage, **kw)
+    m.pk = ObjectId()
+    return m
+
+
+class MedicamentModeleTests(SimpleTestCase):
+    def setUp(self):
+        p = mock.patch.object(Medicament, "_doublon_existe", return_value=False)
+        self.doublon = p.start()
+        self.addCleanup(p.stop)
+
+    def test_la_rupture_vient_de_la_quantite(self):
+        self.assertEqual((un_medicament(quantite=0).etat, un_medicament(quantite=0).libelle_etat), (Medicament.RUPTURE, "Rupture"))
+        self.assertTrue(un_medicament(quantite=0).est_en_rupture)
+        self.assertEqual(un_medicament(quantite=5, seuil=5).etat, Medicament.STOCK_BAS)  # au seuil : bas
+        self.assertEqual(un_medicament(quantite=6, seuil=5).etat, Medicament.DISPONIBLE)
+
+    def test_nettoyage_et_affichage(self):
+        m = un_medicament(nom="  Doliprane   Codéine ", principe=" Paracétamol ", dosage=" 1  g ")
+        m.clean()
+        self.assertEqual((m.nom, m.principe_actif, m.dosage), ("Doliprane Codéine", "paracétamol", "1 g"))
+        self.assertEqual(str(m), "Doliprane Codéine 1 g")
+
+    def test_pas_de_doublon_dans_le_meme_stock(self):
+        self.doublon.return_value = True
+        with self.assertRaises(ValidationError) as ctx:
+            un_medicament().clean()
+        self.assertIn("nom", ctx.exception.message_dict)
+
+    def test_prix_et_quantite_jamais_negatifs(self):
+        with self.assertRaises(ValidationError):
+            un_medicament(prix=Decimal("-1")).clean()
+        with self.assertRaises(ValidationError) as ctx:
+            un_medicament(quantite=-3).clean_fields(exclude=["pharmacie"])
+        self.assertIn("quantite", ctx.exception.message_dict)
+
+
+class RapprochementStockTests(SimpleTestCase):
+    def stock_demo(self):
+        return [
+            un_medicament("Amoxicilline", "amoxicilline", 0),
+            un_medicament("Clamoxyl", "amoxicilline", 4),
+            un_medicament("Hiconcil", "amoxicilline", 12),
+            un_medicament("Doliprane", "paracétamol", 40),
+            un_medicament("Efferalgan", "paracétamol", 3),
+        ]
+
+    def test_par_nom_puis_par_principe_actif(self):
+        medicaments = self.stock_demo()
+        self.assertEqual(stock.trouver("Amoxicilline 1 g, matin et soir", medicaments).quantite, 0)  # le nom prime
+        self.assertEqual(stock.trouver("CLAMOXYL", medicaments).nom, "Clamoxyl")
+        self.assertEqual(stock.trouver("Paracétamol 1 g si fièvre", medicaments).nom, "Doliprane")  # DCI : le mieux fourni
+        self.assertIsNone(stock.trouver("Ventoline 100 µg", medicaments))
+        self.assertIsNone(stock.trouver("", medicaments))
+
+    def test_etat_de_chaque_ligne(self):
+        etats = stock.etat_des_lignes(["Amoxicilline 1 g", "Efferalgan 1 g", "Doliprane 1 g", "Ventoline"], self.stock_demo())
+        self.assertEqual([e["etat"] for e in etats], [Medicament.RUPTURE, Medicament.STOCK_BAS, Medicament.DISPONIBLE, stock.INCONNU])
+        self.assertEqual([e["libelle"] for e in etats], ["Rupture", "Stock bas", "En stock", "Non référencé"])
+        self.assertEqual(stock.lignes_en_rupture(etats), ["Amoxicilline 1 g", "Ventoline"])
+
+    def test_equivalents_disponibles_le_mieux_fourni_d_abord(self):
+        medicaments = self.stock_demo()
+        rompu = stock.trouver("Amoxicilline", medicaments)
+        trouves = stock.equivalents_en_stock("Amoxicilline", medicaments, exclure=rompu)
+        self.assertEqual([m.nom for m in trouves], ["Hiconcil", "Clamoxyl"])  # jamais celui en rupture
+        self.assertEqual(stock.equivalents_en_stock("", medicaments), [])
+        self.assertEqual(stock.principe_de("Clamoxyl", medicaments), "amoxicilline")
+
+    def test_suggestions_disponibles_en_premier(self):
+        suggestions = [{"nom": "Amoxil"}, {"nom": "Amoxicilline"}, {"nom": "Hiconcil"}]
+        triees = stock.annoter_stock(suggestions, self.stock_demo())
+        self.assertEqual([(s["nom"], s["stock"]) for s in triees], [("Hiconcil", 12), ("Amoxil", None), ("Amoxicilline", 0)])
+
+    def test_retrait_atomique_sans_passer_sous_zero(self):
+        medicaments = self.stock_demo()
+        etats = stock.etat_des_lignes(["Amoxicilline", "Doliprane", "Ventoline"], medicaments)
+        with mock.patch.object(Medicament.objects, "filter") as filtre:
+            filtre.return_value.update.return_value = 1
+            self.assertEqual(stock.retirer_du_stock(etats), 1)  # seul Doliprane : Amoxicilline à 0, Ventoline absente
+        doliprane = medicaments[3]
+        filtre.assert_called_once_with(pk=doliprane.pk, quantite__gt=0)  # condition : jamais sous zéro
+        self.assertEqual(str(filtre.return_value.update.call_args.kwargs["quantite"]), str(stock.F("quantite") - 1))
+
+
+class StockVuesTests(SimpleTestCase):
+    def appeler(self, vue, espace, *args, methode="get", donnees=None, medicaments=(), fiche=None):
+        requete = avec_messages(getattr(RequestFactory(), methode)("/pharmacies/stock/", donnees or {}))
+        requete.user = un_user(role=espace)
+        fiche = fiche or une_pharmacie()
+        with mock.patch.object(permissions, "espace_de", return_value=espace), \
+                mock.patch.object(views, "pharmacie_de", return_value=fiche), \
+                mock.patch.object(Medicament.objects, "filter", return_value=list(medicaments)), \
+                mock.patch.object(Medicament, "_doublon_existe", return_value=False), \
+                mock.patch.object(views, "render") as rendre:
+            reponse = vue(requete, *args)
+        return reponse, rendre
+
+    def test_reserve_a_la_pharmacie(self):
+        for vue, args in ((views.stock_liste, ()), (views.stock_creer, ()), (views.stock_modifier, ("x",)), (views.stock_supprimer, ("x",))):
+            for espace in (PATIENT, MEDECIN, ADMIN):
+                with self.subTest(vue=vue.__name__, espace=espace), self.assertRaises(PermissionDenied):
+                    self.appeler(vue, espace, *args)
+
+    def test_la_fiche_d_un_autre_stock_repond_404(self):
+        self.assertIn("objet_ou_404(Medicament, pk=pk, pharmacie=pharmacie_de(request.user))", inspect.getsource(views._mon_medicament))
+        for nom in ("stock_modifier", "stock_supprimer"):
+            self.assertIn("_mon_medicament(request, pk)", inspect.getsource(getattr(views, nom)))
+
+    def test_liste_filtree_sans_accents(self):
+        medicaments = [un_medicament("Doliprane", "paracétamol", 40), un_medicament("Amoxicilline", "amoxicilline", 0)]
+        _, rendre = self.appeler(views.stock_liste, PHARMACIE, donnees={"q": "PARACETAMOL"}, medicaments=medicaments)
+        contexte = rendre.call_args.args[2]
+        self.assertEqual([m.nom for m in contexte["page"]], ["Doliprane"])
+        self.assertEqual(contexte["chiffres"]["rupture"], 1)  # les chiffres portent sur tout le stock
+        _, rendre = self.appeler(views.stock_liste, PHARMACIE, donnees={"etat": "rupture"}, medicaments=medicaments)
+        self.assertEqual([m.nom for m in rendre.call_args.args[2]["page"]], ["Amoxicilline"])
+
+    def test_ajout_dans_le_stock_de_la_pharmacie_connectee(self):
+        fiche = une_pharmacie()
+        donnees = {"nom": "Doliprane", "principe_actif": "Paracétamol", "dosage": "1 g", "forme": "comprime",
+                   "quantite": "0", "seuil_alerte": "5", "prix": "2.900", "pharmacie": str(ObjectId())}
+        with mock.patch.object(Medicament, "save") as enregistrer:
+            reponse, _ = self.appeler(views.stock_creer, PHARMACIE, methode="post", donnees=donnees, fiche=fiche)
+            cree = enregistrer.call_args is not None
+        self.assertTrue(cree)
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse["Location"], reverse("pharmacies:stock"))
+
+    def test_formulaire_invalide_reaffiche(self):
+        _, rendre = self.appeler(views.stock_creer, PHARMACIE, methode="post", donnees={"nom": "", "quantite": "-2"})
+        form = rendre.call_args.args[2]["form"]
+        self.assertIn("nom", form.errors)
+        self.assertIn("quantite", form.errors)
+
+    def test_suppression_en_deux_temps(self):
+        m = un_medicament()
+        with mock.patch.object(views, "_mon_medicament", return_value=m), mock.patch.object(Medicament, "delete") as supprimer:
+            self.appeler(views.stock_supprimer, PHARMACIE, m.pk)
+            supprimer.assert_not_called()
+            reponse, _ = self.appeler(views.stock_supprimer, PHARMACIE, m.pk, methode="post")
+        supprimer.assert_called_once()
+        self.assertEqual(reponse.status_code, 302)
+
+
+class StockEtOrdonnancesTests(SimpleTestCase):
+    def test_la_delivrance_retire_les_boites_du_stock(self):
+        o = une_ordonnance(statut=S.PRETE, pharmacie=une_pharmacie(), medicaments="Doliprane 1 g\nVentoline")
+        requete = avec_messages(RequestFactory().post("/"))
+        requete.user = un_user(role="pharmacie")
+        with mock.patch.object(permissions, "espace_de", return_value=PHARMACIE), \
+                mock.patch.object(views, "objet_ou_404", return_value=o), mock.patch.object(views, "ordonnances_visibles"), \
+                mock.patch.object(Ordonnance, "save"), \
+                mock.patch.object(Medicament.objects, "filter", return_value=[un_medicament("Doliprane", quantite=3)]), \
+                mock.patch.object(stock, "retirer_du_stock", return_value=1) as retirer:
+            views.ordonnance_avancer(requete, o.pk)
+        self.assertEqual(o.statut, S.DELIVREE)
+        etats = retirer.call_args.args[0]
+        self.assertEqual([e["etat"] for e in etats], [Medicament.STOCK_BAS, stock.INCONNU])
+        self.assertIn("1 boîte(s) retirée(s) du stock", [str(m) for m in requete._messages][0])
+
+    def test_pas_de_retrait_avant_la_delivrance(self):
+        o = une_ordonnance(statut=S.TRANSMISE, pharmacie=une_pharmacie())
+        requete = avec_messages(RequestFactory().post("/"))
+        requete.user = un_user(role="pharmacie")
+        with mock.patch.object(permissions, "espace_de", return_value=PHARMACIE), \
+                mock.patch.object(views, "objet_ou_404", return_value=o), mock.patch.object(views, "ordonnances_visibles"), \
+                mock.patch.object(Ordonnance, "save"), mock.patch.object(stock, "retirer_du_stock") as retirer:
+            views.ordonnance_avancer(requete, o.pk)
+        retirer.assert_not_called()
+
+    def test_la_substitution_propose_d_abord_le_stock(self):
+        o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie(), medicaments="Amoxicilline 1 g, matin et soir")
+        medicaments = [un_medicament("Amoxicilline", "amoxicilline", 0), un_medicament("Hiconcil", "amoxicilline", 12)]
+        resultat = sub.Substitution(ia_client.OK, sub.IA, "amoxicilline", [{"nom": "Clamoxyl", "type": "princeps", "type_libelle": "Marque d'origine", "raison": "…"}])
+        with mock.patch.object(sub, "suggerer", return_value=resultat):
+            reponse = SubstitutionVueTests.appeler(self, views.ordonnance_substitution, PHARMACIE, o, donnees={"medicament": o.lignes[0]},
+                                                   allergies=["Pénicilline"], stock_pharmacie=medicaments)
+        donnees = json.loads(reponse.content)
+        self.assertEqual([(s["nom"], s["stock"]) for s in donnees["en_stock"]], [("Hiconcil 1 g", 12)])  # jamais l'Amoxicilline à 0
+        self.assertEqual(donnees["en_stock"][0]["alerte_allergie"], "pénicillines")  # l'allergie vaut aussi pour le stock
+        self.assertEqual(donnees["suggestions"][0]["stock"], None)  # Clamoxyl : pas dans ce stock
+        self.assertEqual(donnees["principe_actif"], "amoxicilline")
+
+
+class StockPagesTests(SimpleTestCase):
+    requete = PagesTests.requete
+
+    def test_liste_du_stock_accessible(self):
+        medicaments = [un_medicament("Doliprane", quantite=40, prix=Decimal("2.900")), un_medicament("Amoxicilline", "amoxicilline", 0)]
+        html = render_to_string("pharmacies/stock.html", {
+            "page": medicaments, "filtre": views.FiltreStockForm(), "chiffres": stats.chiffres_stock(medicaments),
+        }, self.requete(PHARMACIE, "stock"))
+        self.assertIn(">Rupture<", html)  # l'état est écrit, pas seulement coloré
+        self.assertIn("2,900", html)  # prix en dinars, 3 décimales
+        self.assertIn("Modifier<span class=\"sr-only\"> Doliprane 1 g</span>", html)
+        self.assertIn('href="/pharmacies/stock/" class="nav-item" aria-current="page"', html)
+        self.assertEqual(verifier_html(html), [])
+
+    def test_formulaires_accessibles(self):
+        with mock.patch.object(Medicament, "_doublon_existe", return_value=False):
+            form = MedicamentForm({"nom": "", "quantite": "-1"}, pharmacie=une_pharmacie())
+            form.is_valid()
+        m = un_medicament(quantite=0)
+        pages = [
+            render_to_string("pharmacies/medicament_form.html", {"form": form, "medicament": None}, self.requete(PHARMACIE, "stock_creer")),
+            render_to_string("pharmacies/medicament_form.html", {"form": MedicamentForm(instance=m, pharmacie=m.pharmacie), "medicament": m}, self.requete(PHARMACIE, "stock_modifier")),
+            render_to_string("pharmacies/medicament_supprimer.html", {"medicament": un_medicament(quantite=7)}, self.requete(PHARMACIE, "stock_supprimer")),
+        ]
+        self.assertIn('role="alert"', pages[0])
+        self.assertIn("Rupture", pages[1])
+        self.assertIn("mettez plutôt sa quantité à zéro", pages[2])
+        for html in pages:
+            self.assertEqual(verifier_html(html), [])
+
+    def test_la_pharmacie_ne_se_choisit_pas(self):
+        self.assertNotIn("pharmacie", MedicamentForm.base_fields)
+
+    def test_lignes_de_l_ordonnance_avec_leur_stock(self):
+        o = une_ordonnance(statut=S.EN_PREPARATION, pharmacie=une_pharmacie(), medicaments="Amoxicilline 1 g\nParacétamol 1 g")
+        medicaments = [un_medicament("Amoxicilline", "amoxicilline", 0), un_medicament("Doliprane", "paracétamol", 40)]
+        etats = stock.etat_des_lignes(o.lignes, medicaments)
+        html = render_to_string("pharmacies/ordonnance_detail.html", {
+            "ordonnance": o, "allergies": [], "etats": etats, "manquants": stock.lignes_en_rupture(etats),
+            "rupture": RuptureForm(lignes=o.lignes, initial={"medicament": "Amoxicilline 1 g"}),
+            "etapes": [(s, Ordonnance.Statut(s).label) for s in Ordonnance.PARCOURS],
+        }, self.requete(PHARMACIE, "ordonnance_detail"))
+        self.assertIn("Rupture · 0", html)
+        self.assertIn("servi avec Doliprane 1 g", html)  # ordonnance en DCI, servie avec la marque en stock
+        self.assertIn("1 médicament absent de votre stock", html)
+        self.assertIn('<option value="Amoxicilline 1 g" selected>', html)  # la ligne en rupture est déjà choisie
+        self.assertEqual(verifier_html(html), [])
+
+    def test_tableau_de_bord_signale_le_stock(self):
+        medicaments = [un_medicament("Amoxicilline", "amoxicilline", 0), un_medicament("Efferalgan", quantite=3), un_medicament("Doliprane", quantite=40)]
+        html = TableauDeBordPageTests.rendre(self, [], medicaments)
+        self.assertIn("Stock à surveiller", html)
+        self.assertIn("1 en rupture", html)
+        self.assertIn("1 en stock bas", html)
+        self.assertNotIn("Doliprane", html.split("Stock à surveiller")[1].split("</section>")[0])  # pas à commander
+        chiffres = stats.chiffres_stock(medicaments)
+        self.assertEqual([m.nom for m in chiffres["a_commander"]], ["Amoxicilline", "Efferalgan"])
+        self.assertEqual(chiffres["boites"], 43)
+
+    def test_demo_avec_un_medicament_en_rupture(self):
+        from .management.commands import charger_demo_pharmacies as demo
+
+        self.assertTrue(any(quantite == 0 and principe == "amoxicilline" for _, principe, _, _, quantite, *_ in demo.STOCK))

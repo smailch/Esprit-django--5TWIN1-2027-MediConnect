@@ -27,6 +27,9 @@
 <a href="{% url 'pharmacies:ordonnances' %}" class="nav-item" {% if 'ordonnance' in page %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="inbox" class="h-5 w-5"></i><span>Ordonnances reçues</span>
 </a>
+<a href="{% url 'pharmacies:stock' %}" class="nav-item" {% if 'stock' in page %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="package" class="h-5 w-5"></i><span>Stock</span>
+</a>
 <a href="{% url 'pharmacies:ma_pharmacie' %}" class="nav-item" {% if page == 'ma_pharmacie' or page == 'pharmacie_modifier' %}aria-current="page"{% endif %}>
   <i aria-hidden="true" data-lucide="store" class="h-5 w-5"></i><span>Ma pharmacie</span>
 </a>

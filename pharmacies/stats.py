@@ -8,7 +8,7 @@ from collections import Counter
 
 from django.utils import timezone
 
-from .models import Ordonnance
+from .models import Medicament, Ordonnance
 
 S = Ordonnance.Statut
 EN_COURS = (S.TRANSMISE, S.EN_PREPARATION, S.PRETE)
@@ -81,6 +81,20 @@ def a_traiter(ordonnances, limite=6):
     """La file du comptoir : à préparer et en préparation, la plus ancienne d'abord (premier arrivé, premier servi)."""
     file = [o for o in ordonnances if o.statut in (S.TRANSMISE, S.EN_PREPARATION)]
     return sorted(file, key=lambda o: o.modifie_le)[:limite]
+
+
+def chiffres_stock(medicaments, limite=6):
+    """Le stock en un coup d'œil : nombre de références, ruptures, stocks bas, et la liste à commander
+    (ruptures d'abord, puis les stocks les plus bas)."""
+    etats = Counter(m.etat for m in medicaments)
+    a_commander = sorted((m for m in medicaments if m.etat != Medicament.DISPONIBLE), key=lambda m: (m.quantite, m.nom.lower()))
+    return {
+        "references": len(medicaments),
+        "rupture": etats[Medicament.RUPTURE],
+        "bas": etats[Medicament.STOCK_BAS],
+        "boites": sum(m.quantite for m in medicaments),
+        "a_commander": a_commander[:limite],
+    }
 
 
 def a_relancer(ordonnances, maintenant=None):
