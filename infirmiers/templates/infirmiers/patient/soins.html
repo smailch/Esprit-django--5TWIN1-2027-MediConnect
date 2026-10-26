@@ -21,7 +21,7 @@
       {% for i in en_cours %}
       <li class="item-row">
         <div>
-          <p class="item-name"><a href="{% url 'infirmiers:soin' i.pk %}" class="link">{{ i.get_type_soin_display }}</a></p>
+          <p class="item-name"><a href="{% url 'infirmiers:soin' i.pk %}" class="link">{{ i.get_type_soin_display }}</a>{% if i.libelle_serie %}<span class="muted"> · {{ i.libelle_serie }}</span>{% endif %}</p>
           <p class="muted mt-1 text-sm">
             {% if i.statut == 'acceptee' %}
               Passage de {{ i.infirmier }} le {{ i.date_prevue|date:"l j F à H:i" }}

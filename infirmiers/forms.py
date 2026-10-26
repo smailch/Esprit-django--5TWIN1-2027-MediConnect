@@ -1,4 +1,5 @@
 import datetime
+import uuid
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -233,8 +234,26 @@ class AnnulationForm(StyledFormMixin, forms.Form):
         self._style_fields()
 
 
+REPETITIONS = (
+    ("", "Une seule fois"),
+    ("1", "Chaque jour"),
+    ("2", "Tous les deux jours"),
+    ("7", "Chaque semaine"),
+)
+PASSAGES_MAX = 30
+
+
 class DemandeSoinForm(StyledFormMixin, forms.ModelForm):
-    """Demande de soin à domicile faite par le patient (création, ou modification tant qu'elle n'est pas acceptée)."""
+    """Demande de soin à domicile faite par le patient (création, ou modification tant qu'elle n'est pas acceptée).
+
+    À la création, le patient peut demander une série (« chaque jour pendant 10 jours ») : un passage par date,
+    reliés par le même identifiant de série. La modification porte toujours sur un seul passage."""
+
+    repetition = forms.ChoiceField(label="Répéter le soin", choices=REPETITIONS, required=False)
+    nombre_passages = forms.IntegerField(
+        label="Nombre de passages", min_value=2, max_value=PASSAGES_MAX, required=False,
+        help_text=f"De 2 à {PASSAGES_MAX} passages, à partir de la date souhaitée.",
+    )
 
     class Meta:
         model = InterventionDomicile
@@ -265,11 +284,60 @@ class DemandeSoinForm(StyledFormMixin, forms.ModelForm):
             self.initial.setdefault("adresse", patient.adresse)
             self.initial.setdefault("ville", patient.ville)
         self.fields["date_souhaitee"].widget.attrs["min"] = timezone.localdate().isoformat()
+        if not self.instance._state.adding:  # une série ne se crée qu'à la demande
+            del self.fields["repetition"], self.fields["nombre_passages"]
+        self.series = []
         self._style_fields()
         self._autocompleter(adresse="street-address", ville="address-level2")
+
+    def clean(self):
+        donnees = super().clean()
+        if donnees.get("repetition") and not donnees.get("nombre_passages"):
+            self.add_error("nombre_passages", "Indiquez combien de passages sont prévus.")
+        return donnees
+
+    def dates_de_la_serie(self):
+        """Dates des passages demandés (une seule sans répétition)."""
+        debut = self.cleaned_data["date_souhaitee"]
+        ecart = int(self.cleaned_data.get("repetition") or 0)
+        if not ecart:
+            return [debut]
+        return [debut + datetime.timedelta(days=ecart * i) for i in range(self.cleaned_data["nombre_passages"])]
+
+    def save(self, commit=True):
+        """Enregistre le premier passage et, pour une série, les suivants. `self.series` : tous les passages."""
+        dates = self.dates_de_la_serie() if "repetition" in self.fields else [None]
+        premier = super().save(commit=False)
+        if len(dates) > 1:
+            premier.serie, premier.rang_serie, premier.taille_serie = uuid.uuid4().hex, 1, len(dates)
+        self.series = [premier]
+        for rang, date in enumerate(dates[1:], start=2):
+            suivant = InterventionDomicile(
+                **{nom: getattr(premier, nom) for nom in self.Meta.fields}, patient=premier.patient,
+                serie=premier.serie, rang_serie=rang, taille_serie=len(dates),
+            )
+            suivant.date_souhaitee = date
+            self.series.append(suivant)
+        if commit:
+            with transaction.atomic():
+                for passage in self.series:
+                    passage.save()
+        return premier
 
     def clean_date_souhaitee(self):
         date = self.cleaned_data["date_souhaitee"]
         if date < timezone.localdate():
             raise forms.ValidationError("La date souhaitée ne peut pas être dans le passé.")
         return date
+
+
+class HeureSerieForm(StyledFormMixin, forms.Form):
+    """Heure de passage commune à tous les passages d'une série acceptée en bloc."""
+
+    heure = forms.TimeField(label="Heure de passage, chaque jour", widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"))
+
+    def __init__(self, *args, premier=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if premier is not None and not self.is_bound:
+            self.initial["heure"] = datetime.time(*premier.heure_conseillee)
+        self._style_fields()

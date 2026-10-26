@@ -1,0 +1,69 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Alertes des soins à domicile — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Alertes des soins à domicile</h1>
+    <p class="muted mt-2 max-w-2xl text-sm">Signes relevés dans les comptes rendus des infirmiers (règles et IA). Prévenez le médecin du patient, puis indiquez la suite donnée : l'infirmier la verra.</p>
+  </div>
+</header>
+
+<section class="kpi-grid mt-8" aria-label="Alertes à traiter">
+  <div class="panel kpi {% if compteurs.signaler %}kpi-alert{% endif %}"><p class="kpi-num">{{ compteurs.signaler }}</p><p class="kpi-label">À signaler au médecin</p></div>
+  <div class="panel kpi {% if compteurs.surveiller %}kpi-warn{% endif %}"><p class="kpi-num">{{ compteurs.surveiller }}</p><p class="kpi-label">À surveiller</p></div>
+</section>
+
+<form method="get" class="toolbar" role="search" aria-label="Filtrer les alertes">
+  <div>
+    <label for="filtre-etat" class="f-label">État</label>
+    <select id="filtre-etat" name="etat" class="field">
+      {% for valeur, libelle in etats %}<option value="{{ valeur }}" {% if valeur == filtre.etat %}selected{% endif %}>{{ libelle }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="filtre-niveau" class="f-label">Niveau</label>
+    <select id="filtre-niveau" name="niveau" class="field">
+      <option value="">Tous</option>
+      <option value="signaler" {% if filtre.niveau == 'signaler' %}selected{% endif %}>À signaler au médecin</option>
+      <option value="surveiller" {% if filtre.niveau == 'surveiller' %}selected{% endif %}>À surveiller</option>
+    </select>
+  </div>
+  <button type="submit" class="abtn abtn-outline">Filtrer</button>
+</form>
+
+{% if page.object_list %}
+<div class="table-wrap panel mt-6">
+  <table class="tbl">
+    <caption class="sr-only">Alertes des comptes rendus</caption>
+    <thead>
+      <tr>
+        <th scope="col">Passage</th>
+        <th scope="col">Patient</th>
+        <th scope="col">Infirmier</th>
+        <th scope="col">Signes</th>
+        <th scope="col">Niveau</th>
+        <th scope="col">Suivi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in page.object_list %}
+      <tr>
+        <td><a href="{% url 'infirmiers:alerte' i.pk %}" class="link">{{ i.realisee_le|date:"d/m/Y H:i" }}</a></td>
+        <td><a href="{% url 'backoffice:patient_detail' i.patient.pk %}" class="link">{{ i.patient }}</a><br><span class="muted text-xs">{{ i.ville }}</span></td>
+        <td>{{ i.infirmier|default:"—" }}</td>
+        <td class="text-sm">{% for s in i.signes_alerte %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td>{% include "infirmiers/_niveau.html" with niveau=i.niveau_alerte libelle=i.get_niveau_alerte_display %}</td>
+        <td class="text-sm">{% if i.alerte_traitee_le %}Traitée le {{ i.alerte_traitee_le|date:"d/m H:i" }}{% else %}<a href="{% url 'infirmiers:alerte' i.pk %}" class="abtn abtn-outline">Traiter<span class="sr-only"> l'alerte de {{ i.patient }}</span></a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "backoffice/_pager.html" %}
+{% else %}
+<p class="panel panel-pad muted mt-6 text-center text-sm">{% if filtre.etat == 'a_traiter' %}Aucune alerte à traiter.{% else %}Aucune alerte pour ces filtres.{% endif %}</p>
+{% endif %}
+{% endblock %}

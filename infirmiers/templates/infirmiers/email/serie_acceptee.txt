@@ -1,0 +1,15 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+Bonne nouvelle : {{ infirmier }} ({{ infirmier.telephone }}) passera chez vous aux dates suivantes :
+{% for p in passages %}
+  - {{ p.date_prevue|date:"l j F Y" }} à {{ p.date_prevue|time:"H:i" }}{% endfor %}
+
+Bon à savoir :
+- Préparez votre ordonnance et le matériel éventuel.
+- Un empêchement un jour donné ? Annulez ce passage seulement depuis votre espace :
+  {{ lien }}
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

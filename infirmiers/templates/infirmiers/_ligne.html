@@ -2,7 +2,7 @@
 <li class="item-row">
   <div>
     <p class="item-name">
-      <a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.get_type_soin_display }}</a>
+      <a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.get_type_soin_display }}</a>{% if i.libelle_serie %} <span class="tag">{{ i.libelle_serie }}</span>{% endif %}
       <span class="muted"> · {{ i.patient }}</span>
     </p>
     <p class="muted mt-1 text-sm">

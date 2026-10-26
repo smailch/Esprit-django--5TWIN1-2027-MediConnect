@@ -37,6 +37,11 @@
       </div>
       {% include "infirmiers/_signes.html" with signes=i.signes_alerte %}
       <p class="muted mt-4 text-xs">{% if i.analyse_ia == 'ok' %}Note lue par les règles et par l'IA.{% else %}Note lue par les règles.{% endif %} Un repère, pas un diagnostic.</p>
+      {% if i.alerte_traitee_le %}
+      <p class="note mt-4"><i aria-hidden="true" data-lucide="check-circle" class="h-4 w-4"></i><span>Suite donnée par l'administration le {{ i.alerte_traitee_le|date:"d/m à H:i" }} : {{ i.alerte_suite }}</span></p>
+      {% elif i.niveau_alerte != 'ras' %}
+      <p class="muted mt-2 text-xs">Alerte transmise à l'administration, en attente de traitement.</p>
+      {% endif %}
     </section>
     {% endif %}
 

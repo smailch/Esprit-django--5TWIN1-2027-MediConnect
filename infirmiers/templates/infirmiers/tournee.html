@@ -1,0 +1,53 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Tournée du {{ jour|date:"j F" }} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'infirmiers:planning' %}" class="link text-sm">← Mon planning</a>
+    <h1 class="page-title mt-2">Tournée du {{ jour|date:"l j F"|lower }}</h1>
+    <p class="muted mt-2 max-w-2xl text-sm">Les patients sont regroupés par ville pour limiter les trajets, en commençant par votre ville d'exercice. Dans chaque ville, ceux dont le dernier compte rendu était « à signaler » passent d'abord. Estimation : 30 min par passage et 30 min de trajet entre deux villes.</p>
+  </div>
+</header>
+
+{% if identique %}
+<p class="alert alert-warn mt-6" role="note">Votre tournée est déjà dans le meilleur ordre : rien à changer.</p>
+{% else %}
+<section class="kpi-grid mt-8" aria-label="Gain de la tournée proposée">
+  <div class="panel kpi"><p class="kpi-num">{{ actuelle.changements_de_ville }} → {{ proposee.changements_de_ville }}</p><p class="kpi-label">Changements de ville</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ actuelle.minutes_de_trajet }} → {{ proposee.minutes_de_trajet }} min</p><p class="kpi-label">Temps de trajet estimé</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ proposee.fin|date:"H:i" }}</p><p class="kpi-label">Fin de la tournée proposée, trajets compris</p></div>
+</section>
+{% endif %}
+
+<div class="mt-8 grid gap-8 lg:grid-cols-2 lg:items-start">
+  <section class="panel" aria-labelledby="titre-actuelle">
+    <h2 id="titre-actuelle" class="section-title px-5 pt-5">Tournée actuelle</h2>
+    <ol class="mt-2">
+      {% for p, heure in actuelle.etapes %}
+      <li class="item-row"><span><strong class="font-medium">{{ heure|date:"H:i" }}</strong> · {{ p.patient }} <span class="muted">· {{ p.ville }} · {{ p.get_type_soin_display|lower }}</span></span>{% if p.pk in prioritaires %}<span class="sev sev-severe">Prioritaire</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    <div class="pb-3"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="titre-proposee">
+    <h2 id="titre-proposee" class="section-title px-5 pt-5">Tournée proposée</h2>
+    <ol class="mt-2">
+      {% for p, heure in proposee.etapes %}
+      <li class="item-row"><span><strong class="font-medium">{{ heure|date:"H:i" }}</strong> · {{ p.patient }} <span class="muted">· {{ p.ville }} · {{ p.get_type_soin_display|lower }}</span></span>{% if p.pk in prioritaires %}<span class="sev sev-severe">Prioritaire</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    <div class="pb-3"></div>
+  </section>
+</div>
+
+{% if not identique %}
+<form method="post" class="mt-8 flex flex-wrap items-center gap-4">
+  {% csrf_token %}
+  <button type="submit" class="abtn abtn-primary abtn-lg"><i aria-hidden="true" data-lucide="route" class="h-4 w-4"></i>Appliquer cette tournée</button>
+  <p class="muted text-sm">Les patients dont l'heure change sont prévenus par e-mail.</p>
+</form>
+{% endif %}
+{% endblock %}

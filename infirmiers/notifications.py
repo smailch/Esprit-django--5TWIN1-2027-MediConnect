@@ -61,3 +61,12 @@ def annule_par_le_patient(intervention, lien):
     if intervention.infirmier is None or intervention.date_prevue is None:
         return False
     return _envoyer(intervention.infirmier.user, intervention, "Un passage a été annulé", "annule_par_le_patient", lien)
+
+
+def serie_acceptee(interventions, lien):
+    """Un infirmier a accepté plusieurs passages d'une série : un seul message qui les récapitule."""
+    interventions = sorted(interventions, key=lambda i: i.date_prevue)
+    premier = interventions[0]
+    if premier.infirmier is None:
+        return False
+    return _au_patient(premier, "Un infirmier a accepté votre série de soins", "serie_acceptee", lien, passages=interventions)

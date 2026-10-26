@@ -1,0 +1,20 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Un infirmier a accepté votre série de soins{% endblock %}
+{% block preheader %}{{ infirmier }} passera chez vous {{ passages|length }} fois, à partir du {{ intervention.date_prevue|date:"j F" }}.{% endblock %}
+{% block titre %}Un infirmier a accepté votre série de soins{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">Bonne nouvelle : {{ infirmier }} ({{ infirmier.telephone }}) passera chez vous aux dates suivantes.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F0FBFD;border-left:4px solid #0E7490;border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      {% for p in passages %}<tr><td style="padding:3px 18px 3px 0;color:#475569;">{{ p.date_prevue|date:"l j F"|capfirst }}</td><td style="padding:3px 0;font-weight:700;">{{ p.date_prevue|time:"H:i" }}</td></tr>{% endfor %}
+    </table>
+  </td></tr>
+</table>
+<p style="margin:20px 0 6px;font-weight:700;">Bon à savoir</p>
+<ul style="margin:0;padding-left:20px;color:#334155;">
+  <li style="margin:4px 0;">Préparez votre ordonnance et le matériel éventuel.</li>
+  <li style="margin:4px 0;">Un empêchement un jour donné ? Annulez ce passage seulement depuis votre espace.</li>
+</ul>
+{% endblock %}
+{% block bouton_texte %}Voir ma série{% endblock %}

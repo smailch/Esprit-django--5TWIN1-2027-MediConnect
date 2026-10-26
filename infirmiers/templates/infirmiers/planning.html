@@ -25,6 +25,9 @@
     <ul class="panel mt-4">
       {% for i in j.interventions %}{% include "infirmiers/_ligne.html" with heure=True %}{% endfor %}
     </ul>
+    {% if j.optimisable %}
+    <p class="mt-3"><a href="{% url 'infirmiers:tournee' j.jour|date:'Y-m-d' %}" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="route" class="h-4 w-4"></i>Optimiser la tournée<span class="sr-only"> du {{ j.jour|date:"j F" }}</span></a></p>
+    {% endif %}
   </section>
   {% endfor %}
 </div>

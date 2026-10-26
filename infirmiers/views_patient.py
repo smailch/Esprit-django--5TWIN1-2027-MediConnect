@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils import timezone
 
@@ -56,10 +57,14 @@ def soin_demander(request):
     if request.method == "POST" and form.is_valid():
         demande = form.save()
         nombre = len(infirmiers_disponibles(demande))
+        quoi = "Votre demande"
+        if demande.serie:
+            dernier = form.series[-1].date_souhaitee
+            quoi = f"Votre série de {len(form.series)} passages (du {demande.date_souhaitee:%d/%m} au {dernier:%d/%m})"
         if nombre:
-            messages.success(request, f"Votre demande a été envoyée à {nombre} infirmier(s) de {demande.ville}.")
+            messages.success(request, f"{quoi} a été envoyée à {nombre} infirmier(s) de {demande.ville}.")
         else:
-            messages.warning(request, f"Votre demande est enregistrée, mais aucun infirmier ne se déplace encore à {demande.ville} pour ce soin.")
+            messages.warning(request, f"{quoi} est enregistrée, mais aucun infirmier ne se déplace encore à {demande.ville} pour ce soin.")
         return redirect("infirmiers:soin", pk=demande.pk)
     return render(request, "infirmiers/patient/soin_form.html", {"form": form, "demande": None})
 
@@ -68,6 +73,12 @@ def soin_demander(request):
 def soin(request, pk):
     demande = _ma_demande(request, pk)
     contexte = {"demande": demande}
+    if demande.serie:
+        contexte["serie"] = sorted(
+            InterventionDomicile.objects.filter(patient=demande.patient, serie=demande.serie).select_related("infirmier__user"),
+            key=lambda i: i.rang_serie or 0,
+        )
+        contexte["serie_retirables"] = sum(1 for i in contexte["serie"] if i.statut == Statut.DEMANDEE)
     if demande.statut == Statut.DEMANDEE:
         contexte["nombre_infirmiers"] = len(infirmiers_disponibles(demande))
     return render(request, "infirmiers/patient/soin.html", contexte)
@@ -132,3 +143,19 @@ def soin_annuler(request, pk):
                 messages.success(request, "Le passage de l'infirmier est annulé.")
             return redirect("infirmiers:soin", pk=pk)
     return render(request, "infirmiers/patient/soin_annuler.html", {"demande": demande, "form": form})
+
+
+@login_required
+@require_POST
+def soin_serie_retirer(request, pk):
+    """Retire d'un coup les passages de la série qu'aucun infirmier n'a encore acceptés ; les autres restent prévus."""
+    demande = _ma_demande(request, pk)
+    if not demande.serie:
+        return redirect("infirmiers:soin", pk=pk)
+    retires = 0
+    for passage in InterventionDomicile.objects.filter(patient=demande.patient, serie=demande.serie, statut=Statut.DEMANDEE, infirmier__isnull=True):
+        passage.delete()
+        retires += 1
+    restants = InterventionDomicile.objects.filter(patient=demande.patient, serie=demande.serie).order_by("date_souhaitee").first()
+    messages.success(request, f"{retires} passage(s) non accepté(s) retiré(s) de la série.")
+    return redirect("infirmiers:soin", pk=restants.pk) if restants else redirect("infirmiers:soins")
