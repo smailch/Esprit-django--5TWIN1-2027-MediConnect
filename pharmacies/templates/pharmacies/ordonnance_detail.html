@@ -1,4 +1,5 @@
 {% extends "pharmacies/layout.html" %}
+{% load static %}
 
 {% block title %}Ordonnance {{ ordonnance.reference }} — MediConnect{% endblock %}
 
@@ -43,6 +44,35 @@
         {% for ligne in o.lignes %}<li>{{ ligne }}</li>{% endfor %}
       </ol>
     </section>
+
+    {% if o.note_pharmacien %}
+    <p class="alert alert-warn" role="note"><strong class="font-medium">Note de la pharmacie :</strong> {{ o.note_pharmacien }}</p>
+    {% endif %}
+
+    {% if rupture %}
+    <section class="panel panel-pad" aria-labelledby="titre-rupture">
+      <h2 id="titre-rupture" class="section-title">Médicament en rupture ?</h2>
+      <p class="muted mt-1 text-sm">L'assistant propose jusqu'à trois équivalents au même principe actif. Seul le nom du médicament lui est envoyé ; c'est vous qui décidez.</p>
+      <form method="post" action="{% url 'pharmacies:ordonnance_rupture' o.pk %}" class="mt-4 space-y-5" novalidate
+            data-substitution="{% url 'pharmacies:ordonnance_substitution' o.pk %}">
+        {% csrf_token %}
+        {% with field=rupture.medicament %}{% include "core/_champ.html" %}{% endwith %}
+
+        <div>
+          <button type="button" class="abtn abtn-outline" data-suggerer>
+            <i aria-hidden="true" data-lucide="sparkles" class="h-4 w-4"></i>Suggérer un remplaçant
+          </button>
+          <p class="muted mt-2 text-sm" role="status" aria-live="polite" data-etat></p>
+          <p class="f-error" role="alert" data-erreur></p>
+          <ul class="rx-suggestions mt-3" data-liste aria-label="Remplaçants proposés"></ul>
+        </div>
+
+        {% with field=rupture.remplacant %}{% include "core/_champ.html" %}{% endwith %}
+
+        <button type="submit" class="abtn abtn-primary">Signaler la rupture</button>
+      </form>
+    </section>
+    {% endif %}
 
     {% if o.instructions %}
     <section class="panel panel-pad" aria-labelledby="titre-instructions">
@@ -118,3 +148,5 @@
 </div>
 {% endwith %}
 {% endblock %}
+
+{% block extra_js %}{% if rupture %}<script src="{% static 'pharmacies/substitution.js' %}" defer></script>{% endif %}{% endblock %}

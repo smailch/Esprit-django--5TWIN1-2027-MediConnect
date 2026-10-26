@@ -3,15 +3,17 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
+from patients import ia_client
 from patients.models import Allergie, Consultation
 
-from . import stats
-from .forms import FiltreOrdonnancesForm, FiltrePharmaciesForm, OrdonnanceForm, PharmacieForm, TransmissionForm
+from . import ia_substitution, stats
+from .forms import FiltreOrdonnancesForm, FiltrePharmaciesForm, OrdonnanceForm, PharmacieForm, RuptureForm, TransmissionForm
 from .models import Ordonnance, Pharmacie
 from .permissions import ADMIN, PATIENT, PHARMACIE, PRESCRIPTEURS, TOUS, espace_de, espace_requis, patient_de, pharmacie_de
 
@@ -189,11 +191,77 @@ def ordonnance_detail(request, pk):
     allergies = []
     if request.espace != PATIENT:
         allergies = Allergie.objects.filter(patient=ordonnance.patient, active=True).order_by("substance")
+    rupture = None
+    if request.espace == PHARMACIE and ordonnance.est_en_traitement:
+        rupture = RuptureForm(lignes=ordonnance.lignes)
     return render(request, "pharmacies/ordonnance_detail.html", {
         "ordonnance": ordonnance,
         "allergies": allergies,
         "etapes": [(s, Ordonnance.Statut(s).label) for s in Ordonnance.PARCOURS],
+        "rupture": rupture,
     })
+
+
+# --- Rupture de stock : signalement et suggestion de remplaçants par l'IA ---------------------------------------
+
+MESSAGES_SOURCE = {
+    ia_substitution.IA: "Proposé par l'IA, à vérifier : même principe actif, dosage et forme à contrôler.",
+    ia_substitution.LOCAL: "IA indisponible : suggestions tirées de la table locale des génériques.",
+    ia_substitution.AUCUNE: "Aucun équivalent connu pour ce médicament. Vérifiez auprès de votre grossiste ou du prescripteur.",
+}
+
+
+@espace_requis(PHARMACIE)
+@require_POST
+def ordonnance_substitution(request, pk):
+    """Suggestions de remplaçants pour un médicament de l'ordonnance (appel asynchrone, réponse JSON).
+
+    Seul le nom du médicament part vers l'IA ; les allergies du patient sont confrontées aux suggestions ici, en local.
+    Le médicament doit être une ligne de cette ordonnance : la page n'est pas un accès libre à l'IA."""
+    ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
+    if not ordonnance.est_en_traitement:
+        return JsonResponse({"ok": False, "erreur": "Les remplaçants se cherchent pendant la préparation de l'ordonnance."}, status=400)
+    ligne = request.POST.get("medicament", "")
+    if ligne not in ordonnance.lignes or not ia_substitution.nettoyer(ligne):
+        return JsonResponse({"ok": False, "erreur": "Choisissez d'abord le médicament en rupture."}, status=400)
+    resultat = ia_substitution.suggerer(ligne, identifiant=f"pharmacie:{ordonnance.pharmacie_id}")
+    substances = list(Allergie.objects.filter(patient=ordonnance.patient, active=True).values_list("substance", flat=True))
+    suggestions = ia_substitution.signaler_allergies(resultat.suggestions, resultat.principe_actif, substances)
+    message = MESSAGES_SOURCE[resultat.source]
+    if resultat.source != ia_substitution.IA and resultat.statut in ia_client.MESSAGES:
+        message += f" ({ia_client.MESSAGES[resultat.statut]})"
+    return JsonResponse({
+        "ok": True,
+        "medicament": ia_substitution.nettoyer(ligne),
+        "source": resultat.source,
+        "statut": resultat.statut,
+        "message": message,
+        "principe_actif": resultat.principe_actif,
+        "suggestions": suggestions,
+        "duree_ms": resultat.duree_ms,
+        "en_cache": resultat.en_cache,
+    })
+
+
+@espace_requis(PHARMACIE)
+@require_POST
+def ordonnance_rupture(request, pk):
+    """Enregistre la rupture (et le remplaçant choisi par le pharmacien) dans la note visible du patient et du prescripteur."""
+    ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
+    if not ordonnance.est_en_traitement:
+        messages.error(request, "La rupture se signale pendant la préparation de l'ordonnance.")
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
+    form = RuptureForm(request.POST, lignes=ordonnance.lignes)
+    if form.is_valid():
+        note = f"Rupture de stock : {ia_substitution.nettoyer(form.cleaned_data['medicament'])}."
+        if form.cleaned_data["remplacant"].strip():
+            note += f" Remplaçant proposé par la pharmacie : {form.cleaned_data['remplacant'].strip()} (à confirmer avec le patient)."
+        ordonnance.note_pharmacien = note[:300]
+        ordonnance.save(update_fields=["note_pharmacien", "modifie_le"])
+        messages.success(request, "La rupture est signalée : le patient et le prescripteur la voient sur l'ordonnance.")
+    else:
+        messages.error(request, "Choisissez le médicament en rupture.")
+    return _redirection(request, "ordonnance_detail", ordonnance.pk)
 
 
 @espace_requis(*PRESCRIPTEURS)
