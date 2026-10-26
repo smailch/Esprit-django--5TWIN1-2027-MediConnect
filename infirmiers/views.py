@@ -13,8 +13,8 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 
-from . import dossier, ia_soin, notifications
-from .forms import AnnulationForm, CompteRenduForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
+from . import dossier, ia_soin, notifications, tournee as calcul_tournee
+from .forms import AnnulationForm, CompteRenduForm, HeureSerieForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, NiveauAlerte, TypeSoin, passage_en_conflit, prochain_creneau_libre
 
 Statut = InterventionDomicile.Statut
@@ -136,11 +136,81 @@ def demandes(request):
     liste = sorted(liste, key=lambda i: (i.date_souhaitee, i.cree_le))
     return render(request, "infirmiers/demandes.html", {
         "infirmier": infirmier,
-        "demandes": liste,
+        "demandes": _regrouper_series(liste),
         "villes": villes,
         "soins": soins_possibles,
         "filtre": {"ville": ville, "soin": soin},
         "aujourdhui": timezone.localdate(),
+    })
+
+
+def _regrouper_series(demandes):
+    """Une ligne par demande, sauf les passages d'une même série, réunis sur une seule ligne (dans l'ordre)."""
+    lignes, vues = [], set()
+    for demande in demandes:
+        if not demande.serie:
+            lignes.append({"premier": demande, "serie": None})
+        elif demande.serie not in vues:
+            vues.add(demande.serie)
+            lignes.append({"premier": demande, "serie": [d for d in demandes if d.serie == demande.serie]})
+    return lignes
+
+
+def _passages_de_serie(infirmier, cle):
+    """Passages d'une série que cet infirmier peut voir : encore libres dans sa zone, ou déjà à lui."""
+    passages = sorted(
+        InterventionDomicile.objects.filter(serie=cle).select_related("patient__user", "infirmier__user"),
+        key=lambda i: i.rang_serie or 0,
+    )
+    visibles = [
+        p for p in passages
+        if p.infirmier_id == infirmier.pk or (p.statut == Statut.DEMANDEE and p.infirmier_id is None and infirmier.dessert(p.ville))
+    ]
+    if not visibles:
+        raise Http404("Série introuvable.")
+    return passages, visibles
+
+
+@login_required
+def serie(request, cle):
+    infirmier = _infirmier_connecte(request)
+    passages, visibles = _passages_de_serie(infirmier, cle)
+    libres = [p for p in visibles if p.statut == Statut.DEMANDEE]
+    form = HeureSerieForm(request.POST if request.method == "POST" else None, premier=passages[0])
+    if request.method == "POST" and form.is_valid() and libres:
+        erreurs, plan = [], []
+        for passage in libres:
+            quand = timezone.make_aware(datetime.datetime.combine(passage.date_souhaitee, form.cleaned_data["heure"]))
+            if quand < timezone.now():
+                erreurs.append(f"{passage.date_souhaitee:%d/%m} : l'heure est déjà passée")
+                continue
+            if conflit := _conflit_de_planning(infirmier, quand):
+                erreurs.append(f"{passage.date_souhaitee:%d/%m} : {conflit}")
+                continue
+            try:
+                passage.accepter(infirmier, quand)
+            except ValidationError as erreur:
+                erreurs.append(f"{passage.date_souhaitee:%d/%m} : {_message_erreur(erreur)}")
+                continue
+            plan.append(passage)
+        if erreurs:  # tout ou rien : une série à trous ne servirait pas le patient
+            for erreur in erreurs:
+                form.add_error(None, erreur)
+        else:
+            acceptes = [
+                p for p in plan
+                if InterventionDomicile.objects.filter(pk=p.pk, statut=Statut.DEMANDEE, infirmier__isnull=True).update(
+                    infirmier=infirmier, date_prevue=p.date_prevue, acceptee_le=p.acceptee_le, statut=Statut.ACCEPTEE, modifie_le=timezone.now(),
+                )
+            ]
+            if acceptes:
+                notifications.serie_acceptee(acceptes, lien_patient(request, acceptes[0]))
+            pris = len(plan) - len(acceptes)
+            messages.success(request, f"{len(acceptes)} passage(s) de la série accepté(s) à {form.cleaned_data['heure']:%H:%M}."
+                             + (f" {pris} venaient d'être pris par un collègue." if pris else ""))
+            return redirect("infirmiers:planning")
+    return render(request, "infirmiers/serie.html", {
+        "infirmier": infirmier, "passages": passages, "libres": libres, "premier": passages[0], "form": form,
     })
 
 
@@ -156,7 +226,72 @@ def planning(request):
         {"jour": jour, "interventions": list(groupe)}
         for jour, groupe in groupby(acceptees, key=lambda i: timezone.localdate(i.date_prevue))
     ]
+    for j in jours:
+        j["optimisable"] = len(j["interventions"]) >= 2 and j["jour"] >= timezone.localdate()
     return render(request, "infirmiers/planning.html", {"jours": jours, "aujourdhui": timezone.localdate()})
+
+
+def _passages_du_jour(infirmier, jour):
+    debut = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
+    return list(InterventionDomicile.objects.de(infirmier).filter(
+        statut=Statut.ACCEPTEE, date_prevue__gte=debut, date_prevue__lt=debut + datetime.timedelta(days=1),
+    ).select_related("patient__user"))
+
+
+def _prioritaires(passages):
+    """Passages dont le patient avait une alerte « à signaler » à son dernier compte rendu."""
+    derniers = {}
+    for i in InterventionDomicile.objects.filter(patient_id__in=[p.patient_id for p in passages], statut=Statut.REALISEE):
+        if i.realisee_le and (i.patient_id not in derniers or i.realisee_le > derniers[i.patient_id].realisee_le):
+            derniers[i.patient_id] = i
+    return {p.pk for p in passages if p.patient_id in derniers and derniers[p.patient_id].niveau_alerte == NiveauAlerte.SIGNALER}
+
+
+@login_required
+def tournee(request, jour):
+    """Propose un ordre de passage qui limite les changements de ville ; l'infirmier l'applique s'il le souhaite."""
+    infirmier = _infirmier_connecte(request)
+    try:
+        jour = datetime.date.fromisoformat(jour)
+    except ValueError:
+        raise Http404("Date invalide.")
+    if jour < timezone.localdate():
+        messages.error(request, "Cette journée est passée.")
+        return redirect("infirmiers:planning")
+    passages = _passages_du_jour(infirmier, jour)
+    if len(passages) < 2:
+        messages.error(request, "Il faut au moins deux passages ce jour-là pour optimiser la tournée.")
+        return redirect("infirmiers:planning")
+
+    actuelle = calcul_tournee.actuelle(passages)
+    debut = actuelle.etapes[0][1]
+    if jour == timezone.localdate():
+        debut = max(debut, _prochain_quart_d_heure())
+    prioritaires = _prioritaires(passages)
+    proposee = calcul_tournee.proposer(passages, infirmier.ville, debut, prioritaires)
+
+    if request.method == "POST":
+        deplaces = 0
+        for passage, heure in proposee.etapes:
+            if heure == passage.date_prevue:
+                continue
+            ancien = passage.date_prevue
+            try:
+                passage.replanifier(heure)
+            except ValidationError as erreur:
+                messages.error(request, f"{passage.patient} : {_message_erreur(erreur)}")
+                continue
+            passage.save()
+            notifications.passage_fixe(passage, lien_patient(request, passage), ancien=ancien)
+            deplaces += 1
+        messages.success(request, f"Tournée appliquée : {deplaces} passage(s) déplacé(s), les patients concernés ont été prévenus.")
+        return redirect("infirmiers:planning")
+
+    return render(request, "infirmiers/tournee.html", {
+        "jour": jour, "actuelle": actuelle, "proposee": proposee, "prioritaires": prioritaires,
+        "identique": calcul_tournee.est_identique(actuelle, proposee),
+        "gain_villes": actuelle.changements_de_ville - proposee.changements_de_ville,
+    })
 
 
 @login_required

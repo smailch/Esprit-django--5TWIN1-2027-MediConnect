@@ -36,7 +36,20 @@
   <h2 id="titre-liste" class="section-title">En attente <span class="count">{{ demandes|length }}</span></h2>
   {% if demandes %}
   <ul class="panel mt-4">
-    {% for i in demandes %}
+    {% for ligne in demandes %}
+    {% with i=ligne.premier %}
+    {% if ligne.serie %}
+    <li class="item-row">
+      <div>
+        <p class="item-name"><a href="{% url 'infirmiers:serie' i.serie %}" class="link">{{ i.get_type_soin_display }}</a> <span class="tag">série de {{ ligne.serie|length }}</span></p>
+        <p class="muted mt-1 text-sm">
+          {{ i.ville }} · du {{ i.date_souhaitee|date:"D j M" }} au {% with dernier=ligne.serie|last %}{{ dernier.date_souhaitee|date:"D j M" }}{% endwith %}{% if i.moment != 'indifferent' %} ({{ i.get_moment_display|lower }}){% endif %}
+        </p>
+        {% if i.description %}<p class="mt-1 text-sm">{{ i.description|truncatechars:120 }}</p>{% endif %}
+      </div>
+      <a href="{% url 'infirmiers:serie' i.serie %}" class="abtn abtn-outline">Voir la série<span class="sr-only"> : {{ i.get_type_soin_display }} à {{ i.ville }}</span></a>
+    </li>
+    {% else %}
     <li class="item-row">
       <div>
         <p class="item-name"><a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.get_type_soin_display }}</a></p>
@@ -48,6 +61,8 @@
       </div>
       <a href="{% url 'infirmiers:intervention' i.pk %}" class="abtn abtn-outline">Voir et accepter<span class="sr-only"> : {{ i.get_type_soin_display }} à {{ i.ville }}</span></a>
     </li>
+    {% endif %}
+    {% endwith %}
     {% endfor %}
   </ul>
   {% else %}

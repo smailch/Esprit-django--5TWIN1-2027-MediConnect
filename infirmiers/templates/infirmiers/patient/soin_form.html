@@ -27,6 +27,11 @@
     <div class="mt-5 grid gap-5 sm:grid-cols-2">
       {% with field=form.date_souhaitee %}{% include "core/_champ.html" %}{% endwith %}
       {% with field=form.moment %}{% include "core/_champ.html" %}{% endwith %}
+      {% if form.repetition %}
+      {% with field=form.repetition %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.nombre_passages %}{% include "core/_champ.html" %}{% endwith %}
+      <p class="note sm:col-span-2"><i aria-hidden="true" data-lucide="repeat" class="h-4 w-4"></i><span>Pour un traitement sur plusieurs jours (anticoagulant, pansement, insuline…), demandez la série en une fois : un même infirmier peut l'accepter en entier.</span></p>
+      {% endif %}
       <div class="sm:col-span-2">{% with field=form.adresse %}{% include "core/_champ.html" %}{% endwith %}</div>
       <div class="sm:col-span-2">{% with field=form.ville %}{% include "core/_champ.html" %}{% endwith %}</div>
     </div>

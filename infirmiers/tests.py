@@ -16,8 +16,8 @@ from core.views import ConnexionView
 from patients import ia_client
 from patients.models import ConstantesVitales, Mesure, Patient
 
-from . import alertes, dossier, ia_soin, notifications, views, views_patient
-from .forms import AnnulationForm, CompteRenduForm, DemandeSoinForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
+from . import alertes, dossier, ia_soin, notifications, tournee as calcul_tournee, views, views_admin, views_patient
+from .forms import AnnulationForm, CompteRenduForm, DemandeSoinForm, HeureSerieForm, InscriptionInfirmierForm, PassageForm, ProfilInfirmierForm
 from .models import Infirmier, InterventionDomicile, TypeSoin, passage_en_conflit, prochain_creneau_libre
 
 
@@ -949,3 +949,146 @@ class DossierPatientTests(SimpleTestCase):
             {"tension_systolique": 141, "tension_diastolique": 88},
             {"tension_systolique": 150.0, "tension_diastolique": 90.0},
         ])
+
+
+# --- Soins répétés ---------------------------------------------------------------------------------------
+
+
+class SerieTests(SimpleTestCase):
+    def setUp(self):
+        self.patient = Patient(pk=ObjectId(), user=User(username="amel"), adresse="7 rue de Rome", ville="Tunis")
+        p = mock.patch.object(DemandeSoinForm, "validate_unique", lambda form: None)
+        p.start()
+        self.addCleanup(p.stop)
+        self.demain = timezone.localdate() + datetime.timedelta(days=1)
+
+    def form(self, **kw):
+        donnees = {
+            "type_soin": "injection", "description": "Anticoagulant", "date_souhaitee": self.demain.isoformat(), "moment": "matin",
+            "adresse": "7 rue de Rome", "ville": "Tunis", "repetition": "", "nombre_passages": "",
+        }
+        donnees.update(kw)
+        return DemandeSoinForm(donnees, patient=self.patient)
+
+    def test_une_seule_fois(self):
+        form = self.form()
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.dates_de_la_serie(), [self.demain])
+        premier = form.save(commit=False)
+        self.assertEqual((premier.serie, premier.rang_serie, len(form.series)), ("", None, 1))
+
+    def test_serie_quotidienne_hebdomadaire(self):
+        for repetition, ecart in (("1", 1), ("2", 2), ("7", 7)):
+            with self.subTest(repetition=repetition):
+                form = self.form(repetition=repetition, nombre_passages="4")
+                self.assertTrue(form.is_valid(), form.errors)
+                form.save(commit=False)
+                self.assertEqual([p.date_souhaitee for p in form.series], [self.demain + datetime.timedelta(days=ecart * i) for i in range(4)])
+                self.assertEqual([p.rang_serie for p in form.series], [1, 2, 3, 4])
+                self.assertEqual({p.serie for p in form.series} - {""}, {form.series[0].serie})
+                self.assertTrue(all(p.taille_serie == 4 and p.patient is self.patient and p.description == "Anticoagulant" for p in form.series))
+
+    def test_nombre_de_passages_controle(self):
+        self.assertIn("nombre_passages", self.form(repetition="1").errors)
+        self.assertIn("nombre_passages", self.form(repetition="1", nombre_passages="31").errors)
+        self.assertIn("nombre_passages", self.form(repetition="1", nombre_passages="1").errors)
+
+    def test_pas_de_serie_en_modification(self):
+        existante = une_intervention()
+        existante._state.adding = False
+        self.assertNotIn("repetition", DemandeSoinForm(instance=existante, patient=self.patient).fields)
+
+    def test_libelle_de_serie(self):
+        self.assertEqual(une_intervention(serie="abc", rang_serie=3, taille_serie=10).libelle_serie, "3/10")
+        self.assertEqual(une_intervention().libelle_serie, "")
+
+    def test_regroupement_dans_les_demandes(self):
+        a, b, c = une_intervention(serie="s1", rang_serie=1), une_intervention(), une_intervention(serie="s1", rang_serie=2)
+        lignes = views._regrouper_series([a, b, c])
+        self.assertEqual([(l["premier"], l["serie"]) for l in lignes], [(a, [a, c]), (b, None)])
+
+    def test_heure_proposee_pour_la_serie(self):
+        self.assertEqual(HeureSerieForm(premier=une_intervention(moment="apres_midi")).initial["heure"], datetime.time(14, 0))
+
+    def test_email_recapitulatif(self):
+        mail.outbox = []
+        premier = une_intervention(statut="acceptee", infirmier=un_infirmier(), date_prevue=timezone.make_aware(datetime.datetime(2026, 11, 3, 8, 0)))
+        second = une_intervention(statut="acceptee", infirmier=premier.infirmier, date_prevue=timezone.make_aware(datetime.datetime(2026, 11, 4, 8, 0)))
+        premier.patient.user.email = "amel@exemple.tn"
+        second.patient = premier.patient
+        self.assertTrue(notifications.serie_acceptee([second, premier], "https://exemple/soins/1/"))
+        self.assertEqual(mail.outbox[0].subject, "Un infirmier a accepté votre série de soins — MediConnect")
+        self.assertEqual(mail.outbox[0].body.count("à 08:00"), 2)
+        self.assertNotIn("Injection", mail.outbox[0].body)
+
+
+# --- Alertes : suivi par l'administrateur --------------------------------------------------------------------
+
+
+class SuiviAlerteTests(SimpleTestCase):
+    def realisee(self, niveau="signaler"):
+        return une_intervention(statut="realisee", niveau_alerte=niveau, infirmier=un_infirmier(), realisee_le=timezone.now())
+
+    def test_traiter_une_alerte(self):
+        it = self.realisee()
+        self.assertTrue(it.alerte_a_traiter)
+        it.traiter_alerte("Admin", "  Médecin   prévenu. ")
+        self.assertEqual((it.alerte_suite, it.alerte_traitee_par), ("Médecin prévenu.", "Admin"))
+        self.assertIsNotNone(it.alerte_traitee_le)
+        self.assertFalse(it.alerte_a_traiter)
+
+    def test_refus(self):
+        with self.assertRaises(ValidationError):
+            self.realisee().traiter_alerte("Admin", "   ")
+        with self.assertRaises(ValidationError):
+            self.realisee(niveau="ras").traiter_alerte("Admin", "Rien")
+        with self.assertRaises(ValidationError):
+            une_intervention().traiter_alerte("Admin", "Rien")
+
+    def test_pages_reservees_aux_administrateurs(self):
+        for nom, args in (("alertes", ()), ("alerte", ("x",))):
+            with self.subTest(vue=nom):
+                requete = RequestFactory().get("/infirmiers/alertes/")
+                requete.user = AnonymousUser()
+                self.assertEqual(getattr(views_admin, nom)(requete, *args).status_code, 302)
+                requete.user = User(username="sami", role="infirmier")
+                with self.assertRaises(PermissionDenied):
+                    getattr(views_admin, nom)(requete, *args)
+
+    def test_adresses(self):
+        pk = str(ObjectId())
+        self.assertEqual(resolve("/infirmiers/alertes/").view_name, "infirmiers:alertes")
+        self.assertEqual(resolve(f"/infirmiers/alertes/{pk}/traiter/").view_name, "infirmiers:alerte_traiter")
+        self.assertEqual(resolve("/infirmiers/series/abc/").view_name, "infirmiers:serie")
+        self.assertEqual(resolve("/infirmiers/planning/2026-11-03/tournee/").view_name, "infirmiers:tournee")
+
+
+# --- Tournée du jour ----------------------------------------------------------------------------------------
+
+
+class TourneeTests(SimpleTestCase):
+    def passage(self, ville, h, m=0):
+        it = une_intervention(ville=ville, statut="acceptee", date_prevue=timezone.make_aware(datetime.datetime(2026, 11, 3, h, m)))
+        it.pk = ObjectId()
+        return it
+
+    def test_regroupe_par_ville_en_commencant_par_la_sienne(self):
+        a, b, c, d = self.passage("Ariana", 9), self.passage("Tunis", 9, 30), self.passage("Ariana", 10), self.passage("tunis", 10, 30)
+        debut = a.date_prevue
+        proposee = calcul_tournee.proposer([a, b, c, d], " Tunis ", debut)
+        self.assertEqual([p for p, _ in proposee.etapes], [b, d, a, c])
+        heures = [h.strftime("%H:%M") for _, h in proposee.etapes]
+        self.assertEqual(heures, ["09:00", "09:30", "10:30", "11:00"])  # 30 min de trajet entre Tunis et Ariana
+        actuelle = calcul_tournee.actuelle([a, b, c, d])
+        self.assertEqual((actuelle.changements_de_ville, proposee.changements_de_ville), (3, 1))
+        self.assertEqual((actuelle.minutes_de_trajet, proposee.minutes_de_trajet), (90, 30))
+        self.assertEqual(proposee.fin.strftime("%H:%M"), "11:30")
+
+    def test_prioritaires_d_abord_dans_leur_ville(self):
+        a, b = self.passage("Tunis", 9), self.passage("Tunis", 10)
+        proposee = calcul_tournee.proposer([a, b], "Tunis", a.date_prevue, prioritaires={b.pk})
+        self.assertEqual([p for p, _ in proposee.etapes], [b, a])
+
+    def test_deja_optimale(self):
+        a, b = self.passage("Tunis", 9), self.passage("Tunis", 9, 30)
+        self.assertTrue(calcul_tournee.est_identique(calcul_tournee.actuelle([b, a]), calcul_tournee.proposer([a, b], "Tunis", a.date_prevue)))

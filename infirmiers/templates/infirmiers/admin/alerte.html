@@ -1,0 +1,62 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Alerte de {{ i.patient }} — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'infirmiers:alertes' %}" class="link text-sm">← Alertes des soins à domicile</a>
+    <h1 class="page-title mt-2">{{ i.patient }} · {{ i.get_type_soin_display|lower }}</h1>
+    <p class="muted mt-2 text-sm">Passage de {{ i.infirmier|default:"l'infirmier" }} le {{ i.realisee_le|date:"l j F Y à H:i" }} · {{ i.ville }}</p>
+  </div>
+  {% include "infirmiers/_niveau.html" with niveau=i.niveau_alerte libelle=i.get_niveau_alerte_display %}
+</header>
+
+<div class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+  <div class="space-y-8 lg:col-span-7">
+    <section class="panel panel-pad" aria-labelledby="titre-signes">
+      <h2 id="titre-signes" class="section-title">Signes relevés</h2>
+      {% include "infirmiers/_signes.html" with signes=i.signes_alerte %}
+      <p class="muted mt-4 text-xs">{% if i.analyse_ia == 'ok' %}Note lue par les règles et par l'IA.{% else %}Note lue par les règles.{% endif %} Un repère, pas un diagnostic.</p>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-cr">
+      <h2 id="titre-cr" class="section-title">Compte rendu de l'infirmier</h2>
+      <p class="mt-3 text-sm">{{ i.compte_rendu|linebreaksbr }}</p>
+      {% if i.constantes %}
+      <dl class="dl mt-4">
+        {% if i.constantes.temperature is not None %}<div><dt>Température</dt><dd>{{ i.constantes.temperature }} °C</dd></div>{% endif %}
+        {% if i.constantes.tension_systolique is not None %}<div><dt>Tension</dt><dd>{{ i.constantes.tension_systolique }}/{{ i.constantes.tension_diastolique }} mmHg</dd></div>{% endif %}
+        {% if i.constantes.frequence_cardiaque is not None %}<div><dt>Pouls</dt><dd>{{ i.constantes.frequence_cardiaque }} /min</dd></div>{% endif %}
+        {% if i.constantes.saturation_oxygene is not None %}<div><dt>Saturation</dt><dd>{{ i.constantes.saturation_oxygene }} %</dd></div>{% endif %}
+      </dl>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="space-y-8 lg:col-span-5">
+    <section class="panel panel-pad" aria-labelledby="titre-contacts">
+      <h2 id="titre-contacts" class="section-title">Contacts</h2>
+      <dl class="dl mt-4">
+        <div class="wide"><dt>Patient</dt><dd><a href="{% url 'backoffice:patient_detail' i.patient.pk %}" class="link">{{ i.patient }}</a> · <a href="tel:{{ i.patient.telephone }}" class="link">{{ i.patient.telephone }}</a></dd></div>
+        {% if i.infirmier %}<div class="wide"><dt>Infirmier</dt><dd>{{ i.infirmier }} · <a href="tel:{{ i.infirmier.telephone }}" class="link">{{ i.infirmier.telephone }}</a></dd></div>{% endif %}
+        {% if i.patient.contact_urgence_nom %}<div class="wide"><dt>Contact d'urgence</dt><dd>{{ i.patient.contact_urgence_nom }} · {{ i.patient.contact_urgence_tel }}</dd></div>{% endif %}
+      </dl>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-suite">
+      <h2 id="titre-suite" class="section-title">Suite donnée</h2>
+      {% if i.alerte_traitee_le %}
+      <p class="mt-3 text-sm">{{ i.alerte_suite }}</p>
+      <p class="muted mt-1 text-xs">Par {{ i.alerte_traitee_par }} le {{ i.alerte_traitee_le|date:"d/m/Y à H:i" }}</p>
+      {% endif %}
+      <form method="post" action="{% url 'infirmiers:alerte_traiter' i.pk %}" novalidate class="mt-4 space-y-5">
+        {% csrf_token %}
+        {% include "infirmiers/_erreurs.html" %}
+        {% with field=form.suite %}{% include "core/_champ.html" %}{% endwith %}
+        <button type="submit" class="abtn abtn-primary">{% if i.alerte_traitee_le %}Modifier la suite donnée{% else %}Marquer comme traitée{% endif %}</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -207,6 +207,16 @@ class InterventionDomicile(models.Model):
     annulee_le = models.DateTimeField(null=True, blank=True)
     motif_annulation = models.CharField("Motif d'annulation", max_length=200, blank=True)
 
+    # Soins répétés : les passages d'une même série partagent un identifiant (vide : passage unique).
+    serie = models.CharField(max_length=32, blank=True, db_index=True)
+    rang_serie = models.PositiveSmallIntegerField(null=True, blank=True)
+    taille_serie = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # Suivi d'une alerte par l'administrateur (ou, plus tard, le médecin).
+    alerte_traitee_le = models.DateTimeField(null=True, blank=True)
+    alerte_traitee_par = models.CharField(max_length=150, blank=True)
+    alerte_suite = models.CharField("Suite donnée", max_length=300, blank=True)
+
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
 
@@ -331,6 +341,26 @@ class InterventionDomicile(models.Model):
     @property
     def a_signaler(self):
         return self.niveau_alerte == NiveauAlerte.SIGNALER
+
+    @property
+    def libelle_serie(self):
+        """« 3/10 » pour un passage de série, sinon chaîne vide."""
+        return f"{self.rang_serie}/{self.taille_serie}" if self.serie and self.rang_serie else ""
+
+    @property
+    def alerte_a_traiter(self):
+        return self.statut == self.Statut.REALISEE and self.niveau_alerte in (NiveauAlerte.SIGNALER, NiveauAlerte.SURVEILLER) and not self.alerte_traitee_le
+
+    def traiter_alerte(self, par, suite):
+        """L'administrateur indique ce qui a été fait (médecin prévenu, rendez-vous pris…)."""
+        if self.statut != self.Statut.REALISEE or self.niveau_alerte not in (NiveauAlerte.SIGNALER, NiveauAlerte.SURVEILLER):
+            raise ValidationError("Cette intervention n'a pas d'alerte à traiter.")
+        suite = " ".join((suite or "").split())
+        if not suite:
+            raise ValidationError({"alerte_suite": "Indiquez la suite donnée à l'alerte."})
+        self.alerte_suite = suite[:300]
+        self.alerte_traitee_par = str(par)[:150]
+        self.alerte_traitee_le = timezone.now()
 
     def releves(self):
         """{nom: valeur} des constantes de ce passage (pour comparer les passages entre eux)."""
