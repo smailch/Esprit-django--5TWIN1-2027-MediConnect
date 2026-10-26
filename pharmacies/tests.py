@@ -504,7 +504,7 @@ class PagesTests(SimpleTestCase):
         requete = RequestFactory().get("/pharmacies/")
         requete.user = SimpleNamespace(is_authenticated=True, first_name="Hela", username="h", get_full_name=lambda: "Hela B")
         requete.espace = espace
-        requete.resolver_match = SimpleNamespace(url_name=page)
+        requete.resolver_match = SimpleNamespace(url_name=page, namespace="pharmacies")
         return requete
 
     def detail(self, espace, **kw):
@@ -555,13 +555,21 @@ class PagesTests(SimpleTestCase):
         for espace, attendu, absent in (
             (PATIENT, "Mes ordonnances", "Ordonnances reçues"),
             (PHARMACIE, "Ordonnances reçues", "Mes ordonnances"),
-            (ADMIN, "Administration", "Ma pharmacie"),
+            (ADMIN, "File d'attente", "Ma pharmacie"),  # l'administrateur garde le menu du back-office
         ):
             html = render_to_string("pharmacies/ordonnances.html", vide, self.requete(espace))
             with self.subTest(espace=espace):
                 self.assertIn(attendu, html)
                 self.assertNotIn(absent, html)
                 self.assertEqual(html.count('aria-current="page"'), 1)
+
+    def test_l_administrateur_retrouve_le_menu_du_back_office(self):
+        for page, onglet in (("ordonnances", "/pharmacies/ordonnances/"), ("pharmacies", "/pharmacies/")):
+            html = render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(ADMIN, page))
+            with self.subTest(page=page):
+                self.assertEqual(html.count('class="nav-item"'), 7)
+                self.assertIn(f'href="{onglet}" class="nav-item" aria-current="page"', html)
+                self.assertIn('href="/backoffice/rendez-vous/"', html)
 
     def test_le_prescripteur_voit_les_consultations_a_traiter(self):
         consultation = Consultation(patient=un_patient(), medecin_nom="Dr X", resume="…", date=timezone.now())
@@ -769,7 +777,7 @@ class TableauDeBordPageTests(SimpleTestCase):
         requete = RequestFactory().get("/pharmacies/tableau-de-bord/")
         requete.user = SimpleNamespace(is_authenticated=True, first_name="Hela", username="h", get_full_name=lambda: "Hela B")
         requete.espace = espace
-        requete.resolver_match = SimpleNamespace(url_name="tableau_de_bord")
+        requete.resolver_match = SimpleNamespace(url_name="tableau_de_bord", namespace="pharmacies")
         return requete
 
     def rendre(self, ordonnances):

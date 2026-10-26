@@ -54,6 +54,11 @@
 }
 .nav-item:hover { color: var(--a-text); }
 .nav-item[aria-current="page"] { color: var(--a-accent); background: rgba(45, 212, 191, 0.1); }
+/* Mobile : au-delà de cinq onglets (espace administrateur), la barre défile au lieu d'écraser les libellés. */
+@media (max-width: 1023px) {
+  .rail-nav { overflow-x: auto; scrollbar-width: none; }
+  .nav-item { min-width: 4.5rem; }
+}
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
