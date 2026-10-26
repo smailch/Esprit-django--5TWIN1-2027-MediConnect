@@ -10,6 +10,8 @@ import logging
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+from core import courriel
+
 journal = logging.getLogger(__name__)
 
 
@@ -21,11 +23,7 @@ def _envoyer(utilisateur, intervention, objet, modele, lien, **contexte):
     gabarit = f"infirmiers/email/{modele}"
     message = EmailMultiAlternatives(f"{objet} — MediConnect", render_to_string(f"{gabarit}.txt", contexte), None, [utilisateur.email])
     message.attach_alternative(render_to_string(f"{gabarit}.html", contexte), "text/html")
-    try:
-        return message.send(fail_silently=False) == 1
-    except Exception:  # un serveur de messagerie en panne ne doit pas empêcher de soigner
-        journal.exception("Envoi de l'e-mail de soin à domicile impossible (intervention %s)", intervention.pk)
-        return False
+    return courriel.envoyer(message, f"soin à domicile {intervention.pk}", journal)  # en tâche de fond avec Celery
 
 
 def _au_patient(intervention, objet, modele, lien, **contexte):

@@ -11,6 +11,8 @@ import logging
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+from core import courriel
+
 from .agenda import SEUIL_ANNONCE_MIN, retard_minutes
 
 journal = logging.getLogger(__name__)
@@ -24,11 +26,7 @@ def _envoyer(triage, objet, modele, lien=None, **contexte):
     contexte.update(user=utilisateur, triage=triage, creneau=triage.creneau, lien=lien)
     message = EmailMultiAlternatives(f"{objet} — MediConnect", render_to_string(f"{modele}.txt", contexte), None, [utilisateur.email])
     message.attach_alternative(render_to_string(f"{modele}.html", contexte), "text/html")
-    try:
-        return message.send(fail_silently=False) == 1
-    except Exception:  # un serveur de messagerie en panne ne doit pas empêcher de réserver
-        journal.exception("Envoi de l'e-mail de rendez-vous impossible (demande %s)", triage.pk)
-        return False
+    return courriel.envoyer(message, f"demande de rendez-vous {triage.pk}", journal)  # en tâche de fond avec Celery
 
 
 def rendez_vous_fixe(triage, lien, modifie=False):

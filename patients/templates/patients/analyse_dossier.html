@@ -11,6 +11,17 @@
   </div>
 </header>
 
+{% if ia_en_cours %}
+<section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-en-cours" id="ia-en-cours" data-etat="{% url 'patients:analyse_etat' %}">
+  <div class="flex items-center gap-3">
+    <span class="chargement" aria-hidden="true"></span>
+    <h2 id="titre-ia-en-cours" class="section-title">L'assistant IA relit votre dossier…</h2>
+  </div>
+  <p class="muted mt-2 text-sm" role="status" aria-live="polite" id="ia-message">Cela prend quelques secondes. Voici déjà l'analyse des règles médicales ; la page se mettra à jour toute seule.</p>
+  <noscript><a href="{% url 'patients:analyse_dossier' %}" class="abtn abtn-outline mt-3">Actualiser</a></noscript>
+</section>
+{% endif %}
+
 {% if analyse.ia.disponible and not analyse.ia.consentement %}
 <section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-activer">
   <div class="flex flex-wrap items-center justify-between gap-4">
@@ -157,4 +168,29 @@
   </aside>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if ia_en_cours %}
+<script>
+  // Suit l'analyse IA lancée en arrière-plan (Celery) puis recharge la page, qui lira le résultat en cache.
+  (function () {
+    var bloc = document.getElementById("ia-en-cours");
+    var message = document.getElementById("ia-message");
+    var essais = 0;
+    function suivre() {
+      essais += 1;
+      fetch(bloc.dataset.etat, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (etat) {
+          if (!etat.en_cours) { window.location.reload(); return; }
+          if (essais < 45) { setTimeout(suivre, 2000); }
+          else { message.textContent = "L'IA met plus de temps que prévu. L'analyse des règles ci-dessous reste valable ; rechargez la page dans un instant."; }
+        })
+        .catch(function () { message.textContent = "Connexion perdue : rechargez la page pour voir le résultat de l'IA."; });
+    }
+    setTimeout(suivre, 1500);
+  })();
+</script>
+{% endif %}
 {% endblock %}

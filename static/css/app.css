@@ -486,3 +486,12 @@
 .app-footer strong, .auth-footer strong { color: var(--a-text); font-weight: 500; }
 .auth-main { flex: 1; }
 @media (min-width: 1024px) { .app-footer { padding: 1.25rem 3rem; } .auth-footer { padding: 1.25rem 3rem; } }
+
+/* Indicateur de chargement (analyse IA en arrière-plan) ; immobile si l'utilisateur limite les animations. */
+.chargement {
+  display: inline-block; width: 1.25rem; height: 1.25rem; flex: none;
+  border: 2px solid rgba(103, 232, 249, .25); border-top-color: #67E8F9; border-radius: 9999px;
+  animation: chargement-tour .8s linear infinite;
+}
+@keyframes chargement-tour { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .chargement { animation: none; border-top-color: rgba(103, 232, 249, .25); border-right-color: #67E8F9; } }

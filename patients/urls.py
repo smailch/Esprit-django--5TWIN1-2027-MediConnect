@@ -12,6 +12,7 @@ urlpatterns = [
     path("compte/donnees/", views.compte_exporter, name="compte_exporter"),
     path("dossier/", views.dossier, name="dossier"),
     path("dossier/analyse/", views.analyse, name="analyse_dossier"),
+    path("dossier/analyse/etat/", views.analyse_etat, name="analyse_etat"),
     path("dossier/consultations/", views.consultations, name="consultations"),
     path("ia/", views.ia_consentement, name="ia_consentement"),
     path("allergies/", views.allergies, name="allergies"),
