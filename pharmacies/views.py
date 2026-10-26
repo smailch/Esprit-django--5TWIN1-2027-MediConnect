@@ -6,13 +6,14 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404
 from patients import ia_client
 from patients.models import Allergie, Consultation
 
-from . import ia_substitution, stats, stock
+from . import delivrance, ia_substitution, stats, stock
 from .forms import (
     FiltreOrdonnancesForm,
     FiltrePharmaciesForm,
@@ -201,13 +202,16 @@ def ordonnance_detail(request, pk):
     allergies = []
     if request.espace != PATIENT:
         allergies = Allergie.objects.filter(patient=ordonnance.patient, active=True).order_by("substance")
-    rupture, etats, manquants = None, [], []
+    rupture, etats, manquants, disponibles = None, [], [], []
     if request.espace == PHARMACIE:
         # Chaque ligne confrontée au stock réel de la pharmacie : la rupture se constate, elle ne se déclare pas.
         etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
         manquants = stock.lignes_en_rupture(etats)
         if ordonnance.est_en_traitement:
             rupture = RuptureForm(lignes=ordonnance.lignes, initial={"medicament": manquants[0] if manquants else ""})
+    elif request.espace == PATIENT and ordonnance.est_transmissible:
+        # Le patient voit où ses médicaments sont réellement en stock (utile surtout pour le reste d'une délivrance partielle).
+        disponibles = delivrance.pharmacies_disponibles(ordonnance.lignes, exclure=ordonnance.pharmacie, ville=ordonnance.patient.ville)
     return render(request, "pharmacies/ordonnance_detail.html", {
         "ordonnance": ordonnance,
         "allergies": allergies,
@@ -215,6 +219,11 @@ def ordonnance_detail(request, pk):
         "rupture": rupture,
         "etats": etats,
         "manquants": manquants,
+        "servies": len(etats) - len(manquants),
+        # On ne délivre que si au moins un médicament est en stock.
+        "peut_avancer": bool(ordonnance.statut_suivant) and (ordonnance.statut_suivant != Ordonnance.Statut.DELIVREE or len(etats) > len(manquants)),
+        "disponibles": disponibles,
+        "reliquats": list(ordonnance.reliquats.all()) if ordonnance.statut == Ordonnance.Statut.DELIVREE else [],
     })
 
 
@@ -240,9 +249,12 @@ def ordonnance_substitution(request, pk):
     ligne = request.POST.get("medicament", "")
     if ligne not in ordonnance.lignes or not ia_substitution.nettoyer(ligne):
         return JsonResponse({"ok": False, "erreur": "Choisissez d'abord le médicament en rupture."}, status=400)
-    resultat = ia_substitution.suggerer(ligne, identifiant=f"pharmacie:{ordonnance.pharmacie_id}")
-    substances = list(Allergie.objects.filter(patient=ordonnance.patient, active=True).values_list("substance", flat=True))
     medicaments = list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie))
+    # Le principe actif connu par le stock est donné à l'IA, qui ne peut alors pas se tromper de molécule.
+    resultat = ia_substitution.suggerer(
+        ligne, identifiant=f"pharmacie:{ordonnance.pharmacie_id}", principe=stock.principe_de(ligne, medicaments)
+    )
+    substances = list(Allergie.objects.filter(patient=ordonnance.patient, active=True).values_list("substance", flat=True))
     principe = stock.principe_de(ligne, medicaments) or resultat.principe_actif
     # D'abord ce que la pharmacie a réellement en rayon (même principe actif), calculé en local…
     en_stock = [
@@ -354,17 +366,19 @@ def ordonnance_transmettre(request, pk):
     if not ordonnance.est_transmissible:
         messages.error(request, "Cette ordonnance ne peut plus être envoyée à une pharmacie.")
         return _redirection(request, "ordonnance_detail", ordonnance.pk)
-    form = TransmissionForm(
-        request.POST if request.method == "POST" else None,
-        initial={"pharmacie": ordonnance.pharmacie_id},
-    )
+    disponibles = delivrance.pharmacies_disponibles(ordonnance.lignes, ville=ordonnance.patient.ville)
+    # Par défaut : la pharmacie actuelle, sinon celle qui a le plus de médicaments en stock.
+    proposee = ordonnance.pharmacie_id or (disponibles[0]["pharmacie"].pk if disponibles else None)
+    form = TransmissionForm(request.POST if request.method == "POST" else None, initial={"pharmacie": proposee})
     if request.method == "POST" and form.is_valid():
         ordonnance.pharmacie = form.cleaned_data["pharmacie"]
         ordonnance.statut = Ordonnance.Statut.TRANSMISE
         ordonnance.save(update_fields=["pharmacie", "statut", "modifie_le"])
         messages.success(request, f"Votre ordonnance a été envoyée à {ordonnance.pharmacie.nom}.")
         return _redirection(request, "ordonnance_detail", ordonnance.pk)
-    return render(request, "pharmacies/ordonnance_transmettre.html", {"form": form, "ordonnance": ordonnance})
+    return render(request, "pharmacies/ordonnance_transmettre.html", {
+        "form": form, "ordonnance": ordonnance, "disponibles": disponibles,
+    })
 
 
 @espace_requis(PHARMACIE)
@@ -373,17 +387,38 @@ def ordonnance_avancer(request, pk):
     """La pharmacie passe l'ordonnance à l'étape suivante : en préparation, prête, délivrée."""
     ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
     try:
-        nouveau = ordonnance.avancer()
+        if ordonnance.statut_suivant == Ordonnance.Statut.DELIVREE:
+            # Seul ce qui est en stock est remis ; le reste part sur une nouvelle ordonnance rendue au patient.
+            etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
+            retirees, reste = delivrance.delivrer(ordonnance, etats)
+            message = f"Ordonnance {ordonnance.reference} délivrée. {retirees} boîte(s) retirée(s) du stock."
+            if reste is not None:
+                message += (f" {len(reste.lignes)} médicament(s) non disponible(s) : reportés sur l'ordonnance {reste.reference}, "
+                            "le patient voit les pharmacies qui les ont en stock.")
+        else:
+            nouveau = ordonnance.avancer()
+            message = f"Ordonnance {ordonnance.reference} : {Ordonnance.Statut(nouveau).label.lower()}."
     except ValueError as erreur:
         messages.error(request, str(erreur))
     else:
-        message = f"Ordonnance {ordonnance.reference} : {Ordonnance.Statut(nouveau).label.lower()}."
-        if nouveau == Ordonnance.Statut.DELIVREE:  # les boîtes remises sortent du stock
-            etats = stock.etat_des_lignes(ordonnance.lignes, list(Medicament.objects.filter(pharmacie=ordonnance.pharmacie)))
-            retirees = stock.retirer_du_stock(etats)
-            message += f" {retirees} boîte(s) retirée(s) du stock." if retirees else ""
         messages.success(request, message)
     return _redirection(request, "ordonnance_detail", ordonnance.pk)
+
+
+@espace_requis(PHARMACIE)
+@require_POST
+def ordonnance_renvoyer(request, pk):
+    """La pharmacie ne peut pas servir l'ordonnance : elle la rend au patient, qui l'enverra ailleurs."""
+    ordonnance = objet_ou_404(ordonnances_visibles(request), pk=pk)
+    if ordonnance.statut not in (Ordonnance.Statut.TRANSMISE, Ordonnance.Statut.EN_PREPARATION, Ordonnance.Statut.PRETE):
+        messages.error(request, "Cette ordonnance ne peut plus être renvoyée.")
+        return _redirection(request, "ordonnance_detail", ordonnance.pk)
+    nom = ordonnance.pharmacie.nom
+    ordonnance.statut, ordonnance.pharmacie = Ordonnance.Statut.EMISE, None
+    ordonnance.note_pharmacien = f"Renvoyée par {nom} le {timezone.localdate():%d/%m/%Y} : médicaments non disponibles."[:300]
+    ordonnance.save(update_fields=["statut", "pharmacie", "note_pharmacien", "modifie_le"])
+    messages.success(request, f"L'ordonnance {ordonnance.reference} a été rendue au patient.")
+    return _redirection(request, "ordonnances")
 
 
 # --- Stock de la pharmacie : liste, ajout, modification, suppression ---------------------------------------------

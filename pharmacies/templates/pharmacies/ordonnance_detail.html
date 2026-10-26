@@ -36,6 +36,20 @@
 <p class="toast mt-6" role="status">Vos médicaments sont prêts : vous pouvez passer les retirer chez {{ o.pharmacie.nom }}.</p>
 {% endif %}
 
+{% if o.ordonnance_origine and o.statut == "emise" %}
+<p class="alert alert-warn mt-6" role="note">
+  <strong class="font-medium">Ordonnance à compléter.</strong> Ces médicaments n'étaient pas disponibles lors de la délivrance de
+  <a class="link" href="{% url 'pharmacies:ordonnance_detail' o.ordonnance_origine.pk %}">{{ o.ordonnance_origine.reference }}</a>{% if espace == "patient" %} : envoyez-la à une pharmacie qui les a en stock{% endif %}.
+</p>
+{% endif %}
+
+{% for r in reliquats %}
+<p class="alert alert-warn mt-6" role="note">
+  <strong class="font-medium">Délivrance partielle.</strong> Les médicaments non disponibles sont sur l'ordonnance
+  <a class="link" href="{% url 'pharmacies:ordonnance_detail' r.pk %}">{{ r.reference }}</a> ({{ r.get_statut_display|lower }}).
+</p>
+{% endfor %}
+
 <div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
   <div class="space-y-6 lg:col-span-8">
     <section class="panel" aria-labelledby="titre-medicaments">
@@ -53,9 +67,35 @@
         {% endif %}
       </ol>
       {% if manquants and o.statut != "delivree" and o.statut != "annulee" %}
-      <p class="alert alert-danger mx-5 mb-5" role="note">{{ manquants|length }} médicament{{ manquants|length|pluralize }} absent{{ manquants|length|pluralize }} de votre stock : cherchez un remplaçant ci-dessous avant de marquer l'ordonnance prête.</p>
+      <p class="alert alert-danger mx-5 mb-5" role="note">
+        {{ manquants|length }} médicament{{ manquants|length|pluralize }} absent{{ manquants|length|pluralize }} de votre stock.
+        {% if servies %}Cherchez un remplaçant ci-dessous, ou délivrez seulement ce que vous avez : le reste partira sur une nouvelle ordonnance, et le patient verra les pharmacies qui l'ont en stock.
+        {% else %}Rien ne peut être délivré ici : cherchez un remplaçant, ou renvoyez l'ordonnance au patient.{% endif %}
+      </p>
       {% endif %}
     </section>
+
+    {% if disponibles %}
+    <section class="panel panel-pad" aria-labelledby="titre-disponibles">
+      <h2 id="titre-disponibles" class="section-title">Où trouver vos médicaments</h2>
+      <p class="muted mt-1 text-sm">D'après le stock actuel des pharmacies partenaires{% if o.pharmacie %}, autres que {{ o.pharmacie.nom }}{% endif %}.</p>
+      <ul class="mt-4 space-y-2">
+        {% for d in disponibles %}
+        <li class="proposal">
+          <span class="text-sm">
+            <strong class="font-medium">{{ d.pharmacie.nom }}</strong><span class="muted"> · {{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %}</span>
+            <span class="muted block text-xs">{% if d.complete %}A tous vos médicaments{% else %}A {{ d.nombre }} médicament{{ d.nombre|pluralize }} sur {{ o.lignes|length }} : {{ d.medicaments|join:", " }}{% endif %}</span>
+          </span>
+          <form method="post" action="{% url 'pharmacies:ordonnance_transmettre' o.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
+            <button type="submit" class="abtn {% if forloop.first %}abtn-primary{% else %}abtn-outline{% endif %}">Envoyer ici<span class="sr-only"> : {{ d.pharmacie.nom }}</span></button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
 
     {% if o.note_pharmacien %}
     <p class="alert alert-warn" role="note"><strong class="font-medium">Note de la pharmacie :</strong> {{ o.note_pharmacien }}</p>
@@ -133,15 +173,23 @@
           <p class="muted text-sm">Aucune action possible pour le moment.</p>
           {% endif %}
         {% elif espace == "pharmacie" %}
-          {% if o.statut_suivant %}
+          {% if peut_avancer %}
           <form method="post" action="{% url 'pharmacies:ordonnance_avancer' o.pk %}">
             {% csrf_token %}
             <button type="submit" class="abtn abtn-primary abtn-block">
-              {% if o.statut == "transmise" %}Commencer la préparation{% elif o.statut == "en_preparation" %}Marquer comme prête{% else %}Confirmer la délivrance{% endif %}
+              {% if o.statut == "transmise" %}Commencer la préparation{% elif o.statut == "en_preparation" %}Marquer comme prête{% elif manquants %}Délivrer les médicaments disponibles ({{ servies }} sur {{ o.lignes|length }}){% else %}Confirmer la délivrance{% endif %}
             </button>
           </form>
-          {% else %}
+          {% if o.statut == "prete" and manquants %}<p class="muted text-xs">Le reste ({{ manquants|length }}) sera reporté sur une nouvelle ordonnance pour le patient.</p>{% endif %}
+          {% elif not o.statut_suivant %}
           <p class="muted text-sm">Aucune action possible pour le moment.</p>
+          {% endif %}
+          {% if manquants and o.statut_suivant %}
+          <form method="post" action="{% url 'pharmacies:ordonnance_renvoyer' o.pk %}"
+                onsubmit="return confirm('Rendre cette ordonnance au patient ? Il pourra l\'envoyer à une autre pharmacie.');">
+            {% csrf_token %}
+            <button type="submit" class="abtn abtn-ghost abtn-block">Renvoyer au patient</button>
+          </form>
           {% endif %}
         {% else %}
           {% if o.est_modifiable %}<a href="{% url 'pharmacies:ordonnance_modifier' o.pk %}" class="abtn abtn-outline">Modifier</a>{% endif %}
