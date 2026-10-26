@@ -22,6 +22,8 @@ urlpatterns = [
     path('', TemplateView.as_view(template_name='home.html'), name='home'),
     path('comptes/', include('core.urls')),
     path('patients/', include('patients.urls')),
+    # Le module pharmacies a deux entrées : celle de l'administrateur (dans le back-office) et celle des autres comptes.
+    path('backoffice/pharmacies/', include('pharmacies.urls', namespace='backoffice_pharmacies')),
     path('backoffice/', include('backoffice.urls')),
     path('pharmacies/', include('pharmacies.urls')),
     path('admin/', admin.site.urls),

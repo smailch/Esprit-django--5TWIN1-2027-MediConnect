@@ -1,8 +1,7 @@
 {% extends "core/layout.html" %}
 {% load static %}
 
-{# Cadre des pages du module pharmacies : le cadre commun + les onglets de l'espace du compte connecté
-   (request.espace, posé par permissions.espace_requis). #}
+{# Cadre des pages du module pharmacies : le cadre commun + les onglets de l'espace connecté (request.espace). #}
 
 {% block head %}{{ block.super }}<link rel="stylesheet" href="{% static 'pharmacies/pharmacies.css' %}">{% endblock %}
 
