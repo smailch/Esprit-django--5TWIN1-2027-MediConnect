@@ -1,0 +1,274 @@
+{
+  "graine": 1,
+  "n_entrainement": 5400,
+  "specialites": [
+    "Médecine générale",
+    "Pédiatrie",
+    "Cardiologie",
+    "Pneumologie",
+    "Dermatologie",
+    "Gastro-entérologie",
+    "ORL",
+    "Neurologie",
+    "Rhumatologie"
+  ],
+  "seuil_par_defaut": 0.7,
+  "test_genere": {
+    "n": 1350,
+    "precision": 1.0,
+    "reference_toujours_la_meme_reponse": 0.1111,
+    "f1_par_specialite": {
+      "Cardiologie": 1.0,
+      "Dermatologie": 1.0,
+      "Gastro-entérologie": 1.0,
+      "Médecine générale": 1.0,
+      "Neurologie": 1.0,
+      "ORL": 1.0,
+      "Pneumologie": 1.0,
+      "Pédiatrie": 1.0,
+      "Rhumatologie": 1.0
+    },
+    "f1_moyen": 1.0,
+    "classes": [
+      "Cardiologie",
+      "Dermatologie",
+      "Gastro-entérologie",
+      "Médecine générale",
+      "Neurologie",
+      "ORL",
+      "Pneumologie",
+      "Pédiatrie",
+      "Rhumatologie"
+    ],
+    "matrice": [
+      [
+        150,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        150,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        150,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        150,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        150,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        150,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        150,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        150,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        150
+      ]
+    ]
+  },
+  "test_a_la_main": {
+    "n": 30,
+    "precision": 0.9333,
+    "reference_toujours_la_meme_reponse": 0.2,
+    "f1_par_specialite": {
+      "Cardiologie": 0.8,
+      "Dermatologie": 1.0,
+      "Gastro-entérologie": 1.0,
+      "Médecine générale": 0.923,
+      "Neurologie": 1.0,
+      "ORL": 1.0,
+      "Pneumologie": 0.857,
+      "Pédiatrie": 1.0,
+      "Rhumatologie": 0.8
+    },
+    "f1_moyen": 0.9311,
+    "classes": [
+      "Cardiologie",
+      "Dermatologie",
+      "Gastro-entérologie",
+      "Médecine générale",
+      "Neurologie",
+      "ORL",
+      "Pneumologie",
+      "Pédiatrie",
+      "Rhumatologie"
+    ],
+    "matrice": [
+      [
+        2,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        6,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        2
+      ]
+    ]
+  }
+}

@@ -137,6 +137,22 @@ class AutoEvaluationForm(forms.Form):
         return {nom: self.cleaned_data.get(nom) or 0 for nom in ECHELLES}
 
 
+class OrientationForm(StyledFormMixin, forms.Form):
+    """« Quel médecin consulter ? » : un texte libre, rien n'est enregistré."""
+
+    texte = forms.CharField(
+        label="Décrivez ce que vous ressentez",
+        min_length=3,
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 4}),
+        error_messages={"required": "Décrivez en quelques mots ce que vous ressentez.", "min_length": "Décrivez en quelques mots ce que vous ressentez."},
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+
+
 class SymptomesForm(StyledFormMixin, AutoEvaluationForm):
     """Déclaration des symptômes d'un patient : cases à cocher, échelles de 0 à 5,
     température facultative et texte libre."""

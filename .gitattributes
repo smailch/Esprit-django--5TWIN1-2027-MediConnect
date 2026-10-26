@@ -1,0 +1,4 @@
+# Les modèles entraînés et les PDF sont des fichiers binaires : git ne doit jamais toucher à leurs fins de ligne.
+*.joblib binary
+*.pdf binary
+*.png binary

@@ -5220,3 +5220,90 @@ class EmailsDeLaFileTests(SimpleTestCase):
         source = (Path(__file__).resolve().parent / "suivi.py").read_text(encoding="utf-8")
         self.assertIn("notifications.estimation_modifiee(", source)
         self.assertIn("agenda.changement_file_a_annoncer(", source)
+
+
+# --- « Quel médecin consulter ? » -----------------------------------------------------------------------------------
+import inspect  # noqa: E402
+
+from .forms import OrientationForm  # noqa: E402
+
+
+class OrientationTests(SimpleTestCase):
+    def orienter(self, texte, lecture=None, prediction=None):
+        with mock.patch.object(vues_patients.suivi, "toutes_les_demandes_en_attente", return_value=[]), \
+                mock.patch.object(vues_patients.modele_ia, "predire", return_value=lecture), \
+                mock.patch.object(vues_patients.specialite_ia, "predire", return_value=prediction):
+            return vues_patients._orienter(texte)
+
+    def test_une_specialite_sure_donne_ses_medecins_disponibles(self):
+        r = self.orienter("palpitations", prediction={"specialite": "Cardiologie", "confiance": 0.95, "mots": ["palpitations"]})
+        self.assertEqual((r["specialite"], r["sure"], r["urgence"], r["repli"]), ("Cardiologie", True, False, False))
+        self.assertEqual([m["nom"] for m in r["medecins"]], ["Dr Karim Trabelsi"])
+        self.assertEqual(r["mots"], ["palpitations"])
+        self.assertIn("coeur", r["domaine"])
+
+    def test_une_specialite_sans_medecin_disponible_propose_la_medecine_generale(self):
+        r = self.orienter("mon fils tousse", prediction={"specialite": "Pédiatrie", "confiance": 0.9, "mots": []})
+        self.assertEqual(r["specialite"], "Pédiatrie")
+        self.assertTrue(r["repli"])  # la pédiatre du catalogue est indisponible
+        self.assertTrue(all(m["specialite"] == "Médecine générale" for m in r["generalistes"]))
+
+    def test_une_specialite_absente_du_catalogue_propose_la_medecine_generale(self):
+        r = self.orienter("boutons", prediction={"specialite": "Dermatologie", "confiance": 0.95, "mots": []})
+        self.assertEqual(r["medecins"], [])
+        self.assertTrue(r["repli"])
+        self.assertTrue(r["generalistes"])
+
+    def test_un_texte_incertain_oriente_vers_la_medecine_generale(self):
+        r = self.orienter("j'ai mal", prediction={"specialite": "Rhumatologie", "confiance": 0.4, "mots": ["mal"]})
+        self.assertEqual((r["specialite"], r["sure"], r["mots"]), ("Médecine générale", False, []))
+
+    def test_l_alerte_d_urgence_suit_le_modele_de_triage(self):
+        grave = {"niveau": 2, "confiance": 0.93}
+        self.assertTrue(self.orienter("x", lecture=grave)["urgence"])
+        self.assertFalse(self.orienter("x", lecture={"niveau": 2, "confiance": 0.5})["urgence"])
+        self.assertFalse(self.orienter("x", lecture={"niveau": 4, "confiance": 0.99})["urgence"])
+        self.assertFalse(self.orienter("x", lecture=None)["urgence"])
+
+    def test_sans_modele_le_site_reste_utilisable(self):
+        r = self.orienter("x")
+        self.assertEqual(r["specialite"], "Médecine générale")
+        self.assertTrue(r["medecins"])
+
+    def requete(self):
+        requete = RequestFactory().get("/x/")
+        requete.user = SimpleNamespace(is_authenticated=True, patient=True, first_name="A", username="a", get_full_name=lambda: "A")
+        requete.resolver_match = SimpleNamespace(url_name="orientation")
+        return requete
+
+    def test_la_page_affiche_l_alerte_la_specialite_et_les_medecins(self):
+        r = self.orienter("x", lecture={"niveau": 2, "confiance": 0.95},
+                          prediction={"specialite": "Cardiologie", "confiance": 0.9, "mots": ["coeur"]})
+        html = render_to_string("patients/orientation.html", {"form": OrientationForm(), "resultat": r}, self.requete())
+        for attendu in ('role="alert"', "SAMU : 190", "Cardiologie", "« coeur »", "Dr Karim Trabelsi", "Prendre rendez-vous", "pas un diagnostic", "pas conservé"):
+            self.assertIn(attendu, html)
+
+    def test_la_page_sans_alerte_ni_resultat(self):
+        html = render_to_string("patients/orientation.html", {"form": OrientationForm(), "resultat": None}, self.requete())
+        self.assertNotIn("SAMU", html)
+        self.assertNotIn("Spécialité conseillée", html)
+        self.assertIn("Quel médecin consulter ?", html)
+
+    def test_le_formulaire_demande_quelques_mots(self):
+        self.assertFalse(OrientationForm({"texte": "ab"}).is_valid())
+        self.assertFalse(OrientationForm({"texte": ""}).is_valid())
+        self.assertTrue(OrientationForm({"texte": "mal à l'oreille"}).is_valid())
+        self.assertFalse(OrientationForm({"texte": "x" * 1001}).is_valid())
+
+    def test_rien_n_est_enregistre_et_la_page_est_reservee_aux_patients(self):
+        source = inspect.getsource(vues_patients.orientation) + inspect.getsource(vues_patients._orienter)
+        self.assertNotIn(".create(", source)
+        self.assertNotIn(".save(", source)
+        self.assertIn("_patient_connecte(request)", inspect.getsource(vues_patients.orientation))
+        self.assertIn("login_required", inspect.getsource(vues_patients).split("def orientation(")[0][-80:])
+
+    def test_adresse_et_lien_depuis_la_liste_des_medecins(self):
+        from django.urls import reverse
+
+        self.assertEqual(reverse("patients:orientation"), "/patients/orientation/")
+        self.assertIn("patients:orientation", (Path(__file__).resolve().parent / "templates" / "patients" / "medecins.html").read_text(encoding="utf-8"))

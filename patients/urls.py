@@ -24,6 +24,7 @@ urlpatterns = [
     path("mesures/<str:pk>/modifier/", views.mesure_modifier, name="mesure_modifier"),
     path("mesures/<str:pk>/supprimer/", views.mesure_supprimer, name="mesure_supprimer"),
     path("medecins/", views.liste_medecins, name="medecins"),
+    path("orientation/", views.orientation, name="orientation"),
     path("medecins/<str:medecin_id>/symptomes/", views.declarer_symptomes, name="symptomes"),
     path("triage/<str:pk>/", views.resultat, name="resultat"),
     path("triage/<str:pk>/annuler/", views.annuler, name="annuler"),

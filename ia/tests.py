@@ -250,3 +250,129 @@ class ApplicationTests(SimpleTestCase):
     def test_scikit_learn_est_dans_les_dependances(self):
         exigences = (Path(__file__).resolve().parent.parent / "requirements.txt").read_text(encoding="utf-8")
         self.assertIn("scikit-learn", exigences)
+
+
+# --- Modèle d'orientation vers une spécialité -----------------------------------------------------------------------
+from . import lexique_specialite as ls, specialite  # noqa: E402
+
+
+class SpecialiteDonneesTests(SimpleTestCase):
+    def test_chaque_specialite_a_des_phrases_et_une_description(self):
+        for nom, unites in ls.SPECIALITES.items():
+            with self.subTest(nom):
+                self.assertGreaterEqual(sum(len(u["formes"]) for u in unites), 10)
+                self.assertTrue(all(u["poids"] > 0 for u in unites))
+        self.assertEqual(set(specialite.CLASSES), set(ls.DOMAINES))
+        self.assertIn(ls.PEDIATRIE, specialite.CLASSES)
+
+    def test_les_specialites_du_modele_sont_celles_de_la_liste_des_medecins_ou_prevues(self):
+        from patients import medecins_test
+
+        for nom in medecins_test.specialites():
+            if nom != "Urgences":  # les urgences passent par l'alerte, pas par une spécialité conseillée
+                self.assertIn(nom, specialite.CLASSES)
+
+    def test_le_jeu_est_reproductible_et_equilibre(self):
+        a, b = specialite.generer(900, 5), specialite.generer(900, 5)
+        self.assertEqual(a, b)
+        self.assertNotEqual(a, specialite.generer(900, 6))
+        for classe in specialite.CLASSES:
+            self.assertEqual(sum(1 for _, s in a if s == classe), 100)
+
+    def test_la_pediatrie_parle_d_un_enfant(self):
+        phrases = [specialite._phrase_pediatrie(random.Random(graine)) for graine in range(200)]  # sans le bruit (fautes, accents)
+        self.assertTrue(all(any(p.startswith(e) for e in ls.ENFANTS) for p in phrases))
+        self.assertTrue(any(s == ls.PEDIATRIE for _, s in specialite.generer(900, 2)))
+
+    def test_phrases_a_la_main_hors_du_jeu_genere(self):
+        genere = {t for t, _ in specialite.generer(5400, 1)}
+        self.assertFalse(any(t in genere for t, _ in specialite.PHRASES_A_LA_MAIN))
+        self.assertTrue(all(s in specialite.CLASSES for _, s in specialite.PHRASES_A_LA_MAIN))
+
+
+class SpecialiteModeleTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        specialite.oublier()
+        cls.addClassCleanup(specialite.oublier)
+        cls.modele = specialite.charger()
+
+    def test_le_modele_enregistre_est_utilisable(self):
+        self.assertIsNotNone(self.modele)
+        self.assertEqual(set(self.modele.classes_), set(specialite.CLASSES))
+
+    def test_evaluation_enregistree_avec_f1_par_specialite(self):
+        evaluation = specialite.charger_evaluation()
+        for cle in ("test_genere", "test_a_la_main"):
+            self.assertEqual(set(evaluation[cle]["f1_par_specialite"]), set(specialite.CLASSES))
+        self.assertGreater(evaluation["test_a_la_main"]["precision"], evaluation["test_a_la_main"]["reference_toujours_la_meme_reponse"] * 3)
+
+    def test_les_phrases_a_la_main_sont_bien_orientees(self):
+        bonnes = sum(1 for t, v in specialite.PHRASES_A_LA_MAIN if specialite.conseiller(specialite.predire(t))[0] == v)
+        self.assertGreaterEqual(bonnes / len(specialite.PHRASES_A_LA_MAIN), 0.85)
+
+    def test_cas_clairs(self):
+        attendus = {
+            "J'ai des palpitations et mal à la poitrine quand je monte les escaliers": "Cardiologie",
+            "Je tousse depuis un mois et je fume": "Pneumologie",
+            "Ma peau est pleine de boutons rouges qui grattent": "Dermatologie",
+            "Mon fils de 5 ans a de la fièvre": "Pédiatrie",
+            "J'ai très mal au bas du dos et ça descend dans la jambe": "Rhumatologie",
+        }
+        for texte, attendu in attendus.items():
+            with self.subTest(texte):
+                self.assertEqual(specialite.conseiller(specialite.predire(texte))[0], attendu)
+
+    def test_un_texte_vague_ne_propose_pas_de_specialite(self):
+        for texte in ("j'ai mal", "bonjour", "douleur"):
+            with self.subTest(texte):
+                self.assertEqual(specialite.conseiller(specialite.predire(texte))[0], ls.MEDECINE_GENERALE)
+
+    def test_un_proche_malade_ne_oriente_pas(self):
+        self.assertEqual(specialite.conseiller(specialite.predire("Mon père a eu une douleur à la poitrine hier, moi je vais bien"))[0], ls.MEDECINE_GENERALE)
+
+    def test_la_prediction_donne_les_mots_et_trois_probabilites(self):
+        p = specialite.predire("Je tousse depuis un mois et je fume")
+        self.assertLessEqual(len(p["probas"]), 3)
+        self.assertGreater(p["confiance"], 0.7)
+        self.assertTrue(p["mots"])
+
+
+class SpecialiteDecisionTests(SimpleTestCase):
+    def test_sous_le_seuil_on_ne_devine_pas(self):
+        faible = {"specialite": "Cardiologie", "confiance": 0.69}
+        sure = {"specialite": "Cardiologie", "confiance": 0.70}
+        self.assertEqual(specialite.conseiller(faible), (ls.MEDECINE_GENERALE, False))
+        self.assertEqual(specialite.conseiller(sure), ("Cardiologie", True))
+
+    def test_sans_prediction_medecine_generale(self):
+        self.assertEqual(specialite.conseiller(None), (ls.MEDECINE_GENERALE, False))
+
+    def test_texte_vide_pas_de_prediction(self):
+        self.assertIsNone(specialite.predire(""))
+        self.assertIsNone(specialite.predire("   "))
+
+    def test_une_panne_du_modele_ne_leve_pas_d_erreur(self):
+        with mock.patch.object(specialite, "charger", return_value=None):
+            self.assertIsNone(specialite.predire("j'ai mal à l'oreille"))
+
+    def test_sauvegarde_et_relecture_de_l_evaluation(self):
+        entraine, evaluation = specialite.entrainer(n=900, graine=3, n_test=360)
+        with tempfile.TemporaryDirectory() as dossier:
+            specialite.sauvegarder(entraine, evaluation, dossier)
+            self.assertTrue((Path(dossier) / specialite.NOM_MODELE).exists())
+            self.assertEqual(specialite.charger_evaluation(dossier)["n_entrainement"], 900)
+            self.assertIsNone(specialite.charger_evaluation(Path(dossier) / "absent"))
+
+
+class SpecialiteCommandeTests(SimpleTestCase):
+    def test_entrainer_specialite(self):
+        with tempfile.TemporaryDirectory() as dossier, mock.patch.object(specialite, "DOSSIER_ARTEFACTS", Path(dossier)):
+            self.addCleanup(specialite.oublier)
+            sortie = StringIO()
+            call_command("entrainer_specialite", "--n", "900", "--graine", "3", stdout=sortie)
+            texte = sortie.getvalue()
+            for morceau in ("900 phrases d'entraînement", "bonne spécialité", "F1 moyen", "Cardiologie", "Modèle enregistré"):
+                self.assertIn(morceau, texte)
+            self.assertTrue((Path(dossier) / specialite.NOM_MODELE).exists())
