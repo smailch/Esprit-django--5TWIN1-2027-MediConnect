@@ -24,6 +24,14 @@
 }
 
 .stepper { flex-wrap: wrap; row-gap: 0.75rem; }
+
+/* Tableau de bord : chiffres cliquables et barres à la couleur d'accent */
+.kpi-link { display: block; text-decoration: none; color: inherit; transition: border-color 0.15s; }
+.kpi-link:hover { border-color: var(--a-accent); }
+.bar-fill-rx { background: var(--a-accent); }
+.bar-row-rx { grid-template-columns: 7.5rem 1fr 2rem; }
+
+@media (prefers-reduced-motion: reduce) { .kpi-link { transition: none; } }
 .ref { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.02em; }
 
 @media (forced-colors: active) {
