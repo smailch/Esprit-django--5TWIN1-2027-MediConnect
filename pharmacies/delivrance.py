@@ -15,6 +15,16 @@ S = Ordonnance.Statut
 MAX_PHARMACIES = 3
 
 
+def accord_demandable(ordonnance, etats):
+    """La pharmacie peut demander l'accord du patient : il manque des médicaments, mais elle en a au moins un,
+    et la délivrance n'a pas eu lieu."""
+    return (
+        ordonnance.statut in (S.TRANSMISE, S.EN_PREPARATION, S.PRETE)
+        and ordonnance.accord_partiel == Ordonnance.Accord.NON_DEMANDE
+        and bool(lignes_servies(etats)) and bool(stock.lignes_en_rupture(etats))
+    )
+
+
 def lignes_servies(etats):
     """Les lignes que la pharmacie peut remettre avec son stock."""
     return [e["ligne"] for e in etats if e["etat"] in (Medicament.DISPONIBLE, Medicament.STOCK_BAS)]
@@ -30,6 +40,8 @@ def delivrer(ordonnance, etats):
             "Aucun médicament de cette ordonnance n'est dans votre stock : rien ne peut être délivré. "
             "Renvoyez-la au patient, il verra les pharmacies qui les ont."
         )
+    if manquantes and ordonnance.accord_partiel != Ordonnance.Accord.ACCEPTE:
+        raise ValueError("Il manque des médicaments : demandez d'abord l'accord du patient pour une délivrance partielle.")
     ordonnance.avancer()  # contrôle du statut et de l'expiration AVANT toute autre écriture
     reste = None
     if manquantes:
@@ -39,6 +51,7 @@ def delivrer(ordonnance, etats):
             instructions=ordonnance.instructions, date_emission=ordonnance.date_emission,
             valide_jusqu_au=ordonnance.valide_jusqu_au,  # même ordonnance médicale : même validité
             ordonnance_origine=ordonnance,
+            pharmacie_id=ordonnance.pharmacie_reste_id,  # choisie par le patient : le reste y est transmis d'office
             note_pharmacien=f"Reste à servir : non disponible chez {ordonnance.pharmacie} le {timezone.localdate():%d/%m/%Y}."[:300],
         )
         reste.save()

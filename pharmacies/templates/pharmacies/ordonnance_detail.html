@@ -36,6 +36,66 @@
 <p class="toast mt-6" role="status">Vos médicaments sont prêts : vous pouvez passer les retirer chez {{ o.pharmacie.nom }}.</p>
 {% endif %}
 
+{% if decision %}
+<section class="panel panel-pad mt-6 decision" aria-labelledby="titre-decision">
+  <h2 id="titre-decision" class="section-title">{{ o.pharmacie.nom }} n'a pas tous vos médicaments</h2>
+  <p class="mt-2 text-sm">
+    <span class="sev stk-ok">Disponible</span> {{ decision.servies|join:" · " }}<br>
+    <span class="sev stk-rupture mt-2">Manquant</span> {{ decision.manquants|join:" · " }}
+  </p>
+  <p class="muted mt-2 text-sm">Votre réponse est attendue : la pharmacie ne remettra rien sans votre accord.</p>
+
+  <div class="mt-5 grid gap-5 md:grid-cols-2">
+    <div class="choix">
+      <h3 class="item-name">Retirer ici ce qui est disponible</h3>
+      <p class="muted mt-1 text-sm">Le reste passe sur une nouvelle ordonnance, pour une autre pharmacie.</p>
+      <ul class="mt-3 space-y-2">
+        {% for d in decision.pour_le_reste %}
+        <li>
+          <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="accepter">
+            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
+            <button type="submit" class="abtn {% if forloop.first %}abtn-primary{% else %}abtn-outline{% endif %} abtn-block">Accepter, le reste chez {{ d.pharmacie.nom }}</button>
+          </form>
+          <p class="muted mt-1 text-xs">{{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %} · {% if d.complete %}a tout le reste{% else %}a {{ d.medicaments|join:", " }}{% endif %}</p>
+        </li>
+        {% endfor %}
+        <li>
+          <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="accepter">
+            <button type="submit" class="abtn abtn-ghost abtn-block">Accepter, je choisirai plus tard</button>
+          </form>
+        </li>
+      </ul>
+    </div>
+
+    <div class="choix">
+      <h3 class="item-name">Tout prendre dans une autre pharmacie</h3>
+      <p class="muted mt-1 text-sm">Votre ordonnance complète y est envoyée ; {{ o.pharmacie.nom }} ne la prépare plus.</p>
+      {% if decision.pour_tout %}
+      <ul class="mt-3 space-y-2">
+        {% for d in decision.pour_tout %}
+        <li>
+          <form method="post" action="{% url 'pharmacies:ordonnance_decision' o.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="refuser">
+            <input type="hidden" name="pharmacie" value="{{ d.pharmacie.pk }}">
+            <button type="submit" class="abtn abtn-outline abtn-block">Tout envoyer à {{ d.pharmacie.nom }}</button>
+          </form>
+          <p class="muted mt-1 text-xs">{{ d.pharmacie.ville }}{% if d.pharmacie.de_garde %} · de garde{% endif %} · a tous vos médicaments</p>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted mt-3 text-sm">Aucune autre pharmacie n'a tous vos médicaments en stock pour le moment.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {% if o.ordonnance_origine and o.statut == "emise" %}
 <p class="alert alert-warn mt-6" role="note">
   <strong class="font-medium">Ordonnance à compléter.</strong> Ces médicaments n'étaient pas disponibles lors de la délivrance de
@@ -69,7 +129,7 @@
       {% if manquants and o.statut != "delivree" and o.statut != "annulee" %}
       <p class="alert alert-danger mx-5 mb-5" role="note">
         {{ manquants|length }} médicament{{ manquants|length|pluralize }} absent{{ manquants|length|pluralize }} de votre stock.
-        {% if servies %}Cherchez un remplaçant ci-dessous, ou délivrez seulement ce que vous avez : le reste partira sur une nouvelle ordonnance, et le patient verra les pharmacies qui l'ont en stock.
+        {% if servies %}Cherchez un remplaçant ci-dessous, ou proposez au patient une délivrance partielle : il choisira entre retirer ici ce que vous avez (le reste partira ailleurs) ou tout faire préparer par une autre pharmacie.
         {% else %}Rien ne peut être délivré ici : cherchez un remplaçant, ou renvoyez l'ordonnance au patient.{% endif %}
       </p>
       {% endif %}
@@ -180,9 +240,19 @@
               {% if o.statut == "transmise" %}Commencer la préparation{% elif o.statut == "en_preparation" %}Marquer comme prête{% elif manquants %}Délivrer les médicaments disponibles ({{ servies }} sur {{ o.lignes|length }}){% else %}Confirmer la délivrance{% endif %}
             </button>
           </form>
-          {% if o.statut == "prete" and manquants %}<p class="muted text-xs">Le reste ({{ manquants|length }}) sera reporté sur une nouvelle ordonnance pour le patient.</p>{% endif %}
+          {% if o.statut == "prete" and manquants %}<p class="muted text-xs">Le reste ({{ manquants|length }}) sera reporté sur une nouvelle ordonnance{% if o.pharmacie_reste %}, envoyée à {{ o.pharmacie_reste.nom }} comme le patient l'a choisi{% else %} pour le patient{% endif %}.</p>{% endif %}
           {% elif not o.statut_suivant %}
           <p class="muted text-sm">Aucune action possible pour le moment.</p>
+          {% endif %}
+          {% if accord_demandable %}
+          <form method="post" action="{% url 'pharmacies:ordonnance_demander_accord' o.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="abtn abtn-outline abtn-block">Demander l'accord du patient ({{ servies }} sur {{ o.lignes|length }} disponible{{ servies|pluralize }})</button>
+          </form>
+          {% elif manquants and o.accord_partiel == "attente" %}
+          <p class="note"><i aria-hidden="true" data-lucide="hourglass" class="h-4 w-4"></i><span>En attente de la réponse du patient : délivrance partielle ici, ou ordonnance complète dans une autre pharmacie.</span></p>
+          {% elif manquants and o.accord_partiel == "accepte" %}
+          <p class="note"><i aria-hidden="true" data-lucide="check" class="h-4 w-4"></i><span>Le patient accepte la délivrance partielle.</span></p>
           {% endif %}
           {% if manquants and o.statut_suivant %}
           <form method="post" action="{% url 'pharmacies:ordonnance_renvoyer' o.pk %}"

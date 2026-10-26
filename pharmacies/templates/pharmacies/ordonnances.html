@@ -57,7 +57,7 @@
           {% if request.espace != "patient" %}<td>{{ o.patient }}</td>{% endif %}
           <td>{{ o.prescripteur_nom }}</td>
           {% if request.espace != "pharmacie" %}<td>{{ o.pharmacie|default:"—" }}</td>{% endif %}
-          <td><span class="st st-{{ o.statut }}">{{ o.get_statut_display }}</span></td>
+          <td><span class="st st-{{ o.statut }}">{{ o.get_statut_display }}</span>{% if o.accord_partiel == "attente" %}<span class="sev sev-moderee mt-1 block w-fit">{% if request.espace == "patient" %}Votre réponse est attendue{% else %}Attente du patient{% endif %}</span>{% endif %}</td>
           <td class="num"><a class="abtn abtn-outline" href="{% url 'pharmacies:ordonnance_detail' o.pk %}">Ouvrir<span class="sr-only"> l'ordonnance {{ o.reference }}</span></a></td>
         </tr>
         {% empty %}
