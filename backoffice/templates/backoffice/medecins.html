@@ -1,0 +1,65 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Médecins — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Médecins</h1>
+    <p class="muted mt-2 text-sm">Les comptes médecins, du plus récent au plus ancien.</p>
+  </div>
+</header>
+
+<form method="get" class="panel panel-pad mt-8" role="search" aria-label="Rechercher et filtrer les médecins">
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="sm:col-span-2">{% with field=filtre.q %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.specialite %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.ville %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.compte %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.validation %}{% include "core/_champ.html" %}{% endwith %}</div>
+    <div>{% with field=filtre.presence %}{% include "core/_champ.html" %}{% endwith %}</div>
+  </div>
+  <div class="mt-5 flex flex-wrap gap-2">
+    <button type="submit" class="abtn abtn-primary">Filtrer</button>
+    {% if filtres_actifs %}<a href="{% url 'backoffice:medecins' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  </div>
+</form>
+
+<section class="panel mt-6" aria-label="Liste des médecins">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Médecin</th><th scope="col">Spécialité</th><th scope="col">Ville</th>
+          <th scope="col">Téléphone</th><th scope="col" class="num">En attente</th>
+          <th scope="col">Inscrit le</th><th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in page %}
+        <tr>
+          <td>
+            <a class="link" href="{% url 'backoffice:medecin_detail' m.pk %}">{{ m }}</a>
+            {% if not m.user.is_active %}<span class="st st-annule ml-1">Désactivé</span>
+            {% elif not m.user.est_valide %}<span class="st st-en_attente ml-1">En attente</span>{% endif %}
+            {% if not m.disponible %}<span class="muted ml-1 text-xs">Absent</span>{% endif %}
+            <span class="muted block text-xs">{{ m.user.email }}</span>
+          </td>
+          <td>{{ m.specialite }}</td>
+          <td>{{ m.ville }}</td>
+          <td>{{ m.telephone|default:"—" }}</td>
+          <td class="num">{{ m.nb_demandes }}</td>
+          <td>{{ m.cree_le|date:"d/m/Y" }}</td>
+          <td class="num"><a class="abtn abtn-outline" href="{% url 'backoffice:medecin_detail' m.pk %}">Voir</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="muted">{% if filtres_actifs %}Aucun médecin ne correspond à ces critères.{% else %}Aucun médecin inscrit pour le moment.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% include "backoffice/_pager.html" %}
+{% endblock %}

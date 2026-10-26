@@ -63,8 +63,15 @@ class RedirectionApresConnexionTests(SimpleTestCase):
         self.assertEqual(self.destination(role="admin"), "/backoffice/")
         self.assertEqual(self.destination(is_superuser=True), "/backoffice/")
 
+    def test_medecin_vers_son_espace(self):
+        self.assertEqual(self.destination(role="medecin"), "/medecins/")
+
+    def test_infirmier_et_pharmacie_vers_leur_espace(self):
+        self.assertEqual(self.destination(role="infirmier"), "/infirmiers/tableau-de-bord/")
+        self.assertEqual(self.destination(role="pharmacie"), "/pharmacies/tableau-de-bord/")
+
     def test_autres_roles_vers_l_accueil(self):
-        self.assertEqual(self.destination(role="medecin"), "/")
+        self.assertEqual(self.destination(role="laboratoire"), "/")
 
 
 class AdminUserTests(SimpleTestCase):
@@ -740,7 +747,7 @@ class StructureHtmlTests(SimpleTestCase):
 
 
 class PagesAccessiblesTests(SimpleTestCase):
-    PUBLIQUES = ("/", "/comptes/connexion/", "/patients/inscription/", "/comptes/mot-de-passe-oublie/", "/comptes/mot-de-passe-oublie/envoye/", "/comptes/reinitialisation/terminee/")
+    PUBLIQUES = ("/", "/comptes/connexion/", "/patients/inscription/", "/medecins/inscription/", "/comptes/mot-de-passe-oublie/", "/comptes/mot-de-passe-oublie/envoye/", "/comptes/reinitialisation/terminee/")
 
     def test_les_pages_publiques_n_ont_aucun_defaut(self):
         for url in self.PUBLIQUES:
@@ -766,7 +773,7 @@ class PagesAccessiblesTests(SimpleTestCase):
 
     def test_aucune_icone_n_est_oubliee_dans_les_gabarits(self):
         manquantes = []
-        for dossier in ("core", "patients", "backoffice", "templates"):
+        for dossier in ("core", "patients", "backoffice", "medecins", "templates"):
             for chemin in (RACINE_PROJET / dossier).rglob("*.html"):
                 for balise in re.findall(r"<i\b[^>]*data-lucide[^>]*>", chemin.read_text(encoding="utf-8")):
                     if "aria-hidden" not in balise:
@@ -841,5 +848,5 @@ class CommandeAuditTests(SimpleTestCase):
         sortie = io.StringIO()
         call_command("audit_accessibilite", stdout=sortie)
         texte = sortie.getvalue()
-        for morceau in ("Contrastes (seuil WCAG AA", "texte principal sur le fond", "Structure des pages", "4 pages vérifiées, 0 avec un défaut ; 0 contraste(s) insuffisant(s)."):
+        for morceau in ("Contrastes (seuil WCAG AA", "texte principal sur le fond", "Structure des pages", "5 pages vérifiées, 0 avec un défaut ; 0 contraste(s) insuffisant(s)."):
             self.assertIn(morceau, texte)

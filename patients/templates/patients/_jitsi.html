@@ -1,0 +1,69 @@
+<div class="panel appel-cadre">
+  <div id="salle-jitsi" class="jitsi-salle" role="region" aria-label="Salle de téléconsultation avec {{ jitsi.nom }}"></div>
+</div>
+{{ jitsi|json_script:"jitsi-config" }}
+<script src="https://{{ jitsi.domaine }}/external_api.js"></script>
+<script>
+function mesurerSalle() {
+  var barre = document.querySelector(".appel-barre");
+  var haut = barre ? Math.ceil(barre.getBoundingClientRect().bottom) : 0;
+  var marge = window.innerWidth < 1024 ? 96 : 24;
+  return Math.max(window.innerHeight - haut - marge, 480);
+}
+function appliquerTaille() {
+  var cadre = document.querySelector(".appel-cadre");
+  var salle = document.getElementById("salle-jitsi");
+  if (!cadre || !salle) return 0;
+  var h = mesurerSalle();
+  cadre.style.height = h + "px";
+  var iframe = salle.querySelector("iframe");
+  if (iframe) {
+    iframe.style.width = "100%";
+    iframe.style.height = h + "px";
+  }
+  return h;
+}
+function ouvrirSalle() {
+  var salle = document.getElementById("salle-jitsi");
+  if (!salle || salle.dataset.ouverte || !window.JitsiMeetExternalAPI) return;
+  salle.dataset.ouverte = "1";
+  var h = appliquerTaille();
+  var cfg = JSON.parse(document.getElementById("jitsi-config").textContent);
+  var api = new JitsiMeetExternalAPI(cfg.domaine, {
+    roomName: cfg.salle,
+    parentNode: salle,
+    lang: "fr",
+    userInfo: { displayName: cfg.nom },
+    width: "100%",
+    height: h,
+    configOverwrite: {
+      prejoinPageEnabled: false,
+      prejoinConfig: { enabled: false },
+      enableWelcomePage: false,
+      enableClosePage: false,
+      disableDeepLinking: true,
+      disableInviteFunctions: true,
+      readOnlyName: true,
+      enableInsecureRoomNameWarning: false,
+      startWithAudioMuted: false,
+      startWithVideoMuted: false
+    },
+    interfaceConfigOverwrite: {
+      MOBILE_APP_PROMO: false,
+      SHOW_CHROME_EXTENSION_BANNER: false
+    }
+  });
+  function ajuster() {
+    var iframe = salle.querySelector("iframe");
+    if (iframe) iframe.title = "Salle de téléconsultation Jitsi";
+    appliquerTaille();
+  }
+  var iframe = salle.querySelector("iframe");
+  if (iframe) iframe.addEventListener("load", ajuster);
+  api.addListener("videoConferenceJoined", ajuster);
+  window.addEventListener("resize", appliquerTaille);
+  ajuster();
+}
+if (document.readyState === "complete") ouvrirSalle();
+else window.addEventListener("load", ouvrirSalle);
+</script>

@@ -12,7 +12,10 @@ from django.views.decorators.http import require_POST
 
 from core.utils import objet_ou_404, proteger_tableur
 from ia import decision as decision_ia, modele as modele_ia
-from patients import analyse_service, compte as gestion_compte, ia_client, medecins_test, notifications, suivi
+from medecins import annuaire
+from medecins.horaires import JOURS
+from medecins.models import Medecin
+from patients import analyse_service, compte as gestion_compte, ia_client, notifications, suivi
 from patients.models import (
     Allergie,
     Consultation,
@@ -26,6 +29,7 @@ from patients.models import (
 
 from .forms import (
     ConsultationForm,
+    FiltreMedecinForm,
     FiltreRendezVousForm,
     FiltrePatientForm,
     MajRendezVousForm,
@@ -246,6 +250,141 @@ def patient_detail(request, pk):
     })
 
 
+def _choix_medecins():
+    specialites = sorted({s for s in Medecin.objects.values_list("specialite", flat=True) if s})
+    villes = sorted({v for v in Medecin.objects.values_list("ville", flat=True) if v}, key=str.casefold)
+    return specialites, villes
+
+
+def _demandes_en_attente_par_medecin():
+    nombres = {}
+    codes = Triage.objects.filter(statut=Triage.Statut.EN_ATTENTE).values_list("medecin_id", flat=True)
+    for code in codes:
+        if code:
+            nombres[code] = nombres.get(code, 0) + 1
+    return nombres
+
+
+def _horaires_lisibles(medecin):
+    noms = dict(JOURS)
+    groupes = {}
+    for plage in medecin.plages or []:
+        groupes.setdefault(int(plage.jour), []).append((int(plage.debut), int(plage.fin)))
+    lignes = []
+    for jour in sorted(groupes):
+        texte = ", ".join(f"{debut} h – {fin} h" for debut, fin in sorted(groupes[jour]))
+        lignes.append((noms.get(jour, str(jour)), texte))
+    return lignes
+
+
+def _medecin_ou_404(pk):
+    return objet_ou_404(Medecin.objects.select_related("user"), pk=pk)
+
+
+@administrateur_requis
+def medecins(request):
+    specialites, villes = _choix_medecins()
+    filtre = FiltreMedecinForm(request.GET or None, specialites=specialites, villes=villes)
+    liste = Medecin.objects.select_related("user").order_by("-cree_le")
+    if filtre.is_valid():
+        liste = filtre.appliquer(liste)
+    actifs = filtre.parametres()
+    page = _page(request, liste)
+    nombres = _demandes_en_attente_par_medecin()
+    for medecin in page:
+        medecin.nb_demandes = nombres.get(medecin.code, 0)
+    return render(request, "backoffice/medecins.html", {
+        "page": page,
+        "filtre": filtre,
+        "filtres_actifs": bool(actifs),
+        "parametres": urlencode(actifs),
+    })
+
+
+@administrateur_requis
+def medecin_detail(request, pk):
+    medecin = _medecin_ou_404(pk)
+    return render(request, "backoffice/medecin_detail.html", {
+        "medecin": medecin,
+        "horaires": _horaires_lisibles(medecin),
+        "nb_demandes": Triage.objects.filter(medecin_id=medecin.code, statut=Triage.Statut.EN_ATTENTE).count(),
+    })
+
+
+def _compte_medecin_modifiable(request, medecin):
+    if medecin.user.is_staff or medecin.user.is_superuser:
+        messages.error(request, "Ce compte appartient au personnel : il ne peut pas être désactivé ici.")
+        return False
+    return True
+
+
+@administrateur_requis
+@require_POST
+def medecin_valider(request, pk):
+    medecin = _medecin_ou_404(pk)
+    if medecin.user.est_valide:
+        messages.info(request, "Ce médecin est déjà validé.")
+    else:
+        medecin.user.est_valide = True
+        medecin.user.save(update_fields=["est_valide"])
+        messages.success(request, f"{medecin} peut ouvrir sa file d'attente.")
+    return redirect("backoffice:medecin_detail", pk=medecin.pk)
+
+
+@administrateur_requis
+@require_POST
+def medecin_retirer(request, pk):
+    medecin = _medecin_ou_404(pk)
+    if not medecin.user.est_valide:
+        messages.info(request, "Ce médecin est déjà en attente de validation.")
+    else:
+        medecin.user.est_valide = False
+        medecin.user.save(update_fields=["est_valide"])
+        messages.success(request, f"La validation de {medecin} est retirée. Sa file n'est plus ouverte.")
+    return redirect("backoffice:medecin_detail", pk=medecin.pk)
+
+
+@administrateur_requis
+@require_POST
+def medecin_desactiver(request, pk):
+    medecin = _medecin_ou_404(pk)
+    if _compte_medecin_modifiable(request, medecin):
+        if not medecin.user.is_active:
+            messages.info(request, "Ce compte est déjà désactivé.")
+        else:
+            medecin.user.is_active = False
+            medecin.user.save(update_fields=["is_active"])
+            messages.success(request, f"Le compte de {medecin} est désactivé.")
+    return redirect("backoffice:medecin_detail", pk=medecin.pk)
+
+
+@administrateur_requis
+@require_POST
+def medecin_reactiver(request, pk):
+    medecin = _medecin_ou_404(pk)
+    if _compte_medecin_modifiable(request, medecin):
+        if medecin.user.is_active:
+            messages.info(request, "Ce compte est déjà actif.")
+        else:
+            medecin.user.is_active = True
+            medecin.user.save(update_fields=["is_active"])
+            messages.success(request, f"Le compte de {medecin} est réactivé.")
+    return redirect("backoffice:medecin_detail", pk=medecin.pk)
+
+
+@administrateur_requis
+@require_POST
+def medecin_disponibilite(request, pk):
+    medecin = _medecin_ou_404(pk)
+    medecin.disponible = not medecin.disponible
+    medecin.save(update_fields=["disponible"])
+    if medecin.disponible:
+        messages.success(request, f"{medecin} prend de nouveau des rendez-vous.")
+    else:
+        messages.success(request, f"{medecin} ne prend plus de rendez-vous.")
+    return redirect("backoffice:medecin_detail", pk=medecin.pk)
+
+
 @administrateur_requis
 def symptomes(request):
     return render(request, "backoffice/symptomes.html", {
@@ -258,7 +397,7 @@ def file_attente(request):
     """Vue d'ensemble de la file : pour chaque médecin, la file (ordre de passage) et les rendez-vous fixés."""
     en_attente = suivi.toutes_les_demandes_en_attente()
     groupes = suivi.annoter(en_attente)
-    medecins = list(medecins_test.tous())
+    medecins = list(annuaire.tous())
     connus = {m["id"] for m in medecins}
     # demandes d'un médecin qui n'est plus dans la liste : on les montre quand même
     for t in en_attente:

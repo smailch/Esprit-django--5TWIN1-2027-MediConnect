@@ -161,12 +161,36 @@ IA_DELAI_MAX = float(os.environ.get('IA_DELAI_MAX', '6'))  # secondes ; au-delà
 
 # --- E-mail : réinitialisation du mot de passe ---------------------------------------------------------------
 # Par défaut, les messages s'affichent dans la console du serveur : pratique en développement, rien n'est envoyé.
-# Pour envoyer de vrais messages : EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend, EMAIL_HOST, etc. dans .env.
+# Compte Google (Gmail ou Workspace) : smtp.gmail.com, port 587, TLS.
+# Le mot de passe est un mot de passe d'application, pas le mot de passe du compte.
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '').replace(' ', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'MediConnect <no-reply@mediconnect.local>')
 PASSWORD_RESET_TIMEOUT = 2 * 60 * 60  # le lien de réinitialisation reste valable deux heures
+
+# --- SMS : compte rendu, au clic du médecin ------------------------------------------------------------------
+# Numéro qui reçoit le SMS pendant l'essai. Le vider pour envoyer au téléphone du dossier.
+SMS_NUMERO_TEST = os.environ.get('SMS_NUMERO_TEST', '+21652241079')
+# Envoi automatique (Twilio). Sans identifiants, le clic ouvre l'application SMS du téléphone.
+# Le service de messagerie est prioritaire : pas besoin de numéro expéditeur.
+SMS_MODE = os.environ.get('SMS_MODE', 'twilio')
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_API_KEY_SID = os.environ.get('TWILIO_API_KEY_SID', '')
+TWILIO_API_KEY_SECRET = os.environ.get('TWILIO_API_KEY_SECRET', '')
+TWILIO_MESSAGING_SERVICE_SID = os.environ.get('TWILIO_MESSAGING_SERVICE_SID', '')
+TWILIO_FROM = os.environ.get('TWILIO_FROM_NUMBER') or os.environ.get('TWILIO_FROM', '')
+
+# --- WhatsApp : compte rendu, au clic du médecin -------------------------------------------------------------
+# Jeton et identifiant du numéro, page « Étape 1. Faites un essai » de l'application Meta.
+# Le jeton d'essai expire au bout de quelques heures : le régénérer sur la même page.
+WHATSAPP_TOKEN = os.environ.get('WHATSAPP_TOKEN', '')
+WHATSAPP_PHONE_ID = os.environ.get('WHATSAPP_PHONE_ID', '')
+WHATSAPP_VERSION = os.environ.get('WHATSAPP_GRAPH_VERSION', 'v25.0')
+WHATSAPP_FROM = os.environ.get('WHATSAPP_FROM', '')
+# Code à 6 chiffres posé lors de l'enregistrement du numéro. Meta le redemande pour le réenregistrer.
+WHATSAPP_PIN = os.environ.get('WHATSAPP_PIN', '')

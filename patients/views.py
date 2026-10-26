@@ -14,7 +14,9 @@ from django.views.decorators.http import require_POST
 from core.utils import objet_ou_404, proteger_tableur
 from ia import decision as decision_ia, modele as modele_ia, specialite as specialite_ia
 
-from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, medecins_test, mesures_stats, notifications, planning, suivi
+from medecins import annuaire
+
+from . import analyse_service, compte as gestion_compte, dossier as synthese, ia_client, ia_taches, mesures_stats, notifications, planning, suivi, visio as salle_visio
 from .forms import (
     OrientationForm,
     AllergieForm,
@@ -172,10 +174,10 @@ def _orienter(texte):
     urgence = bool(lecture and lecture["niveau"] <= 2 and lecture["confiance"] >= decision_ia.SEUIL_PAR_DEFAUT)
     prediction = specialite_ia.predire(texte)
     conseillee, sure = specialite_ia.conseiller(prediction)
-    medecins = _medecins_avec_disponibilite(medecins_test.filtrer(conseillee, ""))
+    medecins = _medecins_avec_disponibilite(annuaire.filtrer(conseillee, ""))
     repli = not any(m["disponible"] for m in medecins) and conseillee != specialite_ia.ls.MEDECINE_GENERALE
     if repli:  # aucun médecin de cette spécialité n'est disponible : la médecine générale reste un bon point de départ
-        generalistes = _medecins_avec_disponibilite(medecins_test.filtrer(specialite_ia.ls.MEDECINE_GENERALE, ""))
+        generalistes = _medecins_avec_disponibilite(annuaire.filtrer(specialite_ia.ls.MEDECINE_GENERALE, ""))
     else:
         generalistes = []
     return {
@@ -205,9 +207,9 @@ def liste_medecins(request):
     specialite = request.GET.get("specialite", "")
     ville = request.GET.get("ville", "")
     return render(request, "patients/medecins.html", {
-        "medecins": _medecins_avec_disponibilite(medecins_test.filtrer(specialite, ville)),
-        "specialites": medecins_test.specialites(),
-        "villes": medecins_test.villes(),
+        "medecins": _medecins_avec_disponibilite(annuaire.filtrer(specialite, ville)),
+        "specialites": annuaire.specialites(),
+        "villes": annuaire.villes(),
         "specialite": specialite,
         "ville": ville,
     })
@@ -216,9 +218,12 @@ def liste_medecins(request):
 @login_required
 def declarer_symptomes(request, medecin_id):
     patient = _patient_connecte(request)
-    medecin = medecins_test.trouver(medecin_id)
+    medecin = annuaire.trouver(medecin_id)
     if medecin is None:
         raise Http404("Médecin introuvable.")
+    if not medecin["disponible"]:
+        messages.error(request, "Ce médecin ne prend pas de rendez-vous pour le moment.")
+        return redirect("patients:medecins")
 
     form = SymptomesForm(request.POST if request.method == "POST" else None)
     if request.method == "POST" and form.is_valid():
@@ -333,7 +338,7 @@ def _propositions(triage, en_attente=None):
     requête pour plusieurs triages)."""
     if triage.statut != Triage.Statut.EN_ATTENTE or not est_eligible(triage.niveau_effectif):
         return []
-    courant = medecins_test.trouver(triage.medecin_id) or {
+    courant = annuaire.trouver(triage.medecin_id) or {
         "id": triage.medecin_id,
         "nom": triage.medecin_nom,
         "specialite": triage.medecin_specialite,
@@ -346,7 +351,7 @@ def _propositions(triage, en_attente=None):
     for t in en_attente:
         if t.pk != triage.pk and not t.creneau:  # ni devant elle-même, ni les rendez-vous fixés
             files.setdefault(t.medecin_id, []).append(t.niveau_effectif)
-    return choisir_alternatives(triage.niveau_effectif, courant, medecins_test.tous(), files)
+    return choisir_alternatives(triage.niveau_effectif, courant, annuaire.tous(), files)
 
 
 @login_required
@@ -364,6 +369,20 @@ def resultat(request, pk):
         "message": MESSAGES_NIVEAU.get(triage.niveau_effectif, ""),
         "propositions": _propositions(triage),
         "can_book": planning.reservable(triage.statut, triage.niveau_effectif),
+    })
+
+
+@login_required
+def visio(request, pk):
+    """Ouvre la salle Jitsi de cette demande, la même que celle du médecin."""
+    patient = _patient_connecte(request)
+    triage = objet_ou_404(Triage, pk=pk, patient=patient)
+    if triage.statut != Triage.Statut.EN_CONSULTATION:
+        messages.info(request, "La téléconsultation s'ouvre quand le médecin la commence.")
+        return redirect("patients:resultat", pk=triage.pk)
+    return render(request, "patients/visio.html", {
+        "triage": triage,
+        "jitsi": salle_visio.config(triage, str(patient)),
     })
 
 
@@ -411,7 +430,7 @@ def creneaux(request, pk):
         messages.error(request, "Un créneau ne peut pas être choisi pour cette demande.")
         return redirect("patients:resultat", pk=triage.pk)
 
-    medecin = medecins_test.trouver(triage.medecin_id)
+    medecin = annuaire.trouver(triage.medecin_id)
     horaires = medecin.get("horaires", {}) if medecin and medecin.get("disponible") else {}
     maintenant = timezone.localtime()
 
@@ -489,7 +508,7 @@ def file_medecin_test(request, medecin_id):
     module `medecins`). Réservée au personnel et aux comptes médecin."""
     if not (request.user.is_staff or request.user.role == request.user.Role.MEDECIN):
         raise PermissionDenied("Réservé aux médecins.")
-    medecin = medecins_test.trouver(medecin_id)
+    medecin = annuaire.trouver(medecin_id)
     if medecin is None:
         raise Http404("Médecin introuvable.")
     du_medecin = list(Triage.objects.filter(medecin_id=medecin_id, statut=Triage.Statut.EN_ATTENTE))
@@ -498,7 +517,7 @@ def file_medecin_test(request, medecin_id):
         "medecin": medecin,
         "demandes": groupes["file"],
         "planning": groupes["planning"],
-        "medecins": medecins_test.tous(),
+        "medecins": annuaire.tous(),
     })
 
 

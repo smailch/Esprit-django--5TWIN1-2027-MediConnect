@@ -1,0 +1,106 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Synthèse — {{ patient }} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'medecins:tableau_de_bord' %}" class="link text-sm">← File d'attente</a>
+    <h1 class="page-title mt-2">{{ patient }}</h1>
+    <p class="muted mt-2 text-sm">
+      {{ patient.age }} ans · {{ patient.get_sexe_display }} · {{ patient.ville }}
+      {% if patient.telephone %} · {{ patient.telephone }}{% endif %}
+      · {{ triage.get_statut_display }}
+    </p>
+  </div>
+  <span class="lv lv-{{ triage.niveau_effectif }}">Niveau {{ triage.niveau_effectif }}</span>
+</header>
+
+<div class="mt-8 flex flex-wrap gap-3">
+  {% if triage.est_actif %}
+  <form method="post" action="{% url 'medecins:commencer' triage.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="abtn abtn-primary">{% if triage.statut == "en_consultation" %}Reprendre la visio{% else %}Commencer la téléconsultation{% endif %}</button>
+  </form>
+  <a href="{% url 'medecins:visio' triage.pk %}" class="abtn abtn-outline">Ouvrir la visio</a>
+  {% endif %}
+  <a href="{% url 'medecins:compte_rendu' triage.pk %}" class="abtn abtn-outline">{% if consultation %}Modifier le compte rendu{% else %}Rédiger le compte rendu{% endif %}</a>
+</div>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-2">
+  <section class="panel panel-pad" aria-labelledby="titre-triage">
+    <h2 id="titre-triage" class="section-title">Ce que le triage a retenu</h2>
+    {% if triage.symptomes %}
+    <ul class="mt-4 space-y-1 text-sm">
+      {% for s in triage.symptomes %}
+      <li>{{ s.nom }}{% if s.drapeau_rouge %} — drapeau rouge{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if triage.explication %}<p class="mt-4 text-sm">{{ triage.explication }}</p>{% endif %}
+    {% if triage.texte_libre %}<p class="muted mt-3 text-sm">« {{ triage.texte_libre }} »</p>{% endif %}
+    {% if triage.drapeaux_rouges %}
+    <p class="alert alert-danger mt-4" role="note">Drapeaux rouges : {{ triage.drapeaux_rouges|join:", " }}</p>
+    {% endif %}
+    {% if triage.constantes %}
+    <dl class="dl mt-4">
+      {% if triage.constantes.temperature %}<div><dt>Température</dt><dd>{{ triage.constantes.temperature }} °C</dd></div>{% endif %}
+      {% if triage.constantes.tension_systolique %}<div><dt>Tension</dt><dd>{{ triage.constantes.tension_systolique }}/{{ triage.constantes.tension_diastolique }}</dd></div>{% endif %}
+      {% if triage.constantes.frequence_cardiaque %}<div><dt>Fréquence</dt><dd>{{ triage.constantes.frequence_cardiaque }} bpm</dd></div>{% endif %}
+      {% if triage.constantes.saturation_oxygene %}<div><dt>Saturation</dt><dd>{{ triage.constantes.saturation_oxygene }} %</dd></div>{% endif %}
+    </dl>
+    {% endif %}
+    {% with resume=triage.auto_evaluation_resume %}
+    {% if resume %}
+    <ul class="mt-4 space-y-1 text-sm">
+      {% for item in resume %}<li>{{ item.nom }} : {{ item.libelle }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    <p class="muted mt-4 text-xs">Niveau proposé par le triage : {{ triage.niveau|default:"—" }}. Niveau retenu : {{ triage.niveau_effectif }}.</p>
+  </section>
+
+  <section class="panel panel-pad" aria-labelledby="titre-dossier">
+    <h2 id="titre-dossier" class="section-title">Dossier avant la consultation</h2>
+    <dl class="dl mt-4">
+      <div><dt>Groupe sanguin</dt><dd>{{ dossier.groupe_sanguin|default:"Non renseigné" }}</dd></div>
+      <div class="wide"><dt>Antécédents</dt><dd class="whitespace-pre-line">{{ dossier.antecedents|default:"Non renseignés" }}</dd></div>
+      <div class="wide"><dt>Traitements en cours</dt><dd class="whitespace-pre-line">{{ dossier.traitements_en_cours|default:"Aucun indiqué" }}</dd></div>
+      {% if patient.contact_urgence_nom %}
+      <div class="wide"><dt>Contact d'urgence</dt><dd>{{ patient.contact_urgence_nom }} · {{ patient.contact_urgence_tel }}</dd></div>
+      {% endif %}
+    </dl>
+    {% if allergies %}
+    <h3 class="item-name mt-6">Allergies</h3>
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for a in allergies %}
+      <li>{% if a.est_severe %}<strong>{{ a.substance }}</strong> — sévère{% else %}{{ a.substance }}{% endif %}{% if a.reaction %} ({{ a.reaction }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if mesures %}
+    <h3 class="item-name mt-6">Dernières mesures</h3>
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for m in mesures %}
+      <li>{{ m.get_type_display }} : {{ m.valeur_affichee }} <span class="muted">· {{ m.mesure_le|date:"d/m/Y" }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if manquants %}
+    <p class="muted mt-4 text-sm">Informations encore absentes du dossier : {{ manquants|join:", " }}.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if triage.est_actif %}
+<section class="panel panel-pad mt-6 max-w-xl" aria-labelledby="titre-niveau">
+  <h2 id="titre-niveau" class="section-title">Requalifier l'urgence</h2>
+  <p class="muted mt-2 text-sm">La décision finale vous appartient. Un drapeau rouge peut justifier de monter le niveau.</p>
+  <form method="post" action="{% url 'medecins:requalifier' triage.pk %}" class="mt-4 space-y-4">
+    {% csrf_token %}
+    {% include "core/_champ.html" with field=form_niveau.niveau %}
+    <button type="submit" class="abtn abtn-primary">Enregistrer le niveau</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

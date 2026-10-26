@@ -1,0 +1,46 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Mon profil — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mon profil</h1>
+    <p class="muted mt-2 text-sm">Identifiant de file : {{ medecin.code }}. Ces horaires servent à estimer l'attente des patients.</p>
+  </div>
+  <a href="{% url 'core:mot_de_passe' %}" class="abtn abtn-outline">Mot de passe</a>
+</header>
+
+{% if not user.est_valide %}
+<p class="alert alert-warn mt-6" role="status">Votre compte n'est pas encore validé : la file d'attente s'ouvrira après validation par un administrateur.</p>
+{% endif %}
+
+<form method="post" novalidate class="mt-8 max-w-3xl space-y-8">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <fieldset class="panel panel-pad space-y-5">
+    <legend class="section-title">Identité</legend>
+    {% for field in form %}
+      {% if field.name == "first_name" or field.name == "last_name" or field.name == "email" or field.name == "telephone" or field.name == "numero_ordre" or field.name == "specialite" or field.name == "ville" or field.name == "presentation" or field.name == "disponible" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="panel panel-pad space-y-5">
+    <legend class="section-title">Horaires de présence</legend>
+    {% for field in form %}
+      {% if field.name|slice:":6" == "plage_" %}
+        {% include "core/_champ.html" %}
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+</form>
+{% endblock %}
