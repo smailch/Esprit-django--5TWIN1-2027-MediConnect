@@ -219,7 +219,7 @@ code { font-family: Consolas, monospace; font-size: 9.5pt; background: #F1F5F9; 
 <h3>Hypothèses à valider</h3>
 <ul>
 <li>Les <strong>délais cibles</strong> et seuils sont des valeurs de démonstration à faire valider par un professionnel de santé.</li>
-<li>Les <strong>médecins et leurs horaires</strong> sont fictifs (<code>patients/medecins_test.py</code>) en attendant le module Médecins ; la durée de consultation (20 min) est une estimation.</li>
+<li>Les <strong>médecins et leurs horaires</strong> viennent des profils validés (<code>medecins.Medecin</code>) ; la durée de consultation (20 min) est une estimation.</li>
 <li>La <strong>simulation</strong> est simple : un seul médecin, arrivées aléatoires régulières, une graine aléatoire. Elle montre une tendance, pas des valeurs réelles.</li>
 <li>Le comptage des dépassements se fait au passage « En consultation » dans le back-office ; le module Médecin devra appeler la même fonction (<code>Triage.enregistrer_depassements</code>).</li>
 </ul>

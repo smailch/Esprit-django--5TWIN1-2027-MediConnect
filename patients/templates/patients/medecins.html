@@ -49,7 +49,11 @@
       <div><dt>En attente</dt><dd>{{ m.en_attente }} patient{{ m.en_attente|pluralize }}</dd></div>
     </dl>
     {% endif %}
+    {% if m.disponible %}
     <a href="{% url 'patients:symptomes' m.id %}" class="abtn abtn-primary abtn-block mt-4">Choisir ce médecin</a>
+    {% else %}
+    <p class="muted mt-4 text-sm">Ce médecin ne prend pas de rendez-vous pour le moment.</p>
+    {% endif %}
   </li>
   {% empty %}
   <li class="panel panel-pad muted text-sm sm:col-span-2 lg:col-span-3">Aucun médecin ne correspond à ces critères.</li>

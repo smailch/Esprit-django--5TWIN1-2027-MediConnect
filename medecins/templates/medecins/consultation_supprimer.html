@@ -1,0 +1,24 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Supprimer le compte rendu — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'medecins:consultation_detail' consultation.pk %}" class="link text-sm">← Compte rendu</a>
+    <h1 class="page-title mt-2">Supprimer ce compte rendu ?</h1>
+  </div>
+</header>
+
+<section class="panel panel-pad mt-8 max-w-2xl">
+  <p class="item-name">{{ consultation.patient }} · {{ consultation.date|date:"d/m/Y à H:i" }}</p>
+  <p class="muted mt-3 text-sm">Le texte disparaît du dossier du patient, ainsi que l'ordonnance, les examens et les soins qui y sont liés. La demande reste marquée comme terminée.</p>
+  <div class="mt-6 flex flex-wrap gap-3">
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="abtn abtn-danger abtn-lg">Oui, supprimer</button>
+    </form>
+    <a href="{% url 'medecins:consultation_detail' consultation.pk %}" class="abtn abtn-outline abtn-lg">Non, le garder</a>
+  </div>
+</section>
+{% endblock %}

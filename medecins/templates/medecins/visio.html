@@ -1,0 +1,16 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Téléconsultation — {{ triage.patient }} — MediConnect{% endblock %}
+
+{% block page %}
+<div class="appel">
+  <header class="appel-barre">
+    <a href="{% url 'medecins:synthese' triage.pk %}" class="link text-sm">← {{ triage.patient }}</a>
+    <h1 class="appel-titre">Téléconsultation</h1>
+    <a href="{% url 'medecins:compte_rendu' triage.pk %}" class="abtn abtn-primary">Compte rendu</a>
+    <a href="{{ jitsi.lien }}" class="abtn abtn-ghost" target="_blank" rel="noopener noreferrer">Plein écran</a>
+    <span class="appel-urgence"><strong>Urgence</strong> 190 · 15 · 112</span>
+  </header>
+  {% include "patients/_jitsi.html" %}
+</div>
+{% endblock %}

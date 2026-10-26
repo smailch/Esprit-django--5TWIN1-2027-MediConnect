@@ -31,6 +31,7 @@
         <li class="fade-down" style="--i:3"><a href="{% url 'patients:medecins' %}" class="hover:text-accent transition-colors">Médecins</a></li>
         <li class="fade-down" style="--i:4"><a href="#a-propos" class="hover:text-accent transition-colors">À propos</a></li>
         <li class="fade-down" style="--i:5"><a href="#contact" class="hover:text-accent transition-colors">Contact</a></li>
+        <li class="fade-down" style="--i:6"><a href="{% url 'medecins:inscription' %}" class="hover:text-accent transition-colors">Espace médecin</a></li>
       </ul>
 
       <div class="flex items-center gap-3">
@@ -63,6 +64,7 @@
       <li><a href="{% url 'patients:medecins' %}" class="menu-link">Médecins</a></li>
       <li><a href="#a-propos" class="menu-link">À propos</a></li>
       <li><a href="#contact" class="menu-link">Contact</a></li>
+      <li><a href="{% url 'medecins:inscription' %}" class="menu-link">Espace médecin</a></li>
     </ul>
     <a href="{% url 'core:connexion' %}" class="menu-link btn btn-glass mt-auto mb-3 w-full">Connexion</a>
     <a href="{% url 'patients:inscription' %}" class="menu-link btn btn-primary w-full">Prendre rendez-vous</a>

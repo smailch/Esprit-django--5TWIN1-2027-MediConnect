@@ -1,13 +1,13 @@
 """Suivi de la file d'attente : annote les demandes en attente (place, délai, prise en charge estimée).
 
-Utilisé par l'espace patient et par le back-office pour que les deux affichent les mêmes chiffres.
-Les horaires des médecins viennent pour l'instant de `medecins_test` (à remplacer par le module médecins).
+Utilisé par l'espace patient, l'espace médecin et le back-office pour que tous affichent les mêmes chiffres.
+Les horaires viennent du profil `medecins.Medecin`.
 """
 from django.utils import timezone
 
 import logging
 
-from . import agenda, file_attente, medecins_test, notifications, planning
+from . import agenda, file_attente, notifications, planning
 from .models import ReglageTriage, Triage
 
 journal = logging.getLogger(__name__)
@@ -18,8 +18,17 @@ def reglage_actuel():
 
 
 def horaires_du_medecin(medecin_id):
-    medecin = medecins_test.trouver(medecin_id)
-    return (medecin or {}).get("horaires", {})
+    """Plages du médecin enregistré. Vide s'il n'existe pas, ou si ce test n'ouvre pas la base."""
+    try:
+        from medecins.models import Medecin
+        medecin = Medecin.objects.filter(code=medecin_id).first()
+    except Exception as exc:
+        if exc.__class__.__name__ != "DatabaseOperationForbidden":
+            raise
+        return {}
+    if medecin is None:
+        return {}
+    return medecin.horaires_planning()
 
 
 def annoter(en_attente, reglage=None, maintenant=None):

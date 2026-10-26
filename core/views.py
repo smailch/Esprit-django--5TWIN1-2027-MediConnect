@@ -30,6 +30,8 @@ class ConnexionView(LoginView):
             return reverse("backoffice:tableau_de_bord")
         if role == user.Role.PATIENT:
             return reverse("patients:tableau_de_bord")
+        if role == user.Role.MEDECIN:
+            return reverse("medecins:tableau_de_bord")
         if role == user.Role.PHARMACIE:  # validée ou non : le tableau de bord explique l'attente de validation
             return reverse("pharmacies:tableau_de_bord")
         return reverse("home")
@@ -52,9 +54,15 @@ class ChangementMotDePasseView(PasswordChangeView):
 
     def get_context_data(self, **kwargs):
         contexte = super().get_context_data(**kwargs)
-        est_patient = hasattr(self.request.user, "patient")  # un patient garde son menu et revient à « Mon compte »
-        contexte["cadre"] = "patients/layout.html" if est_patient else "core/layout.html"
-        contexte["retour"] = reverse("patients:compte") if est_patient else reverse("home")
+        utilisateur = self.request.user
+        if getattr(utilisateur, "patient", None):
+            cadre, retour = "patients/layout.html", reverse("patients:compte")
+        elif getattr(utilisateur, "medecin", None):
+            cadre, retour = "medecins/layout.html", reverse("medecins:profil")
+        else:
+            cadre, retour = "core/layout.html", reverse("home")
+        contexte["cadre"] = cadre
+        contexte["retour"] = retour
         return contexte
 
 

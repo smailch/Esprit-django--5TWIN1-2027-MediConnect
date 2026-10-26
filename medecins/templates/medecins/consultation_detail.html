@@ -1,0 +1,37 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Consultation du {{ consultation.date|date:"d/m/Y" }} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'medecins:consultations' %}" class="link text-sm">← Consultations</a>
+    <h1 class="page-title mt-2">{{ consultation.patient }}</h1>
+    <p class="muted mt-2 text-sm">{{ consultation.date|date:"d/m/Y à H:i" }} · {{ consultation.medecin_nom }}</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <a href="{% url 'medecins:consultation_modifier' consultation.pk %}" class="abtn abtn-outline">Modifier</a>
+    <a href="{% url 'medecins:consultation_supprimer' consultation.pk %}" class="abtn abtn-danger">Supprimer</a>
+  </div>
+</header>
+
+<section class="panel panel-pad mt-8 max-w-3xl">
+  {% include "patients/_consultation.html" with c=consultation %}
+</section>
+{% include "medecins/_whatsapp.html" %}
+{% include "medecins/_courriel.html" %}
+
+{% if actes %}
+<section class="mt-8 max-w-3xl" aria-labelledby="titre-actes">
+  <h2 id="titre-actes" class="section-title">Actes prescrits</h2>
+  <ul class="mt-4 space-y-4">
+    {% for acte in actes %}
+    <li class="panel panel-pad">
+      <p class="item-name">{{ acte.get_type_display }}</p>
+      <p class="mt-2 whitespace-pre-line text-sm">{{ acte.contenu }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

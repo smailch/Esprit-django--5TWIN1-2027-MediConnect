@@ -4,7 +4,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from patients import medecins_test
+from medecins import annuaire
 from patients.models import Allergie, Consultation, Patient, ReglageTriage, Triage
 
 from .stats import LIBELLES_NIVEAU
@@ -22,14 +22,11 @@ class FiltreRendezVousForm(forms.Form):
         required=False,
         choices=[("", "Tous")] + [(str(n), f"{n} – {nom}") for n, nom in LIBELLES_NIVEAU.items()],
     )
-    medecin = forms.ChoiceField(
-        label="Médecin",
-        required=False,
-        choices=[("", "Tous")] + [(m["id"], m["nom"]) for m in medecins_test.tous()],
-    )
+    medecin = forms.ChoiceField(label="Médecin", required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["medecin"].choices = [("", "Tous")] + [(m["id"], m["nom"]) for m in annuaire.tous()]
         for champ in self.fields.values():
             champ.widget.attrs["class"] = "field"
 
@@ -180,3 +177,57 @@ class FiltrePatientForm(forms.Form):
                 continue
             actifs[nom] = "on" if valeur is True else str(valeur).strip()
         return actifs
+
+
+class FiltreMedecinForm(forms.Form):
+    """Recherche et filtres de la liste des médecins (envoyés en GET)."""
+
+    COMPTES = (("", "Tous"), ("actif", "Actifs"), ("desactive", "Désactivés"))
+    VALIDATIONS = (("", "Toutes"), ("valide", "Validés"), ("attente", "En attente"))
+    PRESENCES = (("", "Toutes"), ("ouvert", "Prennent des rendez-vous"), ("ferme", "Absents"))
+
+    q = forms.CharField(label="Nom, e-mail, téléphone, spécialité ou ville", required=False, max_length=100)
+    specialite = forms.ChoiceField(label="Spécialité", required=False, choices=[("", "Toutes")])
+    ville = forms.ChoiceField(label="Ville", required=False, choices=[("", "Toutes")])
+    compte = forms.ChoiceField(label="Compte", required=False, choices=COMPTES)
+    validation = forms.ChoiceField(label="Validation", required=False, choices=VALIDATIONS)
+    presence = forms.ChoiceField(label="Prise de rendez-vous", required=False, choices=PRESENCES)
+
+    def __init__(self, *args, specialites=(), villes=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["specialite"].choices = [("", "Toutes")] + [(s, s) for s in specialites]
+        self.fields["ville"].choices = [("", "Toutes")] + [(v, v) for v in villes]
+        for champ in self.fields.values():
+            champ.widget.attrs["class"] = "field"
+
+    def appliquer(self, medecins):
+        """Restreint la liste des médecins selon les filtres choisis. À appeler après is_valid()."""
+        d = self.cleaned_data
+        q = (d.get("q") or "").strip()
+        if q:
+            medecins = medecins.filter(
+                Q(user__last_name__icontains=q) | Q(user__first_name__icontains=q) | Q(user__email__icontains=q)
+                | Q(telephone__icontains=q) | Q(ville__icontains=q) | Q(specialite__icontains=q)
+            )
+        if d.get("specialite"):
+            medecins = medecins.filter(specialite=d["specialite"])
+        if d.get("ville"):
+            medecins = medecins.filter(ville__iexact=d["ville"])
+        if d.get("compte") == "actif":
+            medecins = medecins.filter(user__is_active=True)
+        elif d.get("compte") == "desactive":
+            medecins = medecins.filter(user__is_active=False)
+        if d.get("validation") == "valide":
+            medecins = medecins.filter(user__est_valide=True)
+        elif d.get("validation") == "attente":
+            medecins = medecins.filter(user__est_valide=False)
+        if d.get("presence") == "ouvert":
+            medecins = medecins.filter(disponible=True)
+        elif d.get("presence") == "ferme":
+            medecins = medecins.filter(disponible=False)
+        return medecins
+
+    def parametres(self):
+        if not self.is_valid():
+            return {}
+        return {nom: str(valeur).strip() for nom, valeur in self.cleaned_data.items() if valeur not in (None, "")}

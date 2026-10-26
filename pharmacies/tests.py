@@ -601,7 +601,7 @@ class PagesTests(SimpleTestCase):
         for page, onglet in (("ordonnances", "/backoffice/pharmacies/ordonnances/"), ("pharmacies", "/backoffice/pharmacies/")):
             html = render_to_string("pharmacies/ordonnances.html", {"page": []}, self.requete(ADMIN, page))
             with self.subTest(page=page):
-                self.assertEqual(html.count('class="nav-item"'), 7)
+                self.assertEqual(html.count('class="nav-item"'), 8)  # menu du back-office, module médecins compris
                 self.assertIn(f'href="{onglet}" class="nav-item" aria-current="page"', html)
                 self.assertIn('href="/backoffice/rendez-vous/"', html)
                 self.assertNotIn('href="/pharmacies/', html)  # tous les liens restent dans le back-office
@@ -1980,8 +1980,8 @@ class MenusParRoleTests(SimpleTestCase):
         attendus = {
             PATIENT: ["Tableau de bord", "Rendez-vous", "Mon dossier", "Mes ordonnances", "Mon profil"],
             PHARMACIE: ["Tableau de bord", "Ordonnances reçues", "Stock", "Ma pharmacie", "Annuaire"],
-            MEDECIN: ["Ordonnances", "Pharmacies"],
-            ADMIN: ["Tableau de bord", "Rendez-vous", "File d'attente", "Patients", "Pharmacies", "Ordonnances", "Paramètres"],
+            MEDECIN: ["File d'attente", "Consultations", "Ordonnances", "Pharmacies", "Mon profil"],
+            ADMIN: ["Tableau de bord", "Rendez-vous", "File d'attente", "Patients", "Médecins", "Pharmacies", "Ordonnances", "Paramètres"],
         }
         for espace, onglets in attendus.items():
             menu = self.menu(espace)

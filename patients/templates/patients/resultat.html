@@ -29,6 +29,14 @@
       <p class="mt-4 text-sm">{{ message }}</p>
     </section>
 
+    {% if triage.statut == "en_consultation" %}
+    <section class="panel panel-pad" aria-labelledby="t-visio">
+      <h2 id="t-visio" class="section-title">Téléconsultation</h2>
+      <p class="muted mt-2 text-sm">{{ triage.medecin_nom }} a ouvert la consultation. La salle est la même que la sienne.</p>
+      <a href="{% url 'patients:visio' triage.pk %}" class="abtn abtn-primary mt-4">Rejoindre la téléconsultation</a>
+    </section>
+    {% endif %}
+
     {% if triage.statut == "en_attente" %}
     <section class="panel panel-pad" aria-labelledby="t-suivi">
       <h2 id="t-suivi" class="section-title">Suivi de votre demande</h2>
