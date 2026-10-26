@@ -1,0 +1,39 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}{% if medicament %}Modifier un médicament{% else %}Ajouter un médicament{% endif %} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'pharmacies:stock' %}" class="link text-sm">← Stock</a>
+    <h1 class="page-title mt-2">{% if medicament %}Modifier « {{ medicament }} »{% else %}Ajouter un médicament{% endif %}</h1>
+    {% if medicament %}<p class="mt-2 text-sm"><span class="sev stk-{{ medicament.etat }}">{{ medicament.libelle_etat }}</span></p>{% endif %}
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% with field=form.nom %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.principe_actif %}{% include "core/_champ.html" %}{% endwith %}
+  <div class="grid gap-6 sm:grid-cols-2">
+    {% with field=form.dosage %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.forme %}{% include "core/_champ.html" %}{% endwith %}
+  </div>
+  <div class="grid gap-6 sm:grid-cols-3">
+    {% with field=form.quantite %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.seuil_alerte %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.prix %}{% include "core/_champ.html" %}{% endwith %}
+  </div>
+
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+    <a href="{% url 'pharmacies:stock' %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+{% endblock %}
