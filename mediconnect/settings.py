@@ -268,6 +268,10 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '').replace(' ', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'MediConnect <no-reply@mediconnect.local>')
 PASSWORD_RESET_TIMEOUT = 2 * 60 * 60  # le lien de réinitialisation reste valable deux heures
+# Compte Gmail propre aux comptes rendus PDF envoyés par les médecins (facultatif : sinon le compte ci-dessus).
+MEDECINS_EMAIL_HOST_USER = os.environ.get('MEDECINS_EMAIL_HOST_USER', '')
+MEDECINS_EMAIL_HOST_PASSWORD = os.environ.get('MEDECINS_EMAIL_HOST_PASSWORD', '').replace(' ', '')
+MEDECINS_DEFAULT_FROM_EMAIL = os.environ.get('MEDECINS_DEFAULT_FROM_EMAIL', '')
 
 # --- SMS : compte rendu, au clic du médecin ------------------------------------------------------------------
 # Numéro qui reçoit le SMS pendant l'essai. Le vider pour envoyer au téléphone du dossier.

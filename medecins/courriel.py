@@ -4,7 +4,7 @@ import smtplib
 from pathlib import Path
 
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, get_connection
 from django.utils import timezone
 from fpdf import FPDF
 
@@ -17,6 +17,19 @@ CIEL = (232, 245, 248)
 GRIS = (90, 110, 120)
 _ARIAL = Path(r"C:\Windows\Fonts\arial.ttf")
 _ARIAL_GRAS = Path(r"C:\Windows\Fonts\arialbd.ttf")
+
+
+def compte_d_envoi():
+    """(identifiant, mot de passe, expéditeur) du compte Gmail des comptes rendus.
+
+    Le module médecins peut avoir son propre compte (MEDECINS_EMAIL_HOST_USER, MEDECINS_EMAIL_HOST_PASSWORD,
+    MEDECINS_DEFAULT_FROM_EMAIL) ; sinon il utilise le compte général du site (EMAIL_HOST_USER…), comme les
+    e-mails de rendez-vous et de soins à domicile."""
+    if getattr(settings, "MEDECINS_EMAIL_HOST_USER", ""):
+        utilisateur = settings.MEDECINS_EMAIL_HOST_USER
+        return (utilisateur, settings.MEDECINS_EMAIL_HOST_PASSWORD,
+                settings.MEDECINS_DEFAULT_FROM_EMAIL or f"MediConnect <{utilisateur}>")
+    return (getattr(settings, "EMAIL_HOST_USER", ""), getattr(settings, "EMAIL_HOST_PASSWORD", ""), settings.DEFAULT_FROM_EMAIL)
 
 
 def email_patient(consultation):
@@ -100,7 +113,8 @@ def envoyer_compte_rendu(consultation):
     email = email_patient(consultation)
     if not email:
         raise EchecEnvoi("Ce patient n'a pas d'adresse e-mail utilisable.")
-    if not (getattr(settings, "EMAIL_HOST_USER", "") and getattr(settings, "EMAIL_HOST_PASSWORD", "")):
+    utilisateur, mot_de_passe, expediteur = compte_d_envoi()
+    if not (utilisateur and mot_de_passe):
         raise EchecEnvoi(
             "L'envoi Gmail n'est pas prêt : le mot de passe d'application manque dans .env."
         )
@@ -114,8 +128,9 @@ def envoyer_compte_rendu(consultation):
             f"Le compte rendu de la consultation du {quand} est joint à ce message (PDF).\n\n"
             f"MediConnect"
         ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
+        from_email=expediteur,
         to=[email],
+        connection=get_connection(username=utilisateur, password=mot_de_passe),
     )
     message.attach(nom, pdf_compte_rendu(consultation), "application/pdf")
     try:
