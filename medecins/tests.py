@@ -377,6 +377,28 @@ class CourrielCompteRenduTests(SimpleTestCase):
         self.assertEqual(autre["email"], "patient.deux@exemple.tn")
         self.assertEqual(mail.outbox[1].to, ["patient.deux@exemple.tn"])
 
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        EMAIL_HOST_USER="rendez-vous@exemple.tn",
+        EMAIL_HOST_PASSWORD="mot-de-passe-general",
+        DEFAULT_FROM_EMAIL="MediConnect <rendez-vous@exemple.tn>",
+        MEDECINS_EMAIL_HOST_USER="medecins@exemple.tn",
+        MEDECINS_EMAIL_HOST_PASSWORD="mot-de-passe-medecins",
+        MEDECINS_DEFAULT_FROM_EMAIL="",
+    )
+    def test_le_compte_propre_aux_medecins_est_prioritaire(self):
+        from unittest import mock
+
+        from django.core import mail
+        from . import courriel
+
+        with mock.patch.object(courriel, "get_connection", wraps=courriel.get_connection) as connexion:
+            courriel.envoyer_compte_rendu(self.consultation("patient.un@exemple.tn"))
+        connexion.assert_called_once_with(username="medecins@exemple.tn", password="mot-de-passe-medecins")
+        self.assertEqual(mail.outbox[0].from_email, "MediConnect <medecins@exemple.tn>")
+        with self.settings(MEDECINS_EMAIL_HOST_USER=""):  # sans compte propre : le compte général du site
+            self.assertEqual(courriel.compte_d_envoi(), ("rendez-vous@exemple.tn", "mot-de-passe-general", "MediConnect <rendez-vous@exemple.tn>"))
+
     def test_sans_adresse_lenvoi_est_refuse(self):
         from .courriel import EchecEnvoi, envoyer_compte_rendu as envoyer
         with self.assertRaises(EchecEnvoi):
