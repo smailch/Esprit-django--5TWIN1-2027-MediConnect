@@ -1,0 +1,18 @@
+{% extends "core/auth_layout.html" %}
+
+{% block title %}Vérifiez votre messagerie — MediConnect{% endblock %}
+
+{% block auth_link %}
+<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>
+{% endblock %}
+
+{% block page %}
+<h1 class="auth-title">Vérifiez votre messagerie</h1>
+<p class="mt-4 text-sm">Si un compte correspond à cette adresse, un e-mail vient d'être envoyé avec un lien pour choisir un nouveau mot de passe.</p>
+<ul class="muted mt-4 list-disc space-y-1 pl-5 text-sm">
+  <li>Le lien est valable deux heures.</li>
+  <li>Pensez à regarder dans vos courriers indésirables.</li>
+  <li>Aucun e-mail ne part pour une adresse inconnue, mais ce message reste le même : on ne révèle pas qui a un compte.</li>
+</ul>
+<a href="{% url 'core:connexion' %}" class="abtn abtn-primary abtn-lg abtn-block mt-8">Retour à la connexion</a>
+{% endblock %}

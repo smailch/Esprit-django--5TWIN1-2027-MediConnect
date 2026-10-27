@@ -1,0 +1,8 @@
+# Les modèles entraînés et les PDF sont des fichiers binaires : git ne doit jamais toucher à leurs fins de ligne.
+*.joblib binary
+*.pdf binary
+*.png binary
+
+# Scripts exécutés dans les conteneurs Linux : fins de ligne LF, même depuis Windows (sinon /bin/sh échoue).
+*.sh text eol=lf
+Dockerfile text eol=lf

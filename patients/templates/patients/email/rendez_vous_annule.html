@@ -1,0 +1,19 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}{% if creneau %}Votre rendez-vous est annulé{% else %}Votre demande est annulée{% endif %}{% endblock %}
+{% block preheader %}{% if creneau %}Le rendez-vous du {{ creneau|date:"j F"|lower }} à {{ creneau|time:"H:i" }} avec {{ triage.medecin_nom }} est annulé.{% else %}Votre demande auprès de {{ triage.medecin_nom }} est annulée.{% endif %}{% endblock %}
+{% block titre %}{% if creneau %}Votre rendez-vous est annulé{% else %}Votre demande est annulée{% endif %}{% endblock %}
+{% block corps %}
+{% if creneau %}<p style="margin:0 0 16px;">Nous confirmons l'annulation du rendez-vous suivant. Aucune action n'est nécessaire de votre part.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F8FAFC;border-left:4px solid #94A3B8;border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;color:#475569;">
+      <tr><td style="padding:3px 18px 3px 0;">Médecin</td><td style="padding:3px 0;">{{ triage.medecin_nom }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;">Date</td><td style="padding:3px 0;">{{ creneau|date:"l j F Y"|capfirst }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;">Heure</td><td style="padding:3px 0;">{{ creneau|time:"H:i" }}</td></tr>
+    </table>
+  </td></tr>
+</table>
+{% else %}<p style="margin:0 0 16px;">Nous confirmons l'annulation de votre demande auprès de <strong>{{ triage.medecin_nom }}</strong>. Vous ne figurez plus dans sa file d'attente et aucune action n'est nécessaire de votre part.</p>{% endif %}
+<p style="margin:20px 0 0;">Vous avez encore besoin d'une consultation ? Vous pouvez refaire une demande à tout moment depuis votre espace MediConnect.</p>
+{% endblock %}
+{% block bouton_texte %}Faire une nouvelle demande{% endblock %}

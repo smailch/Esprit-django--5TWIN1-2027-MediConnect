@@ -1,0 +1,169 @@
+{
+  "graine": 1,
+  "n_entrainement": 6000,
+  "repartition_entrainement": {
+    "1": 937,
+    "2": 626,
+    "3": 573,
+    "4": 1593,
+    "5": 2271
+  },
+  "test_genere": {
+    "n": 1500,
+    "precision": 0.9273,
+    "a_un_niveau_pres": 0.99,
+    "graves_reperes": 0.9688,
+    "graves_pris_pour_benins": 0.0182,
+    "fausses_alertes": 0.0041,
+    "reference_toujours_la_meme_reponse": 0.3873,
+    "repartition": {
+      "1": 229,
+      "2": 156,
+      "3": 142,
+      "4": 392,
+      "5": 581
+    },
+    "matrice": [
+      [
+        219,
+        3,
+        3,
+        1,
+        3
+      ],
+      [
+        1,
+        150,
+        2,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        111,
+        31,
+        0
+      ],
+      [
+        2,
+        1,
+        12,
+        351,
+        26
+      ],
+      [
+        0,
+        1,
+        1,
+        19,
+        560
+      ]
+    ]
+  },
+  "test_a_la_main": {
+    "n": 39,
+    "precision": 0.8974,
+    "a_un_niveau_pres": 0.9231,
+    "graves_reperes": 0.9231,
+    "graves_pris_pour_benins": 0.0769,
+    "fausses_alertes": 0.0909,
+    "reference_toujours_la_meme_reponse": 0.4359,
+    "repartition": {
+      "1": 8,
+      "2": 5,
+      "3": 4,
+      "4": 5,
+      "5": 17
+    },
+    "matrice": [
+      [
+        7,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        3,
+        1,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        4,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        16
+      ]
+    ]
+  },
+  "mots_par_niveau": {
+    "1": [
+      "ai une",
+      "plus respirer",
+      "au thorax",
+      "saigne",
+      "je suffoque",
+      "suffoque",
+      "ai tres",
+      "serre"
+    ],
+    "2": [
+      "fait une",
+      "des convulsions",
+      "une douleur",
+      "respirer une",
+      "ai des",
+      "atroce",
+      "ai fait",
+      "tres"
+    ],
+    "3": [
+      "ai du",
+      "du mal",
+      "mal respirer",
+      "mal",
+      "effort",
+      "moindre effort",
+      "ai de",
+      "ventre svp"
+    ],
+    "4": [
+      "essouffle et",
+      "matin des",
+      "de douleur",
+      "ai de",
+      "elevee depuis",
+      "vertiges svp",
+      "toilettes merci",
+      "nuit avec"
+    ],
+    "5": [
+      "pas de",
+      "37",
+      "fievre 39",
+      "peu de",
+      "de temperature",
+      "de fievre",
+      "sans",
+      "fievre 38"
+    ]
+  }
+}

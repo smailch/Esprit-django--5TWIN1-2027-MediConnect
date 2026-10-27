@@ -1,0 +1,5 @@
+{% extends "erreur.html" %}
+{% block code %}Formulaire expiré{% endblock %}
+{% block code_court %}403{% endblock %}
+{% block titre %}Ce formulaire a expiré{% endblock %}
+{% block explication %}Pour votre sécurité, chaque formulaire porte un jeton à usage limité (protection CSRF). Revenez à la page précédente, rechargez-la puis envoyez de nouveau le formulaire.{% endblock %}

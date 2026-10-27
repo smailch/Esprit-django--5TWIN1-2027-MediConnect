@@ -1,0 +1,135 @@
+{% extends "patients/layout.html" %}
+{% load l10n %}
+
+{% block title %}Mes mesures — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:dossier' %}" class="link text-sm">← Mon dossier médical</a>
+    <h1 class="page-title mt-2">Mes mesures de santé</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Notez votre poids, votre tension, votre glycémie, votre température, votre pouls ou votre saturation. Le médecin suit ainsi votre évolution.</p>
+  </div>
+  <a href="{% url 'patients:mesure_creer' %}" class="abtn abtn-primary">
+    <i aria-hidden="true" data-lucide="plus" class="h-4 w-4"></i>Ajouter une mesure
+  </a>
+</header>
+
+<section class="mt-8" aria-labelledby="titre-dernieres">
+  <h2 id="titre-dernieres" class="section-title">Dernières valeurs</h2>
+  <ul class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {% for d in dernieres %}
+    <li class="panel panel-pad">
+      <p class="muted text-sm">{{ d.libelle }}</p>
+      {% if d.mesure %}
+      <p class="item-name mt-2 text-2xl">{{ d.mesure.valeur_affichee }}</p>
+      <p class="muted mt-1 text-sm">{{ d.mesure.mesure_le|date:"d/m/Y à H:i" }}</p>
+      {% if d.mesure.alerte == "haute" %}<span class="sev sev-moderee mt-2">Valeur élevée</span>{% elif d.mesure.alerte == "basse" %}<span class="sev sev-moderee mt-2">Valeur basse</span>{% endif %}
+      {% else %}
+      <p class="muted mt-2 text-sm">Aucune mesure.</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="mt-10" aria-labelledby="titre-historique">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h2 id="titre-historique" class="section-title">Historique <span class="count">{{ total }}</span></h2>
+    {% if total %}
+    <a href="{% url 'patients:mesures_exporter' %}?type={{ type_choisi }}&amp;periode={{ periode }}" class="abtn abtn-outline">
+      <i aria-hidden="true" data-lucide="download" class="h-4 w-4"></i>Télécharger (CSV)
+    </a>
+    {% endif %}
+  </div>
+
+  <nav class="mt-4 flex flex-wrap gap-2" aria-label="Filtrer par type de mesure">
+    <a href="?periode={{ periode }}" class="abtn {% if not type_choisi %}abtn-primary{% else %}abtn-outline{% endif %}" {% if not type_choisi %}aria-current="true"{% endif %}>Toutes</a>
+    {% for code, libelle in types %}
+    <a href="?type={{ code }}&amp;periode={{ periode }}" class="abtn {% if type_choisi == code %}abtn-primary{% else %}abtn-outline{% endif %}" {% if type_choisi == code %}aria-current="true"{% endif %}>{{ libelle }}</a>
+    {% endfor %}
+  </nav>
+  <nav class="mt-3 flex flex-wrap items-center gap-2" aria-label="Choisir la période">
+    <span class="muted text-sm">Période :</span>
+    {% for code, libelle in periodes %}
+    <a href="?type={{ type_choisi }}&amp;periode={{ code }}" class="abtn {% if periode == code %}abtn-primary{% else %}abtn-outline{% endif %}" {% if periode == code %}aria-current="true"{% endif %}>{{ libelle }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if type_choisi and resume %}
+  <div class="panel panel-pad mt-6">
+    <h3 class="section-title">Évolution</h3>
+    <dl class="stat-grid mt-4">
+      <div class="stat"><dt>Dernière valeur</dt><dd>{{ historique.0.valeur_affichee }}</dd></div>
+      <div class="stat"><dt>Plus basse</dt><dd>{{ resume.min|floatformat:"-1" }}{% if resume2 %}/{{ resume2.min|floatformat:"-1" }}{% endif %} <span class="muted text-sm">{{ unite }}</span></dd></div>
+      <div class="stat"><dt>Plus haute</dt><dd>{{ resume.max|floatformat:"-1" }}{% if resume2 %}/{{ resume2.max|floatformat:"-1" }}{% endif %} <span class="muted text-sm">{{ unite }}</span></dd></div>
+      <div class="stat"><dt>Moyenne ({{ resume.nombre }} mesure{{ resume.nombre|pluralize }})</dt><dd>{{ resume.moyenne|floatformat:"-1" }}{% if resume2 %}/{{ resume2.moyenne|floatformat:"-1" }}{% endif %} <span class="muted text-sm">{{ unite }}</span></dd></div>
+    </dl>
+    {% if resume.tendance %}
+    <p class="muted mt-4 text-sm">
+      Tendance :
+      <strong class="font-medium text-gray-800">{% if resume.tendance == "hausse" %}en hausse ↗{% elif resume.tendance == "baisse" %}en baisse ↘{% else %}stable →{% endif %}</strong>
+      par rapport à vos mesures précédentes.
+    </p>
+    {% endif %}
+
+    {% if graphique %}
+    <figure class="mt-5">
+      {% localize off %}
+      <svg class="chart" viewBox="0 0 {{ graphique.largeur }} {{ graphique.hauteur }}" role="img"
+           aria-label="Courbe d'évolution de vos mesures du {{ graphique.premiere_date|date:'d/m/Y' }} au {{ graphique.derniere_date|date:'d/m/Y' }}. Les valeurs détaillées sont dans la liste ci-dessous.">
+        {% if graphique.zone %}<rect class="chart-zone" x="{{ graphique.zone_x }}" y="{{ graphique.zone.y }}" width="{{ graphique.zone_largeur }}" height="{{ graphique.zone.hauteur }}"></rect>{% endif %}
+        {% for t in graphique.axe_y %}
+        <line class="chart-grid" x1="{{ graphique.zone_x }}" x2="{{ graphique.zone_x|add:graphique.zone_largeur }}" y1="{{ t.y }}" y2="{{ t.y }}"></line>
+        <text class="chart-text" x="{{ graphique.zone_x|add:'-8' }}" y="{{ t.y|add:'4' }}" text-anchor="end">{{ t.texte }}</text>
+        {% endfor %}
+        {% for l in graphique.lignes %}
+        <polyline class="chart-line chart-line-{{ forloop.counter }}" points="{{ l.points }}"></polyline>
+        {% for s in l.sommets %}<circle class="chart-dot-{{ forloop.parentloop.counter }}" cx="{{ s.0 }}" cy="{{ s.1 }}" r="3.5"></circle>{% endfor %}
+        {% endfor %}
+        <text class="chart-text" x="{{ graphique.zone_x }}" y="{{ graphique.hauteur|add:'-8' }}">{{ graphique.premiere_date|date:"d/m/Y" }}</text>
+        <text class="chart-text" x="{{ graphique.zone_x|add:graphique.zone_largeur }}" y="{{ graphique.hauteur|add:'-8' }}" text-anchor="end">{{ graphique.derniere_date|date:"d/m/Y" }}</text>
+      </svg>
+      {% endlocalize %}
+      <figcaption class="legend mt-2">
+        <span><i></i>{% if resume2 %}Premier chiffre{% else %}Valeur ({{ unite }}){% endif %}</span>
+        {% if resume2 %}<span><i class="l2"></i>Second chiffre</span>{% endif %}
+        {% if graphique.zone %}<span><i class="z"></i>Zone de repère</span>{% endif %}
+      </figcaption>
+    </figure>
+    {% else %}
+    <p class="muted mt-4 text-sm">Ajoutez au moins deux mesures sur cette période pour voir la courbe.</p>
+    {% endif %}
+  </div>
+  {% elif not type_choisi and total %}
+  <p class="muted mt-4 text-sm">Choisissez un type de mesure ci-dessus pour voir sa courbe et ses statistiques.</p>
+  {% endif %}
+
+  {% if historique %}
+  <ul class="panel mt-4">
+    {% for m in historique %}
+    <li class="item-row">
+      <div>
+        <p class="item-name">{{ m.get_type_display }} : {{ m.valeur_affichee }}</p>
+        <p class="muted mt-1 text-sm">{{ m.mesure_le|date:"d/m/Y à H:i" }}{% if m.note %} · {{ m.note }}{% endif %}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        {% if m.alerte == "haute" %}<span class="sev sev-moderee">Valeur élevée</span>{% elif m.alerte == "basse" %}<span class="sev sev-moderee">Valeur basse</span>{% endif %}
+        <span class="item-actions">
+          <a href="{% url 'patients:mesure_modifier' m.pk %}" class="abtn abtn-outline">Modifier<span class="sr-only"> la mesure de {{ m.get_type_display|lower }} du {{ m.mesure_le|date:"d/m/Y H:i" }}</span></a>
+          <a href="{% url 'patients:mesure_supprimer' m.pk %}" class="abtn abtn-danger">Supprimer<span class="sr-only"> la mesure de {{ m.get_type_display|lower }} du {{ m.mesure_le|date:"d/m/Y H:i" }}</span></a>
+        </span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="panel panel-pad mt-4 text-center">
+    <p class="muted text-sm">Aucune mesure enregistrée{% if type_choisi or periode != "tout" %} pour ce choix{% endif %}.</p>
+    <a href="{% url 'patients:mesure_creer' %}" class="abtn abtn-primary mt-4">Ajouter une mesure</a>
+  </div>
+  {% endif %}
+
+  <p class="muted mt-4 text-sm">Les mentions « valeur élevée » ou « valeur basse » sont de simples repères, pas un diagnostic. En cas de doute, parlez-en à votre médecin.</p>
+</section>
+{% endblock %}

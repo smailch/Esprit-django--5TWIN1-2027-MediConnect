@@ -1,0 +1,15 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+comptes_test.txt
+*.pptx
+.idea/
+.vscode/
+.claude/
+db.sqlite3
+staticfiles/
+venv/
+htmlcov/
+.coverage
+.coverage.*

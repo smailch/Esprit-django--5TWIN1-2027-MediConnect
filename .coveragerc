@@ -1,0 +1,30 @@
+# Couverture des tests : coverage run manage.py test && coverage report   (rapport HTML : coverage html -> htmlcov/)
+[run]
+source = .
+branch = True
+omit =
+    .venv/*
+    venv/*
+    */migrations/*
+    mongo_migrations/*
+    */tests.py
+    */tests_*.py
+    */fabriques_test.py
+    manage.py
+    mediconnect/asgi.py
+    mediconnect/wsgi.py
+    docs/*
+    laboratoires/*
+
+[report]
+show_missing = False
+skip_covered = False
+precision = 1
+sort = Cover
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+
+[html]
+directory = htmlcov
+title = MediConnect — couverture des tests

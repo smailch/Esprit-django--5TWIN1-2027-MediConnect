@@ -1,0 +1,17 @@
+{% load accessibilite %}
+<div class="f">
+  <label for="{{ field.id_for_label }}" class="f-label">
+    {{ field.label }}{% if field.field.required %}<span aria-hidden="true"> *</span>{% endif %}
+  </label>
+  {{ field|decrit }}
+  {% if field.help_text %}
+  <div class="f-help" id="{{ field.auto_id }}_aide">{{ field.help_text|safe }}</div>
+  {% endif %}
+  {% if field.errors %}
+  <div id="{{ field.auto_id }}_erreur">
+    {% for erreur in field.errors %}
+    <p class="f-error" role="alert">{{ erreur }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

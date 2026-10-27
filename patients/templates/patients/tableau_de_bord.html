@@ -1,0 +1,98 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Tableau de bord — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Bonjour {{ user.first_name|default:user.username }}</h1>
+    <p class="muted mt-2 text-sm">Suivez ici vos demandes de rendez-vous.</p>
+  </div>
+  <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary">
+    <i aria-hidden="true" data-lucide="calendar-plus" class="h-4 w-4"></i>Nouvelle demande
+  </a>
+</header>
+
+<div class="mt-10 grid gap-10 lg:grid-cols-12 lg:items-start">
+
+  <section class="lg:col-span-8" aria-labelledby="titre-en-cours">
+    <h2 id="titre-en-cours" class="section-title">En cours <span class="count">{{ en_cours|length }}</span></h2>
+
+    {% if en_cours %}
+    <ul class="mt-4 space-y-4">
+      {% for t in en_cours %}
+      {% with n=t.niveau_effectif %}
+      <li class="panel req req-{{ n }}">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="req-doctor">{{ t.medecin_nom }}</p>
+            <p class="muted mt-1 text-sm">{{ t.medecin_specialite }} · demande du {{ t.cree_le|date:"d/m/Y à H:i" }}</p>
+          </div>
+          <span class="lv lv-{{ n }}">{{ t.get_niveau_display }}</span>
+        </div>
+
+        {% if t.peut_reserver %}
+        <p class="mt-4"><a href="{% url 'patients:creneaux' t.pk %}" class="abtn abtn-primary"><i aria-hidden="true" data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir le jour et l'heure</a></p>
+        {% endif %}
+        {% if t.statut == "en_consultation" %}
+        <p class="mt-4 text-sm">{{ t.medecin_nom }} a commencé la consultation. Vous entrez dans la même salle.</p>
+        <p class="mt-3"><a href="{% url 'patients:visio' t.pk %}" class="abtn abtn-primary">Rejoindre la téléconsultation</a></p>
+        {% else %}
+        <div class="mt-4">{% include "patients/_suivi_attente.html" %}</div>
+        {% endif %}
+
+        {% if n == 1 %}
+        <p class="alert alert-danger mt-3" role="alert">Situation potentiellement vitale : appelez immédiatement les urgences (190 / 15 / 112).</p>
+        {% endif %}
+
+        <div class="mt-4">{% include "patients/_propositions.html" with triage=t propositions=t.propositions %}</div>
+
+        <div class="mt-5 flex flex-wrap gap-3">
+          <a href="{% url 'patients:resultat' t.pk %}" class="abtn abtn-outline">Voir le détail</a>
+          {% if t.statut == "en_attente" %}
+          <form method="post" action="{% url 'patients:annuler' t.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="abtn abtn-danger">Annuler</button>
+          </form>
+          {% endif %}
+        </div>
+      </li>
+      {% endwith %}
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="panel panel-pad mt-4 text-center">
+      <p class="muted text-sm">Vous n'avez aucune demande en cours.</p>
+      <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary mt-4">Prendre rendez-vous</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="space-y-10 lg:col-span-4">
+    <section aria-labelledby="titre-historique">
+      <h2 id="titre-historique" class="section-title">Historique <span class="count">{{ historique|length }}</span></h2>
+      {% if historique %}
+      <ul class="panel mt-4 divide-y divide-gray-300/60">
+        {% for t in historique %}
+        <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <div>
+            <p class="text-sm font-medium">{{ t.medecin_nom }}</p>
+            <p class="muted text-xs">{{ t.cree_le|date:"d/m/Y" }} · {{ t.get_niveau_display }} · {{ t.get_statut_display }}</p>
+          </div>
+          <a href="{% url 'patients:resultat' t.pk %}" class="abtn abtn-ghost">Détail</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="panel panel-pad muted mt-4 text-sm">Votre historique est vide.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-urgence">
+      <h2 id="titre-urgence" class="section-title">Urgence vitale ?</h2>
+      <p class="muted mt-2 text-sm">Appelez le 190, le 15 ou le 112. MediConnect ne remplace pas les secours.</p>
+    </section>
+  </aside>
+
+</div>
+{% endblock %}

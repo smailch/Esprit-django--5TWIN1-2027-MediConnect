@@ -1,0 +1,10 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Votre demande est de nouveau proposée{% endblock %}
+{% block preheader %}Le passage du {{ ancien|date:"j F à H:i" }} n'aura pas lieu : un autre infirmier peut accepter votre demande.{% endblock %}
+{% block titre %}Votre demande est de nouveau proposée{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">{{ ancien_infirmier }} ne pourra finalement pas venir. Le passage prévu n'aura donc pas lieu :</p>
+{% include "infirmiers/email/_passage.html" with nom=ancien_infirmier quand=ancien barre="#94A3B8" %}
+<p style="margin:16px 0 0;">Votre demande n'est pas perdue : elle est de nouveau proposée aux infirmiers de votre ville. Nous vous écrirons dès que l'un d'eux l'aura acceptée.</p>
+{% endblock %}
+{% block bouton_texte %}Suivre ma demande{% endblock %}

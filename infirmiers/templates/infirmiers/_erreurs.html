@@ -1,0 +1,5 @@
+{% if form.non_field_errors %}
+<div role="alert" class="alert alert-danger">
+  {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+</div>
+{% endif %}

@@ -1,0 +1,32 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Mes consultations — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:dossier' %}" class="link text-sm">← Mon dossier médical</a>
+    <h1 class="page-title mt-2">Mes consultations</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Le compte rendu de chaque consultation terminée, du plus récent au plus ancien.</p>
+  </div>
+</header>
+
+{% if consultations %}
+<ul class="mt-8 space-y-4">
+  {% for c in consultations %}
+  <li class="panel panel-pad">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p class="item-name">{{ c.medecin_nom }}</p>
+        <p class="muted mt-1 text-sm">{% if c.medecin_specialite %}{{ c.medecin_specialite }} · {% endif %}{{ c.date|date:"l j F Y" }}</p>
+      </div>
+      {% if c.diagnostic %}<span class="tag">{{ c.diagnostic }}</span>{% endif %}
+    </div>
+    <div class="mt-4">{% include "patients/_consultation.html" %}</div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="panel panel-pad muted mt-8 text-sm">Aucune consultation terminée pour l'instant. Après chaque consultation, son compte rendu apparaît ici.</p>
+{% endif %}
+{% endblock %}

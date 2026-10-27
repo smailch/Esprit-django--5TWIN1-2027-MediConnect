@@ -1,0 +1,51 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#050E1C">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2716%27 fill=%27%230E7490%27/%3E%3C/svg%3E">
+  <title>{% block title %}MediConnect — Votre médecin, à portée de clic{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            // Marque : cyan profond pour les fonds, cyan clair pour le texte sur fond sombre.
+            primary: { DEFAULT: '#0E7490', dark: '#155E75' },
+            accent: '#67E8F9',
+            soft: '#0F2A4A',
+            // Thème sombre : l'échelle des gris est inversée (800 = texte clair, 300 = filets).
+            gray: {
+              50: '#0E1B30', 100: '#142540', 200: '#1B3150', 300: '#2A4468', 400: '#4A6688',
+              500: '#8FA6C4', 600: '#A9BDD6', 700: '#C4D3E6', 800: '#E3ECF7', 900: '#F2F7FC',
+            },
+            red:    { 50: '#3A1219', 100: '#4B1820', 300: '#B4474F', 800: '#FCA5A5', 900: '#FECACA' },
+            orange: { 50: '#3A200C', 100: '#4B290F', 300: '#B8661A', 800: '#FDBA74', 900: '#FED7AA' },
+            yellow: { 50: '#38300A', 100: '#473B0C', 300: '#A68A12', 800: '#FDE047', 900: '#FEF08A' },
+            green:  { 800: '#86EFAC' },
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="{% static 'css/ui.css' %}">
+  <link rel="stylesheet" href="{% static 'css/hero.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body class="font-sans font-light tracking-normal text-slate-100 bg-[#050E1C] antialiased">
+  {% block content %}{% endblock %}
+
+  <script src="https://unpkg.com/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

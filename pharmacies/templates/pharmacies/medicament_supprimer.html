@@ -1,0 +1,32 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}Retirer un médicament — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'pharmacies:stock' %}" class="link text-sm">← Stock</a>
+    <h1 class="page-title mt-2">Retirer ce médicament du stock ?</h1>
+  </div>
+</header>
+
+<section class="panel panel-pad mt-8 max-w-2xl" aria-labelledby="titre-confirmation">
+  <h2 id="titre-confirmation" class="item-name">{{ medicament }}</h2>
+  <p class="muted mt-1 text-sm">{{ medicament.get_forme_display }}{% if medicament.principe_actif %} · {{ medicament.principe_actif }}{% endif %} · {{ medicament.quantite }} boîte{{ medicament.quantite|pluralize }} en stock</p>
+
+  {% if medicament.quantite %}
+  <p class="alert alert-warn mt-4" role="note">Il reste des boîtes en stock. S'il manque seulement pour le moment, mettez plutôt sa quantité à zéro : il apparaîtra en rupture, et les équivalents resteront proposés.</p>
+  {% else %}
+  <p class="muted mt-4 text-sm">Le médicament ne sera plus référencé : les ordonnances qui le contiennent l'afficheront « non référencé ».</p>
+  {% endif %}
+
+  <div class="mt-6 flex flex-wrap gap-3">
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="abtn abtn-danger abtn-lg">Oui, retirer</button>
+    </form>
+    <a href="{% url 'pharmacies:stock' %}" class="abtn abtn-outline abtn-lg">Non, le garder</a>
+    <a href="{% url 'pharmacies:stock_modifier' medicament.pk %}" class="abtn abtn-ghost abtn-lg">Modifier la quantité</a>
+  </div>
+</section>
+{% endblock %}

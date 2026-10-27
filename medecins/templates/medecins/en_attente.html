@@ -1,0 +1,13 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Compte en attente — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Validation en cours</h1>
+    <p class="muted mt-2 max-w-xl text-sm">{{ medecin.nom_affiche }}, votre compte {{ medecin.specialite|lower }} à {{ medecin.ville }} est enregistré. Un administrateur doit le valider avant que vous puissiez ouvrir votre file et consulter.</p>
+  </div>
+</header>
+<p class="mt-8"><a href="{% url 'medecins:profil' %}" class="abtn abtn-outline">Compléter mon profil</a></p>
+{% endblock %}

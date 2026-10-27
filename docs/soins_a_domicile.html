@@ -1,0 +1,132 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — Le module des soins infirmiers à domicile</title><style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 9.4pt; line-height: 1.38; }
+.page { width: 210mm; height: 297mm; padding: 9mm 11mm 8mm; overflow: hidden; page-break-after: always; position: relative; }
+.page:last-child { page-break-after: auto; }
+h1 { margin: 0; font-size: 19pt; color: #0E7490; } .sous { color: #475569; margin: 1mm 0 3mm; font-size: 10pt; }
+h2 { margin: 2.2mm 0 1.2mm; font-size: 11.4pt; color: #fff; background: #0E7490; display: inline-block; padding: .8mm 3mm; border-radius: 1.6mm; letter-spacing: .02em; }
+h3 { margin: 0 0 1mm; font-size: 10pt; color: #0E7490; } p { margin: .7mm 0; }
+.bloc { border: 1.3px solid #0E7490; border-radius: 2.4mm; padding: 1.8mm 2.4mm; background: #F8FEFF; }
+.bloc.ia { border-color: #7C3AED; background: #FAF5FF; } .bloc.ia h3 { color: #6D28D9; }
+.bloc.ok { border-color: #16A34A; background: #F0FDF4; } .bloc.ok h3 { color: #15803D; }
+.bloc.ja { border-color: #D97706; background: #FFFBEB; } .bloc.ja h3 { color: #B45309; }
+.bloc.al { border-color: #DC2626; background: #FEF2F2; } .bloc.al h3 { color: #B91C1C; }
+.rang { display: flex; align-items: stretch; gap: 1.8mm; } .rang > .bloc { flex: 1; min-width: 0; }
+.fl { flex: 0 0 auto; align-self: center; font-size: 15pt; color: #0E7490; font-weight: 700; line-height: 1; }
+.tag { display: inline-block; min-width: 5mm; text-align: center; color: #fff; font-weight: 700; border-radius: 1.2mm; padding: 0 1.4mm; font-size: 8.4pt; margin-right: 1mm; }
+.A { background: #0E7490; } .C { background: #7C3AED; } .E { background: #D97706; } .F { background: #15803D; } .R { background: #DC2626; }
+table { width: 100%; border-collapse: collapse; font-size: 8.6pt; } th { background: #0E7490; color: #fff; text-align: left; padding: 1.1mm 1.6mm; }
+td { padding: 1.1mm 1.6mm; border-bottom: .3mm solid #BAE6FD; vertical-align: top; } tr:nth-child(even) td { background: #F0FBFD; }
+code { font-family: Consolas, monospace; font-size: 8.2pt; background: #E0F2FE; padding: 0 .8mm; border-radius: .8mm; }
+.petit { font-size: 8.2pt; color: #475569; } ul { margin: .6mm 0; padding-left: 4mm; } li { margin: .3mm 0; }
+q { quotes: none; font-style: italic; } .ex { background: #fff; border: 1px dashed #A78BFA; border-radius: 1.6mm; padding: 1.2mm 2mm; margin: 1mm 0; font-size: 8.6pt; }
+.pied { position: absolute; left: 11mm; right: 11mm; bottom: 2.6mm; font-size: 7.8pt; color: #64748B; display: flex; justify-content: space-between; }
+</style></head><body>
+
+<div class='page'>
+<h1>Le module des soins infirmiers à domicile</h1>
+<div class='sous'>App <code>infirmiers</code> · Walid Gobji · entités <b>Infirmier</b> et <b>InterventionDomicile</b> · Django 5.2 + MongoDB</div>
+
+<h2>1 · Le parcours, de la demande au compte rendu</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc'><h3>① Le patient demande</h3><p>Soin, date, matin ou après-midi, ville. Une fois, ou en <b>série</b> (chaque jour, tous les 2 jours, chaque semaine).</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>② Un infirmier accepte</h3><p>Seuls les infirmiers <b>validés</b> qui desservent la ville et pratiquent le soin la voient. Le premier qui accepte l'obtient.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>③ Il organise sa journée</h3><p>Planning sans double réservation, <b>tournée optimisée</b> par ville, déplacement ou désistement.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc ia'><h3>④ Il saisit le compte rendu</h3><p>Note libre ou dictée, lue par les <b>règles</b> et l'<b>IA</b> : constantes et signes d'alerte.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc al'><h3>⑤ L'alerte remonte</h3><p>L'administration la traite et note la suite ; l'infirmier la voit. Les constantes rejoignent le dossier.</p></div>
+</div>
+
+<h2>2 · Cycle de vie d'une intervention</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc ja'><h3>Demandée</h3><p>Sans infirmier. Le patient peut la <b>modifier</b> ou la <b>retirer</b>.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>Acceptée</h3><p>Infirmier + heure de passage. Il peut la <b>déplacer</b> ou <b>se désister</b> (retour à « demandée »).</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc ok'><h3>Réalisée</h3><p>Compte rendu, constantes, niveau d'alerte. Archivée, plus modifiable.</p></div>
+  <div class='bloc' style='flex:.8;border-style:dashed'><h3>Annulée</h3><p>Par le patient ou l'infirmier, <b>avec un motif</b>, tant qu'elle n'est pas réalisée.</p></div>
+</div>
+<p class='petit'>Chaque étape est une méthode du modèle (<code>accepter</code>, <code>replanifier</code>, <code>liberer</code>, <code>terminer</code>, <code>annuler</code>) qui vérifie ses règles et <b>remet l'objet dans son état précédent en cas de refus</b>. L'acceptation est une mise à jour conditionnelle : deux infirmiers qui acceptent en même temps ne peuvent pas obtenir la même demande.</p>
+
+<h2>3 · Les deux entités et ce qu'elles contiennent</h2>
+<table>
+<tr><th style='width:34mm'>Entité</th><th>Champs principaux</th><th style='width:52mm'>Particularités MongoDB</th></tr>
+<tr><td><b>Infirmier</b><br><span class='petit'>lié au compte (rôle infirmier)</span></td><td>Téléphone, numéro d'Ordre (unique), ville d'exercice, autres villes desservies, soins pratiqués, disponibilité. Validé par l'administrateur avant toute acceptation.</td><td>Villes et soins sont des <b>listes dans le document</b> (<code>ArrayField</code>)</td></tr>
+<tr><td><b>InterventionDomicile</b><br><span class='petit'>patient, infirmier, consultation</span></td><td>Soin, détail, adresse, date souhaitée, moment, statut, passage prévu, compte rendu, niveau d'alerte, série (rang/total), suivi de l'alerte, motif d'annulation.</td><td>Constantes (<code>EmbeddedModelField</code>) et signes d'alerte (<code>EmbeddedModelArrayField</code>) <b>enregistrés dans le document</b></td></tr>
+</table>
+
+<h2>4 · Ce que voit chaque acteur</h2>
+<table>
+<tr><th style='width:26mm'>Acteur</th><th>Pages</th></tr>
+<tr><td><b>Patient</b></td><td>Soins à domicile : demander (une fois ou en série), suivre en 3 étapes, modifier, retirer, annuler un passage, lire le compte rendu. Son adresse et son téléphone ne sont montrés qu'à l'infirmier qui accepte.</td></tr>
+<tr><td><b>Infirmier</b></td><td>Tableau de bord (patients à suivre, comptes rendus à saisir), demandes de la zone (séries regroupées), planning par jour, tournée du jour, compte rendu intelligent, historique, profil.</td></tr>
+<tr><td><b>Administrateur</b></td><td>Back-office → <b>Alertes soins</b> : alertes à traiter, suite donnée. Back-office → <b>Comptes</b> : validation des infirmiers, désactivation (ses passages à venir retournent aux autres infirmiers, patients prévenus).</td></tr>
+</table>
+<h2>5 · Organisation de l'infirmier</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc'><h3>Planning sans chevauchement</h3><p>Deux passages à moins de <b>30 min</b> sont refusés, avec le prochain créneau libre proposé. Une série n'est acceptée que si <b>tous</b> ses jours sont libres.</p></div>
+  <div class='bloc'><h3>Tournée du jour</h3><p>Regroupe les patients <b>par ville</b> en partant de la sienne, prioritaires d'abord. Exemple : 4 → 2 changements de ville, <b>120 → 60 min</b> de trajet. Les patients déplacés sont prévenus.</p></div>
+  <div class='bloc'><h3>Soins répétés</h3><p><q>Injection chaque matin pendant 10 jours</q> : demandée en une fois, acceptée en bloc, un seul e-mail récapitulatif.</p></div>
+</div>
+
+<div class='pied'><span>MediConnect · Module infirmiers</span><span>1 / 2</span></div>
+</div>
+
+<div class='page'>
+<h2>6 · Le compte rendu intelligent</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc'><h3><span class='tag A'>R</span>Règles (toujours actives)</h3>
+    <ul><li>Constantes : <q>T 38,4</q>, <q>TA 15/9</q> (ramené à 150/90), <q>pouls 98</q>, <q>sat 93 %</q></li>
+    <li>12 signes d'alerte du catalogue (infection de plaie, difficulté respiratoire, confusion…)</li>
+    <li>Négations et proches écartés : <q>pas de rougeur</q>, <q>son mari est tombé</q></li>
+    <li>Seuils repris des mesures de santé du patient</li></ul></div>
+  <div class='bloc ia'><h3><span class='tag C'>IA</span>IA de langage (facultative)</h3>
+    <p>Comprend les formulations libres que les règles ne connaissent pas : <q>a du mal à reprendre son souffle</q>, <q>thermomètre à 38 et 6</q>.</p>
+    <p class='petit'>Même client que le triage (Groq ou Ollama). Sans IA, les règles suffisent.</p></div>
+  <div class='bloc ja'><h3><span class='tag E'>Év</span>Évolution</h3>
+    <p>Compare aux passages et mesures précédents : <q>132 → 141 → 152 mmHg sur les 3 derniers relevés</q>.</p>
+    <p class='petit'>Un relevé présent deux fois (passage + mesure) ne compte qu'une fois.</p></div>
+</div>
+<div class='ex'><b>Exemple réel testé sur Atlas</b> — note : <q>Le point de piqûre est un peu enflammé et chaud. Il a du mal à reprendre son souffle. Thermomètre à 38 et 6, tension 16/10.</q><br>
+→ <b>À signaler au médecin</b> : infection de la plaie (règles), difficulté respiratoire (IA), fièvre (IA), tension élevée (constantes). Chaque signe est affiché <b>avec la phrase qui le justifie</b>.</div>
+
+<h2>7 · Les garde-fous</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc al'><h3>On ne fait jamais confiance au modèle</h3><ul>
+    <li>Nom du patient, téléphones, e-mails retirés <b>avant l'envoi</b></li>
+    <li>Signes acceptés seulement <b>dans le catalogue</b> et <b>cités mot pour mot</b></li>
+    <li>Un chiffre absent de la note est rejeté</li>
+    <li><b>L'IA ne fixe jamais le niveau</b> : les règles pèsent les signes</li></ul></div>
+  <div class='bloc ok'><h3>L'humain décide</h3><ul>
+    <li>« Analyser » ne fait que proposer : l'infirmier relit et corrige</li>
+    <li>Une valeur corrigée fait tomber les signes tirés de l'ancienne</li>
+    <li>Une note piège (<q>ignore les instructions…</q>) n'a pas manipulé l'IA ; un chiffre écrit est lu par prudence, l'infirmier le corrige</li>
+    <li>« Un repère, pas un diagnostic » sur chaque analyse</li></ul></div>
+</div>
+
+<h2>8 · Liens avec les autres modules</h2>
+<table>
+<tr><th style='width:36mm'>Module</th><th>Lien</th></tr>
+<tr><td><b>Patients</b> (Ismail)</td><td>Patient, adresse et ville ; allergies montrées à l'infirmier ; consultation d'origine ; <b>les constantes deviennent des mesures de santé</b> ; même client IA et mêmes garde-fous ; e-mails sur le même gabarit.</td></tr>
+<tr><td><b>Médecins</b> (Mourad)</td><td>Un soin prescrit dans le compte rendu du médecin apparaît chez le patient (« Soins prescrits par votre médecin ») : il le demande <b>en un clic</b>, formulaire pré-rempli (type de soin, répétition) et relié à la consultation.</td></tr>
+<tr><td><b>Administration</b></td><td>Page <b>Comptes</b> : validation et désactivation des infirmiers (permissions Django) ; page <b>Alertes</b> du back-office.</td></tr>
+</table>
+
+<h2>9 · Tests, métriques de l'IA et tâches de fond</h2>
+<div class='rang' style='margin-top:1mm'>
+  <div class='bloc'><h3>Tests</h3><p><b>Unitaires</b> (règles, garde-fous avec IA simulée, cycle de vie, formulaires, e-mails, tournée) et <b>d'intégration</b> sur une vraie base avec le client HTTP : CRUD complet des deux entités, parcours patient → infirmier → compte rendu → alerte traitée, séries, conflits, tournée, droits.</p></div>
+  <div class='bloc ia'><h3>Métriques (60 notes annotées)</h3>
+    <table><tr><th></th><th>Règles</th><th>Règles + IA</th></tr>
+    <tr><td>Exactitude</td><td>65 %</td><td><b>95 %</b></td></tr>
+    <tr><td>F1 macro</td><td>0,64</td><td><b>0,95</b></td></tr>
+    <tr><td>Rappel « à signaler »</td><td>0,50</td><td><b>0,85</b></td></tr>
+    <tr><td>Alertes manquées / fausses</td><td>7 / 0</td><td><b>1 / 0</b></td></tr></table>
+    <p class='petit'>Groq, médiane 423 ms, p95 1,9 s. <code>python manage.py evaluer_alertes</code></p></div>
+  <div class='bloc'><h3>Celery + Redis</h3><p>E-mails envoyés en tâche de fond. Si l'IA ne répond pas à l'enregistrement d'un compte rendu (délai, réseau), une <b>relecture IA</b> est reprogrammée (1, 2, puis 4 min) : un signe vu par l'IA s'ajoute, le niveau ne peut que monter.</p></div>
+</div>
+<div class='pied'><span>MediConnect · Module infirmiers</span><span>2 / 2</span></div>
+</div>
+</body></html>

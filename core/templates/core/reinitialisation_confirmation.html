@@ -1,0 +1,29 @@
+{% extends "core/auth_layout.html" %}
+
+{% block title %}Nouveau mot de passe — MediConnect{% endblock %}
+
+{% block auth_link %}
+<a href="{% url 'core:connexion' %}" class="abtn abtn-outline">Se connecter</a>
+{% endblock %}
+
+{% block page %}
+{% if validlink %}
+<h1 class="auth-title">Nouveau mot de passe</h1>
+<p class="muted mt-2 text-sm">Choisissez un mot de passe que vous n'utilisez nulle part ailleurs.</p>
+
+<form method="post" novalidate class="mt-8 space-y-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+  {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+  <button type="submit" class="abtn abtn-primary abtn-lg abtn-block">Enregistrer le mot de passe</button>
+</form>
+{% else %}
+<h1 class="auth-title">Ce lien n'est plus valable</h1>
+<p class="mt-4 text-sm">Il a déjà servi ou il a expiré (il dure deux heures). Vous pouvez en demander un nouveau.</p>
+<a href="{% url 'core:reinitialisation' %}" class="abtn abtn-primary abtn-lg abtn-block mt-8">Demander un nouveau lien</a>
+{% endif %}
+{% endblock %}

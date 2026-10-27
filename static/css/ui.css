@@ -1,0 +1,251 @@
+/* ==========================================================================
+   MediConnect : thème sombre « verre bleu nuit »
+   Aucun blanc décoratif : pas de voile, pas de reflet, pas de liseré clair.
+   Le verre vient de la transparence, du flou et d'une lueur colorée.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+  --bg: #050E1C;
+  --bg-2: #081A33;
+  --text: #E3ECF7;
+  --muted: #A9BDD6;
+  --line: rgba(120, 160, 220, 0.18);       /* bordure bleutée, jamais blanche */
+  --line-strong: rgba(148, 180, 230, 0.32);
+  --cyan: #22D3EE;
+  --cyan-text: #67E8F9;
+  --teal: #0E7490;
+  --teal-dark: #0B5568;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---- Panneaux : verre bleu foncé ---------------------------------------- */
+.glass {
+  color: var(--text);
+  background: linear-gradient(145deg, rgba(20, 44, 80, 0.74), rgba(9, 25, 48, 0.7));
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 26px 50px -28px rgba(0, 0, 0, 0.85);
+}
+.glass-pill { border-radius: 9999px; }
+.glass .glass {
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: none;
+}
+
+/* Petite pastille d'information */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: #BFE9F4;
+  background: rgba(14, 116, 144, 0.16);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* ---- Boutons : verre teinté, lueur colorée, aucun trait blanc ------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1.5rem;
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  transition:
+    transform 0.25s var(--ease),
+    box-shadow 0.25s var(--ease),
+    background 0.25s var(--ease),
+    border-color 0.25s var(--ease);
+}
+.btn:hover { transform: translateY(-2px); }
+.btn:active { transform: translateY(0) scale(0.98); }
+
+/* Action principale : verre cyan profond (texte blanc, contraste > 5:1) */
+.btn-primary {
+  color: #fff;
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: linear-gradient(135deg, rgba(14, 116, 144, 0.96), rgba(11, 85, 104, 0.96));
+  box-shadow: 0 12px 30px -12px rgba(34, 211, 238, 0.55);
+}
+.btn-primary:hover {
+  border-color: rgba(34, 211, 238, 0.75);
+  box-shadow: 0 18px 38px -14px rgba(34, 211, 238, 0.7);
+}
+
+/* Action secondaire : verre sombre translucide, bordure bleutée */
+.btn-glass {
+  color: #D3E6F8;
+  border: 1px solid var(--line-strong);
+  background: rgba(148, 180, 230, 0.08);
+  box-shadow: 0 10px 24px -16px rgba(0, 0, 0, 0.8);
+}
+.btn-glass:hover {
+  color: #fff;
+  border-color: rgba(103, 232, 249, 0.55);
+  background: rgba(148, 180, 230, 0.16);
+}
+
+.btn-neutral { color: #C4D3E6; }
+.btn-sm { min-height: 44px; padding: 0 1.1rem; }
+.btn-icon { width: 44px; padding: 0; }
+
+/* Onglet actif de la navigation : verre cyan lumineux */
+.btn-light {
+  color: #A5F3FC;
+  font-weight: 500;
+  border: 1px solid rgba(34, 211, 238, 0.65);
+  background: rgba(34, 211, 238, 0.14);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1), 0 12px 28px -14px rgba(34, 211, 238, 0.6);
+}
+
+/* Marque : pastille du logo */
+.logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  color: #fff;
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  background: linear-gradient(135deg, #0E7490, #0B3F63);
+  box-shadow: 0 8px 20px -8px rgba(34, 211, 238, 0.6);
+}
+
+/* ---- Fond des pages intérieures : bleu nuit profond --------------------- */
+.page-bg {
+  position: relative;
+  isolation: isolate;
+  color: var(--text);
+  background: linear-gradient(135deg, #050E1C 0%, #071A32 55%, #0A2745 100%);
+}
+.page-bg::before,
+.page-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.page-bg::before {
+  background: var(--page-img) center / cover no-repeat;
+  opacity: 0.14;
+  filter: grayscale(1) contrast(1.1);
+}
+.page-bg::after {
+  background:
+    radial-gradient(56rem 34rem at 92% -8%, rgba(14, 165, 200, 0.28), transparent 62%),
+    radial-gradient(46rem 30rem at 0% 100%, rgba(37, 99, 235, 0.2), transparent 62%);
+}
+
+/* ---- Accueil : la vidéo reste visible, assombrie côté texte -------------- */
+.hero-video { filter: brightness(1.05) contrast(1.05); }
+/* Teinte cyan par fusion « couleur » : colorise la vidéo en gardant sa luminosité
+   (la vidéo est en noir et blanc) ; rien n'est éclairci. */
+.hero-tint {
+  background: rgba(14, 130, 190, 0.6);
+  mix-blend-mode: color;
+}
+.hero-veil { background: rgba(4, 12, 26, 0.72); }
+@media (min-width: 768px) {
+  .hero-veil {
+    background:
+      linear-gradient(0deg, rgba(4, 12, 26, 0.55) 0%, transparent 38%),
+      linear-gradient(
+        90deg,
+        rgba(4, 12, 26, 0.94) 0%,
+        rgba(4, 12, 26, 0.78) 34%,
+        rgba(4, 12, 26, 0.2) 68%,
+        rgba(4, 12, 26, 0) 100%
+      );
+  }
+}
+.menu-panel {
+  background: rgba(5, 14, 28, 0.97);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+
+/* ---- Champs de formulaire ------------------------------------------------ */
+.field {
+  display: block;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border-radius: 0.875rem;
+  border: 1px solid var(--line-strong);
+  background: rgba(4, 12, 26, 0.55);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.field::placeholder { color: #7F96B5; }
+.field option { background: #0B1B33; color: var(--text); }
+.field:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.25);
+}
+
+/* ---- Choix (cases à cocher et échelles de 0 à 5) -------------------------- */
+.choice {
+  border: 1px solid var(--line-strong);
+  background: rgba(148, 180, 230, 0.05);
+  color: #D3E6F8;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.choice:hover { background: rgba(148, 180, 230, 0.12); }
+.choice:has(:checked) {
+  border-color: var(--cyan);
+  background: rgba(34, 211, 238, 0.12);
+  color: #fff;
+}
+.choice-scale:has(:checked) {
+  background: linear-gradient(135deg, #0E7490, #0B5568);
+  border-color: #67E8F9;
+  box-shadow: 0 10px 22px -12px rgba(34, 211, 238, 0.7);
+}
+.choice:has(:focus-visible) { outline: 2px solid var(--cyan-text); outline-offset: 2px; }
+
+/* ---- Repli et préférences utilisateur ----------------------------------- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: #0C2140; }
+  .menu-panel { background: #050E1C; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .chip, .menu-panel { background: #0C2140; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .btn { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .page-bg::before { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .choice, .field { transition: none; }
+  .btn:hover { transform: none; }
+}
+
+@media (forced-colors: active) {
+  .btn, .glass, .chip, .field, .choice { border: 1px solid ButtonText; }
+}
+
+/* ---- Focus clavier visible sur tous les liens et boutons (accueil compris) ------------------------- */
+a:focus-visible, button:focus-visible, summary:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--cyan-text); outline-offset: 3px; border-radius: 4px;
+}

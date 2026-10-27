@@ -1,0 +1,2 @@
+{# Pastille du niveau d'alerte. Paramètre : niveau ("ras", "surveiller" ou "signaler"), libelle. #}
+<span class="sev {% if niveau == 'signaler' %}sev-severe{% elif niveau == 'surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{{ libelle }}</span>

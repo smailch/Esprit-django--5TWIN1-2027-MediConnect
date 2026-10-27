@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{# Cadre « application » de toutes les pages connectées : menu latéral sur ordinateur,
+   barre d'onglets en bas sur mobile. Chaque app l'étend et remplit `nav` (ses onglets)
+   et `page`. #}
+
+{% block head %}{% include "core/_head_app.html" %}{% endblock %}
+
+{% block content %}
+<a href="#contenu" class="skip-link">Aller au contenu principal</a>
+
+<div class="app app-shell">
+  <aside class="rail">
+    <a href="{% url 'home' %}" class="brand rail-brand">
+      <span class="brand-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
+      <span class="brand-name">MediConnect</span>
+    </a>
+
+    <nav class="rail-nav" aria-label="Navigation principale">
+      {% block nav %}{% endblock %}
+    </nav>
+
+    {% if user.is_authenticated %}
+    <div class="rail-user">
+      <div class="rail-user-id">
+        <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1"|upper }}</span>
+        <span class="truncate">{{ user.get_full_name|default:user.username }}</span>
+      </div>
+      <form method="post" action="{% url 'core:deconnexion' %}">
+        {% csrf_token %}
+        <button type="submit" class="abtn abtn-ghost abtn-block"><i aria-hidden="true" data-lucide="log-out" class="h-4 w-4"></i>Se déconnecter</button>
+      </form>
+    </div>
+    {% endif %}
+  </aside>
+
+  <div class="app-main">
+    <header class="topbar">
+      <a href="{% url 'home' %}" class="brand">
+        <span class="brand-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="brand-name">MediConnect</span>
+      </a>
+      {% if user.is_authenticated %}
+      <form method="post" action="{% url 'core:deconnexion' %}">
+        {% csrf_token %}
+        <button type="submit" class="abtn abtn-ghost"><i aria-hidden="true" data-lucide="log-out" class="h-4 w-4"></i>Se déconnecter</button>
+      </form>
+      {% endif %}
+    </header>
+
+    <main id="contenu" class="app-content">
+      {% if messages %}
+      <div class="mb-6 space-y-2" role="status">
+        {% for message in messages %}
+        <p class="toast {% if message.tags == 'error' %}toast-error{% endif %}">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block page %}{% endblock %}
+    </main>
+    <footer class="app-footer">
+      {% include "core/_pied.html" %}
+    </footer>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

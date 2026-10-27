@@ -1,0 +1,97 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Tableau de bord — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Tableau de bord</h1>
+  </div>
+  <div class="flex flex-wrap gap-3">
+    <a href="{% url 'infirmiers:alertes' %}" class="abtn abtn-outline">
+      <i aria-hidden="true" data-lucide="siren" class="h-4 w-4"></i>Alertes des soins à domicile
+    </a>
+    <a href="{% url 'backoffice:rendez_vous' %}" class="abtn abtn-primary">
+      <i aria-hidden="true" data-lucide="calendar-check" class="h-4 w-4"></i>Voir les rendez-vous
+    </a>
+  </div>
+</header>
+
+<section class="kpi-grid mt-8" aria-label="Chiffres clés">
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.total }}</p><p class="kpi-label">Demandes au total</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.en_attente }}</p><p class="kpi-label">En attente de consultation</p></div>
+  <div class="panel kpi {% if kpis.urgentes %}kpi-alert{% endif %}"><p class="kpi-num">{{ kpis.urgentes }}</p><p class="kpi-label">Cas urgents en cours (niveaux 1 et 2)</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ kpis.patients }}</p><p class="kpi-label">Patients inscrits</p></div>
+</section>
+
+<section class="kpi-grid mt-4" aria-label="File d'attente">
+  <div class="panel kpi {% if file.en_retard %}kpi-alert{% endif %}"><p class="kpi-num">{{ file.en_retard }}</p><p class="kpi-label">Demandes en retard</p></div>
+  <div class="panel kpi {% if file.a_risque %}kpi-warn{% endif %}"><p class="kpi-num">{{ file.a_risque }}</p><p class="kpi-label">Demandes à risque</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ file.planifies }}</p><p class="kpi-label">Rendez-vous fixés</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ file.protegees }}</p><p class="kpi-label">Demandes protégées</p></div>
+</section>
+
+{% if a_surveiller %}
+<section class="panel mt-6" aria-labelledby="titre-surveiller">
+  <div class="flex items-center justify-between gap-3 px-5 pt-5">
+    <h2 id="titre-surveiller" class="section-title">À surveiller <span class="count">{{ a_surveiller|length }}</span></h2>
+    <a href="{% url 'backoffice:file_attente' %}" class="link text-sm">Voir la file d'attente</a>
+  </div>
+  <ul class="mt-2">
+    {% for t in a_surveiller %}
+    <li class="item-row">
+      <span>
+        <a class="link font-medium" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a>
+        <span class="muted"> · {{ t.medecin_nom }} · niveau {{ t.niveau_effectif }} · attend depuis {{ t.cree_le|timesince }}</span>
+      </span>
+      <span class="sev {% if t.delai.etat == 'en_retard' %}sev-severe{% else %}sev-moderee{% endif %}">{{ t.delai.libelle }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="pb-3"></div>
+</section>
+{% endif %}
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+  <section class="panel panel-pad lg:col-span-5" aria-labelledby="titre-repartition">
+    <h2 id="titre-repartition" class="section-title">Demandes en cours par niveau</h2>
+    <p class="muted mt-1 text-sm">Demandes en attente ou en consultation, selon le niveau retenu par le médecin ou, à défaut, par le triage.</p>
+    <ul class="bars">
+      {% for r in repartition %}
+      <li class="bar-row req-{{ r.niveau }}">
+        <span class="bar-label"><span class="lv lv-{{ r.niveau }}">{{ r.niveau }}</span>{{ r.libelle }}</span>
+        <span class="bar-track" aria-hidden="true"><span class="bar-fill" style="width: {{ r.pourcentage }}%"></span></span>
+        <span>{{ r.nombre }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="muted mt-5 text-xs">Terminées : {{ kpis.terminees }} · Annulées : {{ kpis.annulees }}</p>
+  </section>
+
+  <section class="panel lg:col-span-7" aria-labelledby="titre-derniers">
+    <div class="flex items-center justify-between gap-3 px-5 pt-5">
+      <h2 id="titre-derniers" class="section-title">Dernières demandes</h2>
+      <a href="{% url 'backoffice:rendez_vous' %}" class="link text-sm">Tout voir</a>
+    </div>
+    <div class="table-wrap mt-3">
+      <table class="tbl tbl-compact">
+        <thead><tr><th scope="col">Date</th><th scope="col">Patient</th><th scope="col">Médecin</th><th scope="col">Niveau</th><th scope="col">Statut</th></tr></thead>
+        <tbody>
+          {% for t in derniers %}
+          <tr>
+            <td>{{ t.cree_le|date:"d/m H:i" }}</td>
+            <td><a class="link" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a></td>
+            <td>{{ t.medecin_nom }}</td>
+            <td><span class="lv lv-{{ t.niveau_effectif }}">{{ t.niveau_effectif }}</span></td>
+            <td><span class="st st-{{ t.statut }}">{{ t.get_statut_display }}</span></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="muted">Aucune demande pour le moment.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

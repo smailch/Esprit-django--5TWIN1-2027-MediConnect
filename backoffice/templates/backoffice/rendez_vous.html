@@ -1,0 +1,68 @@
+{% extends "backoffice/layout.html" %}
+{% load suivi_filtres %}
+
+{% block title %}Rendez-vous — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Rendez-vous</h1>
+    <p class="muted mt-2 text-sm">Toutes les demandes des patients, des plus récentes aux plus anciennes.</p>
+  </div>
+</header>
+
+<form method="get" class="filters mt-8" role="search" aria-label="Rechercher et filtrer les rendez-vous">
+  <div>
+    <label for="{{ filtre.q.id_for_label }}" class="f-label">Patient ou médecin</label>
+    <input type="search" id="{{ filtre.q.id_for_label }}" name="q" value="{{ filtre.q.value|default_if_none:'' }}" class="field" placeholder="Nom, prénom…">
+  </div>
+  <div>
+    <label for="{{ filtre.statut.id_for_label }}" class="f-label">Statut</label>
+    {{ filtre.statut }}
+  </div>
+  <div>
+    <label for="{{ filtre.niveau.id_for_label }}" class="f-label">Niveau</label>
+    {{ filtre.niveau }}
+  </div>
+  <div>
+    <label for="{{ filtre.medecin.id_for_label }}" class="f-label">Médecin</label>
+    {{ filtre.medecin }}
+  </div>
+  <div class="flex gap-2">
+    <button type="submit" class="abtn abtn-primary">Filtrer</button>
+    {% if filtres_actifs %}<a href="{% url 'backoffice:rendez_vous' %}" class="abtn abtn-ghost">Réinitialiser</a>{% endif %}
+  </div>
+</form>
+
+<section class="panel mt-6" aria-label="Liste des rendez-vous">
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Date</th><th scope="col">Patient</th><th scope="col">Médecin</th>
+          <th scope="col">Niveau</th><th scope="col" class="num">Score</th><th scope="col">Statut</th><th scope="col">Délai</th><th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in page %}
+        <tr>
+          <td>{{ t.cree_le|date:"d/m/Y H:i" }}</td>
+          <td><a class="link" href="{% url 'backoffice:patient_detail' t.patient.pk %}">{{ t.patient }}</a></td>
+          <td>{{ t.medecin_nom }}<span class="muted block text-xs">{{ t.medecin_specialite }}</span></td>
+          <td><span class="lv lv-{{ t.niveau_effectif }}">{{ t.niveau_effectif }}</span></td>
+          <td class="num">{{ t.score|default_if_none:"—" }}</td>
+          <td><span class="st st-{{ t.statut }}">{{ t.get_statut_display }}</span></td>
+          <td>{% if t.delai %}<span class="sev {{ t.delai.etat|classe_etat }}">{{ t.delai.libelle }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="num"><a class="abtn abtn-outline" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">Voir</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="muted">{% if filtres_actifs %}Aucun rendez-vous ne correspond à ces critères.{% else %}Aucune demande pour le moment.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% include "backoffice/_pager.html" %}
+{% endblock %}

@@ -1,0 +1,82 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>MediConnect — Schéma du triage et de la file d'attente</title><style>
+@page { size: A4 landscape; margin: 0; }
+* { box-sizing: border-box; } body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0F172A; font-size: 9.2pt; line-height: 1.3; }
+.page { width: 297mm; height: 209mm; padding: 6mm 10mm; background: #fff; overflow: hidden; }
+h1 { margin: 0; font-size: 18pt; color: #0E7490; } .sous { color: #475569; margin: .5mm 0 2mm; font-size: 9.6pt; }
+.bandeau { font-weight: 700; letter-spacing: .08em; font-size: 9.6pt; color: #fff; padding: 1mm 3.2mm; border-radius: 2mm; display: inline-block; margin: 1.8mm 0 1.6mm; }
+.b1 { background: #0E7490; } .b2 { background: #155E75; } .b3 { background: #0F766E; }
+.rang { display: flex; align-items: stretch; gap: 2.2mm; }
+.bloc { flex: 1; border: 1.4px solid #0E7490; border-radius: 2.5mm; padding: 1.4mm 2.2mm; background: #F8FEFF; min-width: 0; }
+.bloc h3 { margin: 0 0 1mm; font-size: 9.8pt; color: #0E7490; } .bloc p { margin: .6mm 0; }
+.bloc.ia { border-color: #7C3AED; background: #FAF5FF; } .bloc.ia h3 { color: #6D28D9; }
+.bloc.ok { border-color: #16A34A; background: #F0FDF4; } .bloc.ok h3 { color: #15803D; }
+.bloc.al { border-color: #DC2626; background: #FEF2F2; } .bloc.al h3 { color: #B91C1C; }
+.bloc.ja { border-color: #D97706; background: #FFFBEB; } .bloc.ja h3 { color: #B45309; }
+.fl { flex: 0 0 auto; align-self: center; font-size: 15pt; color: #0E7490; font-weight: 700; }
+.lv { display: inline-block; min-width: 5mm; text-align: center; color: #fff; font-weight: 700; border-radius: 1.2mm; padding: 0 1.2mm; font-size: 8.2pt; }
+.dl { display: flex; align-items: center; gap: 1.6mm; margin: .6mm 0; } .dl > span:last-child { margin-left: auto; font-weight: 700; color: #155E75; }
+.petit { font-size: 8.4pt; color: #475569; } .niv { display: flex; flex-direction: column; justify-content: center; gap: .7mm; }
+.niv div { display: flex; align-items: center; gap: 1.6mm; }
+.groupes { list-style: none; margin: 0; padding: 0; } .groupes li { display: flex; gap: 1.6mm; margin: .7mm 0; align-items: flex-start; }
+.g { flex: 0 0 4.4mm; height: 4.4mm; border-radius: 50%; background: #155E75; color: #fff; text-align: center; font-weight: 700; font-size: 7.6pt; line-height: 4.4mm; }
+.etats { display: flex; gap: 1.4mm; margin-top: 1mm; } .etat { flex: 1; text-align: center; border-radius: 1.4mm; padding: 1mm 0; color: #fff; font-weight: 700; font-size: 8.4pt; }
+.tab { width: 100%; border-collapse: collapse; font-size: 8.4pt; } .tab td { padding: .5mm 1mm; border-bottom: .3mm solid #BAE6FD; } .tab td:last-child { text-align: right; font-weight: 700; } .tab .r { color: #B91C1C; } .tab .u { background: #FEE2E2; }
+
+.att td:first-child { white-space: nowrap; } .att td:nth-child(2), .att td:nth-child(3) { text-align: left; font-weight: 400; } .att .ent td { font-weight: 700; color: #155E75; border-bottom: .5mm solid #0E7490; } .att td:last-child { font-weight: 700; color: #155E75; }
+.c { font-size: 8.4pt; } .c ol { margin: .4mm 0; padding-left: 4mm; } .c li { margin: .3mm 0; }
+</style></head><body><div class='page'><div class='cadre' style='zoom:.88'>
+<h1>Le triage et la file d'attente</h1>
+<div class='sous'>Du moment où le patient décrit ses symptômes jusqu'à son tour chez le médecin. MediConnect · module Gestion patient</div>
+
+<div class='bandeau b1'>1 · LE TRIAGE : QUEL NIVEAU D'URGENCE ?</div>
+<div class='rang'>
+  <div class='bloc'><h3>Le patient décrit</h3><p>• symptômes cochés (catalogue)<br>• constantes (température…)<br>• 4 échelles de 0 à 5 : douleur, fièvre, respiration, état général<br>• <b>texte libre</b> : « décrivez ce que vous ressentez »</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>① Règles pondérées</h3><p><i>Pas d'IA : calcul prévisible</i></p><p>Points = symptômes + constantes + échelles</p><p style='font-size:9.2pt'>≥ 20 points → <span class='lv' style='background:#EA580C'>2</span><br>≥ 12 points → <span class='lv' style='background:#CA8A04'>3</span><br>≥ 5 points → <span class='lv' style='background:#0E7490'>4</span><br>moins → <span class='lv' style='background:#15803D'>5</span></p><p>Un <b>signe d'alerte</b> impose un niveau minimal : le plus urgent l'emporte.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc ia'><h3>② Modèle de lecture du texte</h3><p><i>Apprentissage automatique, sur le serveur</i></p><p>Lit le texte libre, estime un niveau et sa confiance.</p><p><b>Relève</b> le niveau si confiance ≥ <b>85 %</b>.<br>Jamais de baisse. Jamais le niveau vital.</p></div>
+  <div class='fl'>+</div>
+  <div class='bloc ia'><h3>③ IA Groq <span class='petit'>(facultative)</span></h3><p><i>Si le patient l'a accepté</i></p><p>Repère dans le texte des symptômes non cochés, avec citation vérifiée. Ne décide jamais d'un niveau.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc ok niv'><h3>Niveau final</h3><div><span class='lv' style='background:#B91C1C'>1</span> <b>Vital</b></div><div><span class='lv' style='background:#EA580C'>2</span> <b>Très urgent</b></div><div><span class='lv' style='background:#CA8A04'>3</span> <b>Urgent</b></div><div><span class='lv' style='background:#0E7490'>4</span> <b>Standard</b></div><div><span class='lv' style='background:#15803D'>5</span> <b>Non urgent</b></div><p class='petit'>Le médecin peut requalifier.</p></div>
+</div>
+
+<div class='bandeau b2'>2 · LA FILE D'ATTENTE : DANS QUEL ORDRE PASSE-T-ON ?</div>
+<div class='rang'>
+  <div class='bloc' style='flex:1.25'><h3>Combien de temps au maximum ?</h3><p class='petit'>en heures de <b>présence du médecin</b> (valeurs par défaut, réglables)</p>
+<table class='tab att'><tr class='ent'><td>Cas</td><td>Délai visé</td><td>Passe en tête au plus tard</td></tr>
+<tr><td><span class='lv' style='background:#B91C1C'>1</span> Vital</td><td>immédiat</td><td>dès que le médecin est libre</td></tr>
+<tr><td><span class='lv' style='background:#EA580C'>2</span> Très urgent</td><td>30 min</td><td>1 h 30</td></tr>
+<tr><td><span class='lv' style='background:#CA8A04'>3</span> Urgent</td><td>2 h</td><td>6 h</td></tr>
+<tr><td><span class='lv' style='background:#0E7490'>4</span> Standard</td><td>8 h</td><td>24 h (1 jour)</td></tr>
+<tr><td><span class='lv' style='background:#15803D'>5</span> Non urgent</td><td>24 h</td><td>72 h (3 jours)</td></tr>
+<tr><td>Rendez-vous fixé</td><td colspan='2'>à son heure (+ retard si une urgence passe)</td></tr></table>
+<p class='petit'>Au plus tard = 3 × le délai visé : le patient passe alors devant tous, sauf un cas vital.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>Tri par groupes, puis par échéance</h3><ul class='groupes'>
+    <li><span class='g'>0</span><span><b>Cas vital</b> (niveau 1)</span></li>
+    <li><span class='g'>1</span><span><b>Garantie</b> : demande protégée qui a attendu ≥ 3 × son délai</span></li>
+    <li><span class='g'>2</span><span><b>Niveaux 2 et 3</b> (urgents)</span></li>
+    <li><span class='g'>3</span><span><b>Demandes protégées</b> de niveau 4 et 5</span></li>
+    <li><span class='g'>4</span><span>Toutes les autres : les plus anciennes d'abord</span></li></ul></div>
+  <div class='fl'>›</div>
+  <div class='bloc ja'><h3>Personne n'attend sans fin</h3><p>Chaque fois qu'une demande plus récente passe devant, un <b>dépassement</b> est compté.</p><p>Après <b>5 dépassements</b>, la demande est <b>protégée</b> : seuls les niveaux 1 à 3 peuvent encore passer devant elle.</p><p>Après 3 × son délai, elle passe même devant les urgents (sauf le vital).</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc'><h3>Ce que voit le patient</h3><div class='etats'><div class='etat' style='background:#15803D'>Dans les temps</div><div class='etat' style='background:#CA8A04'>À risque<br><span style='font-weight:400'>≥ 75 % du délai</span></div><div class='etat' style='background:#B91C1C'>En retard</div></div><p>Sa place dans la file ou son heure fixée, son <b>heure prévue</b> (calculée dans l'agenda, partie 3), une jauge du délai.</p></div>
+</div>
+
+<div class='bandeau b3'>3 · L'AGENDA DU MÉDECIN : L'HEURE PRÉVUE DE CHACUN, ET LES E-MAILS</div>
+<div class='rang'>
+  <div class='bloc ok c' style='flex:1.05'><h3>Deux façons d'avoir une heure</h3><p><b>Niveaux 1 et 2</b> : pas de créneau, prise en charge en priorité.</p><p><b>Niveaux 3 à 5</b> : le patient choisit un créneau (<b>heure fixée</b>, engagement, e-mail de confirmation) ou reste dans la file (<b>heure estimée</b>, pas d'e-mail).</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc c' style='flex:1.25'><h3>Un seul agenda par médecin</h3><p>On déroule sa journée, consultation après consultation :</p><ol><li>un <b>cas prioritaire</b> (niveau 1 ou 2, demande protégée) passe d'abord et peut décaler un rendez-vous ;</li><li>un rendez-vous passe à son heure, <b>jamais avant</b> ;</li><li>la file prend les trous qui tiennent avant le prochain rendez-vous (un niveau 3 ne décale jamais un rendez-vous).</li></ol></div>
+  <div class='fl'>›</div>
+  <div class='bloc ja' style='flex:1.05'><h3>Exemple : 2 urgences à 9 h 45</h3><table class='tab'><tr class='u'><td>Urgences (niveau 2)</td><td>9 h 45</td></tr><tr><td>Amel · fixé 10 h 00</td><td class='r'>prévu 10 h 25</td></tr><tr><td>Sami · fixé 10 h 30</td><td class='r'>prévu 10 h 45</td></tr><tr><td>Lina · fixé 11 h 00</td><td>prévu 11 h 05</td></tr><tr><td>Youssef · file</td><td>vers 11 h 25</td></tr></table><p class='petit'>Consultations de 20 min. Un trou dans l'agenda efface le retard.</p></div>
+  <div class='fl'>›</div>
+  <div class='bloc c' style='flex:1.2'><h3>Les e-mails au patient</h3><p>• <b>Rendez-vous confirmé</b>, modifié ou annulé.<br>• <b>Retardé</b> : seulement si l'heure prévue bouge d'au moins <b>10 min</b>, une fois par changement ; « retrouve son heure » au retour.<br>• Jamais pour une simple estimation de la file.<br>• <b>Aucune donnée médicale</b>, jamais la raison du retard. Une panne d'envoi ne bloque rien.</p></div>
+</div>
+
+<div class='rang' style='margin-top:1.8mm'>
+  <div class='bloc' style='flex:1'><h3>Les limites à connaître</h3><p class='c'>L'heure prévue est une <b>estimation</b> (20 min par consultation) : le système ne sait pas quand le médecin termine, l'administrateur doit mettre à jour le statut. Un ordre de passage ne guérit pas la surcharge : surveiller les demandes « en retard » et réorienter. Horaires des médecins et seuils = valeurs de démonstration, à faire valider par un professionnel de santé.</p></div>
+</div>
+</div></div></body></html>

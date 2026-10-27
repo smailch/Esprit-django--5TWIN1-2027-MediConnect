@@ -1,0 +1,17 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Réinitialisation de votre mot de passe{% endblock %}
+{% block preheader %}Choisissez un nouveau mot de passe. Le lien est valable deux heures.{% endblock %}
+{% block titre %}Choisissez un nouveau mot de passe{% endblock %}
+{% block corps %}
+<p style="margin:0 0 12px;">Vous avez demandé à réinitialiser le mot de passe de votre compte MediConnect (identifiant : <strong>{{ user.get_username }}</strong>).</p>
+<p style="margin:0;">Cliquez sur le bouton ci-dessous pour en choisir un nouveau. Le lien est valable <strong>deux heures</strong> et ne peut servir qu'une fois.</p>
+{% endblock %}
+{% block bouton %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 6px;"><tr><td style="background:#0E7490;border-radius:8px;">
+  <a href="{{ protocol }}://{{ domain }}{% url 'core:reinitialisation_confirmation' uidb64=uid token=token %}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;">Changer mon mot de passe</a>
+</td></tr></table>
+<p style="margin:6px 0 0;font-size:12px;color:#64748B;word-break:break-all;">Si le bouton ne s'affiche pas, copiez ce lien dans votre navigateur :<br>{{ protocol }}://{{ domain }}{% url 'core:reinitialisation_confirmation' uidb64=uid token=token %}</p>
+{% endblock %}
+{% block note %}
+<p style="margin:22px 0 0;padding-top:16px;border-top:1px solid #E2E8F0;font-size:13px;color:#475569;">Vous n'êtes pas à l'origine de cette demande ? Ignorez simplement ce message : votre mot de passe ne changera pas.</p>
+{% endblock %}

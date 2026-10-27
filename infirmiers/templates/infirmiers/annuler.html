@@ -1,0 +1,23 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Annuler l'intervention — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'infirmiers:intervention' intervention.pk %}" class="link text-sm">← {{ intervention.get_type_soin_display }} · {{ intervention.patient }}</a>
+    <h1 class="page-title mt-2">Annuler l'intervention</h1>
+    <p class="muted mt-2 max-w-xl text-sm">L'intervention sera close et ne sera plus proposée à personne. Si vous ne pouvez simplement pas y aller, préférez « Me désister » : un autre infirmier pourra la prendre.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% include "infirmiers/_erreurs.html" %}
+  {% with field=form.motif %}{% include "core/_champ.html" %}{% endwith %}
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-danger abtn-lg">Annuler l'intervention</button>
+    <a href="{% url 'infirmiers:intervention' intervention.pk %}" class="abtn abtn-ghost abtn-lg">Retour</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Le passage de l'infirmier est annulé{% endblock %}
+{% block preheader %}Le passage prévu le {{ intervention.date_prevue|date:"j F à H:i" }} est annulé.{% endblock %}
+{% block titre %}Le passage de l'infirmier est annulé{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">{{ infirmier|default:"Votre infirmier" }} a annulé le passage suivant :</p>
+{% include "infirmiers/email/_passage.html" with nom=infirmier quand=intervention.date_prevue barre="#94A3B8" %}
+<p style="margin:16px 0 0;">Le motif est indiqué dans votre espace. Si vous avez toujours besoin de ce soin, vous pouvez faire une nouvelle demande.</p>
+{% endblock %}
+{% block bouton_texte %}Voir ma demande{% endblock %}

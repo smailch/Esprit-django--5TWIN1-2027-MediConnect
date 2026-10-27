@@ -1,0 +1,143 @@
+{% extends "backoffice/layout.html" %}
+{% load suivi_filtres %}
+
+{% block title %}Rendez-vous de {{ triage.patient }} — Administration MediConnect{% endblock %}
+
+{% block page %}
+{% with n=triage.niveau_effectif %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'backoffice:rendez_vous' %}" class="link text-sm">← Tous les rendez-vous</a>
+    <h1 class="page-title mt-2">Demande de {{ triage.patient }}</h1>
+    <p class="muted mt-2 text-sm">Reçue le {{ triage.cree_le|date:"d/m/Y à H:i" }} · {{ triage.medecin_nom }} ({{ triage.medecin_specialite }})</p>
+  </div>
+  <span class="st st-{{ triage.statut }}">{{ triage.get_statut_display }}</span>
+</header>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <div class="space-y-6 lg:col-span-7">
+    <section class="panel result req-{{ n }}" aria-labelledby="titre-niveau">
+      <div class="result-hero">
+        <span class="result-num" aria-hidden="true">{{ n }}</span>
+        <div>
+          <p id="titre-niveau" class="muted text-sm">Niveau d'urgence retenu</p>
+          <p class="result-label">{{ triage.get_niveau_display|slice:"4:" }}</p>
+        </div>
+      </div>
+      <p class="muted mt-4 text-sm">{{ triage.explication }}</p>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-declare">
+      <h2 id="titre-declare" class="section-title">Ce que le patient a déclaré</h2>
+      <dl class="dl mt-4">
+        <div>
+          <dt>Symptômes cochés</dt>
+          <dd>{% for s in triage.symptomes %}{{ s.nom }}{% if s.drapeau_rouge %} (alerte){% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</dd>
+        </div>
+        <div>
+          <dt>Auto-évaluation (0 à 5)</dt>
+          <dd>{% for e in triage.auto_evaluation_resume %}{{ e.nom|capfirst }} : {{ e.libelle|lower }} ({{ e.valeur }}/5){% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</dd>
+        </div>
+        {% if triage.constantes and triage.constantes.temperature %}
+        <div><dt>Température mesurée</dt><dd>{{ triage.constantes.temperature }} °C</dd></div>
+        {% endif %}
+        <div class="wide">
+          <dt>Description libre</dt>
+          <dd>{% if triage.texte_libre %}« {{ triage.texte_libre }} »{% else %}—{% endif %}</dd>
+        </div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="space-y-6 lg:col-span-5">
+    <section class="panel panel-pad" aria-labelledby="titre-infos">
+      <h2 id="titre-infos" class="section-title">Informations</h2>
+      <dl class="dl mt-4">
+        <div><dt>Patient</dt><dd><a class="link" href="{% url 'backoffice:patient_detail' triage.patient.pk %}">{{ triage.patient }}</a></dd></div>
+        <div><dt>Score du triage</dt><dd>{{ triage.score|default_if_none:"—" }}</dd></div>
+        <div><dt>Niveau calculé</dt><dd>{{ triage.niveau|default_if_none:"—" }}</dd></div>
+        <div><dt>Niveau du médecin</dt><dd>{{ triage.niveau_medecin|default_if_none:"non requalifié" }}</dd></div>
+        <div class="wide">
+          <dt>Place dans la file</dt>
+          <dd>{% if place %}{{ place.0 }} sur {{ place.1 }} chez {{ triage.medecin_nom }}{% else %}—{% endif %}</dd>
+        </div>
+        <div class="wide"><dt>Créneau choisi</dt><dd>{% if triage.creneau %}{{ triage.creneau|date:"l j F Y" }} à {{ triage.creneau|date:"H:i" }}{% else %}aucun (file d'attente){% endif %}</dd></div>
+        {% if allergies_severes %}
+        <div class="wide"><dt>Allergies sévères du patient</dt><dd><span class="sev sev-severe">Attention</span> {% for a in allergies_severes %}{{ a.substance }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>
+        {% endif %}
+        {% if triage.drapeaux_rouges %}
+        <div class="wide"><dt>Signes d'alerte</dt><dd>{{ triage.drapeaux_rouges|join:", " }}</dd></div>
+        {% endif %}
+        {% if triage.modele_niveau %}
+        <div class="wide"><dt>Lecture du texte par le modèle <span class="muted">(modèle local, à confirmer)</span></dt><dd>Niveau estimé {{ triage.modele_niveau }} ({% widthratio triage.modele_confiance 1 100 %} % de confiance){% if triage.modele_mots %} · mots décisifs : {{ triage.modele_mots|join:", " }}{% endif %}{% if triage.modele_releve %} · <span class="sev sev-moderee">niveau relevé</span>{% endif %}</dd></div>
+        {% endif %}
+        {% if triage.ia_signes %}
+        <div class="wide"><dt>Repéré par l'IA dans le texte libre <span class="muted">(à confirmer)</span></dt><dd>{% for s in triage.ia_signes %}{{ s }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>
+        {% elif triage.ia_statut == "non_consentie" %}
+        <div class="wide"><dt>Analyse IA du texte libre</dt><dd class="muted">non faite : le patient n'a pas activé l'IA</dd></div>
+        {% elif triage.ia_statut and triage.ia_statut != "ok" %}
+        <div class="wide"><dt>Analyse IA du texte libre</dt><dd class="muted">indisponible lors de la demande ({{ triage.ia_statut }})</dd></div>
+        {% endif %}
+      </dl>
+    </section>
+
+    {% if triage.delai %}
+    <section class="panel panel-pad" aria-labelledby="titre-delai">
+      <div class="flex items-center justify-between gap-3">
+        <h2 id="titre-delai" class="section-title">Délai de prise en charge</h2>
+        <span class="sev {{ triage.delai.etat|classe_etat }}">{{ triage.delai.libelle }}</span>
+      </div>
+      {% if triage.delai.echeance and not triage.creneau %}
+      <div class="meter meter-{{ triage.delai.etat }}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ triage.delai.pourcentage }}"
+           aria-label="Part du délai cible écoulée"><span style="width: {{ triage.delai.pourcentage }}%"></span></div>
+      {% endif %}
+      <dl class="dl mt-4">
+        {% if triage.creneau %}
+        <div class="wide"><dt>Rendez-vous fixé</dt><dd>{{ triage.creneau|date:"l j F Y à H:i" }}</dd></div>
+        {% if triage.heure_prevue %}<div class="wide"><dt>Heure prévue</dt><dd>{{ triage.heure_prevue|date:"H:i" }}{% if triage.retard_min >= 5 %} · retard d'environ {{ triage.retard_min }} min{% else %} · à l'heure{% endif %}</dd></div>{% endif %}
+        {% else %}
+        <div><dt>Échéance</dt><dd>{{ triage.delai.echeance|date:"D j M, H:i" }}</dd></div>
+        <div><dt>Délai cible du niveau {{ triage.niveau_effectif }}</dt><dd>{{ triage.delai.cible_min|duree }}</dd></div>
+        <div><dt>Écoulé (présence du médecin)</dt><dd>{{ triage.delai.ecoule_min|duree }}</dd></div>
+        <div><dt>{% if triage.delai.etat == "en_retard" %}Dépassé de{% else %}Reste{% endif %}</dt><dd>{{ triage.delai.reste_min|duree }}</dd></div>
+        <div><dt>Dépassements subis</dt><dd>{% if triage.protegee %}{{ triage.nb_depassements }} (protégée){% else %}{{ triage.nb_depassements|default:0 }} sur {{ reglage.plafond }}{% endif %}</dd></div>
+        <div><dt>Prise en charge estimée</dt><dd>{{ triage.prise_en_charge_estimee|date:"D j M, H:i" }}</dd></div>
+        {% endif %}
+      </dl>
+    </section>
+    {% endif %}
+
+    <section class="panel panel-pad" aria-labelledby="titre-maj">
+      <h2 id="titre-maj" class="section-title">Mettre à jour</h2>
+      <form method="post" novalidate class="mt-4 space-y-5">
+        {% csrf_token %}
+        {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+
+        <fieldset id="compte-rendu" class="space-y-5 border-t border-gray-300/60 pt-5">
+          <legend class="section-title">Compte rendu de la consultation</legend>
+          <p class="muted text-sm">Obligatoire quand le statut passe à « Terminé ». Il apparaît dans le dossier du patient.</p>
+          {% if compte_rendu.non_field_errors %}
+          <div role="alert" class="alert alert-danger">{% for e in compte_rendu.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+          {% endif %}
+          {% for field in compte_rendu %}{% include "core/_champ.html" %}{% endfor %}
+        </fieldset>
+
+        <button type="submit" class="abtn abtn-primary">Enregistrer</button>
+      </form>
+      <script>
+        (function () {
+          var statut = document.getElementById("{{ form.statut.id_for_label }}");
+          var bloc = document.getElementById("compte-rendu");
+          if (!statut || !bloc) return;
+          function maj() { bloc.hidden = statut.value !== "termine"; }  // sans JavaScript, la rubrique reste visible
+          statut.addEventListener("change", maj);
+          maj();
+        })();
+      </script>
+    </section>
+  </div>
+
+</div>
+{% endwith %}
+{% endblock %}

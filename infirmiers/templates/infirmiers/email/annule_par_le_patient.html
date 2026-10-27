@@ -1,0 +1,18 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Un passage a été annulé{% endblock %}
+{% block preheader %}Le passage du {{ intervention.date_prevue|date:"j F à H:i" }} à {{ intervention.ville }} est annulé par le patient.{% endblock %}
+{% block titre %}Un passage a été annulé{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">Le patient a annulé le passage suivant. Il a été retiré de votre planning.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F8FAFC;border-left:4px solid #94A3B8;border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Date</td><td style="padding:3px 0;font-weight:700;">{{ intervention.date_prevue|date:"l j F Y"|capfirst }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Heure</td><td style="padding:3px 0;font-weight:700;">{{ intervention.date_prevue|time:"H:i" }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Ville</td><td style="padding:3px 0;font-weight:700;">{{ intervention.ville }}</td></tr>
+    </table>
+  </td></tr>
+</table>
+<p style="margin:16px 0 0;">Le motif est indiqué dans votre espace.</p>
+{% endblock %}
+{% block bouton_texte %}Voir l'intervention{% endblock %}

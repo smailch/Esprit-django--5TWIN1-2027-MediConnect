@@ -1,0 +1,112 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}{{ demande.get_type_soin_display }} à domicile — MediConnect{% endblock %}
+
+{% block page %}
+{% with d=demande %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'infirmiers:soins' %}" class="link text-sm">← Soins à domicile</a>
+    <h1 class="page-title mt-2">{{ d.get_type_soin_display }}{% if d.libelle_serie %} <span class="muted text-base">· passage {{ d.libelle_serie }}</span>{% endif %}</h1>
+    <p class="muted mt-2 text-sm">Demande du {{ d.cree_le|date:"d/m/Y à H:i" }}</p>
+  </div>
+  {% include "infirmiers/_statut.html" with i=d %}
+</header>
+
+{% if d.statut != 'annulee' %}<div class="mt-6">{% include "infirmiers/patient/_suivi.html" %}</div>{% endif %}
+
+<div class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+  <div class="space-y-8 lg:col-span-8">
+
+    {% if d.statut == 'demandee' %}
+    <section class="panel panel-pad" aria-labelledby="titre-attente">
+      <h2 id="titre-attente" class="section-title">En attente d'un infirmier</h2>
+      {% if nombre_infirmiers %}
+      <p class="mt-2 text-sm">{{ nombre_infirmiers }} infirmier{{ nombre_infirmiers|pluralize }} de {{ d.ville }} peu{{ nombre_infirmiers|pluralize:"t,vent" }} accepter votre demande. Vous verrez ici son nom et l'heure de son passage.</p>
+      {% else %}
+      <p class="alert alert-warn mt-3" role="note">Aucun infirmier inscrit ne se déplace encore à {{ d.ville }} pour ce soin. Votre demande reste visible : elle sera proposée dès qu'un infirmier de votre zone s'inscrira.</p>
+      {% endif %}
+      <div class="mt-5 flex flex-wrap gap-3">
+        <a href="{% url 'infirmiers:soin_modifier' d.pk %}" class="abtn abtn-outline">Modifier</a>
+        <a href="{% url 'infirmiers:soin_supprimer' d.pk %}" class="abtn abtn-danger">Retirer la demande</a>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if d.statut == 'acceptee' %}
+    <section class="panel panel-pad" aria-labelledby="titre-passage">
+      <h2 id="titre-passage" class="section-title">Passage prévu</h2>
+      <p class="result-num mt-3">{{ d.date_prevue|date:"l j F"|capfirst }} à {{ d.date_prevue|date:"H:i" }}</p>
+      <dl class="dl mt-4">
+        <div><dt>Infirmier</dt><dd>{{ d.infirmier }}</dd></div>
+        <div><dt>Téléphone</dt><dd><a href="tel:{{ d.infirmier.telephone }}" class="link">{{ d.infirmier.telephone }}</a></dd></div>
+      </dl>
+      <p class="muted mt-4 text-sm">Préparez votre ordonnance et le matériel éventuel. En cas d'empêchement, prévenez l'infirmier ou annulez.</p>
+      <div class="mt-5"><a href="{% url 'infirmiers:soin_annuler' d.pk %}" class="abtn abtn-danger">Annuler le passage</a></div>
+    </section>
+    {% endif %}
+
+    {% if d.statut == 'realisee' %}
+    <section class="panel panel-pad" aria-labelledby="titre-cr">
+      <h2 id="titre-cr" class="section-title">Compte rendu de l'infirmier</h2>
+      <p class="muted mt-1 text-sm">{{ d.infirmier|default:"Infirmier" }} · le {{ d.realisee_le|date:"d/m/Y à H:i" }}</p>
+      {% if d.a_signaler %}
+      <p class="alert alert-warn mt-4" role="note">L'infirmier a relevé des points à faire voir à votre médecin. Si vous ne vous sentez pas bien, n'attendez pas : appelez le 190, le 15 ou le 112.</p>
+      {% endif %}
+      <p class="mt-4 text-sm">{{ d.compte_rendu|linebreaksbr }}</p>
+      {% if d.constantes %}
+      <dl class="dl mt-4">
+        {% if d.constantes.temperature is not None %}<div><dt>Température</dt><dd>{{ d.constantes.temperature }} °C</dd></div>{% endif %}
+        {% if d.constantes.tension_systolique is not None %}<div><dt>Tension</dt><dd>{{ d.constantes.tension_systolique }}/{{ d.constantes.tension_diastolique }} mmHg</dd></div>{% endif %}
+        {% if d.constantes.frequence_cardiaque is not None %}<div><dt>Pouls</dt><dd>{{ d.constantes.frequence_cardiaque }} /min</dd></div>{% endif %}
+        {% if d.constantes.saturation_oxygene is not None %}<div><dt>Saturation</dt><dd>{{ d.constantes.saturation_oxygene }} %</dd></div>{% endif %}
+      </dl>
+      <p class="muted mt-4 text-sm">Ces mesures ont été ajoutées à <a href="{% url 'patients:mesures' %}" class="link">vos mesures de santé</a>, avec celles que vous saisissez vous-même.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if d.statut == 'annulee' %}
+    <section class="panel panel-pad" aria-labelledby="titre-annulee">
+      <h2 id="titre-annulee" class="section-title">Demande annulée</h2>
+      <p class="mt-2 text-sm">Le {{ d.annulee_le|date:"d/m/Y à H:i" }} : {{ d.motif_annulation }}</p>
+      <a href="{% url 'infirmiers:soin_demander' %}" class="abtn abtn-outline mt-4">Faire une nouvelle demande</a>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="space-y-8 lg:col-span-4">
+    {% if serie %}
+    <section class="panel panel-pad" aria-labelledby="titre-serie">
+      <h2 id="titre-serie" class="section-title">Série de {{ serie|length }} passages</h2>
+      <ol class="mt-3 space-y-2 text-sm">
+        {% for p in serie %}
+        <li class="flex flex-wrap items-center justify-between gap-2">
+          {% if p.pk == d.pk %}<strong class="font-medium" aria-current="true">{{ p.rang_serie }}. {{ p.date_souhaitee|date:"D j M" }}</strong>{% else %}<a href="{% url 'infirmiers:soin' p.pk %}" class="link">{{ p.rang_serie }}. {{ p.date_souhaitee|date:"D j M" }}</a>{% endif %}
+          {% include "infirmiers/_statut.html" with i=p %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% if serie_retirables %}
+      <form method="post" action="{% url 'infirmiers:soin_serie_retirer' d.pk %}" class="mt-4">
+        {% csrf_token %}
+        <button type="submit" class="abtn abtn-danger">Retirer les {{ serie_retirables }} passage{{ serie_retirables|pluralize }} non accepté{{ serie_retirables|pluralize }}</button>
+      </form>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="panel panel-pad" aria-labelledby="titre-demande">
+      <h2 id="titre-demande" class="section-title">Ma demande</h2>
+      <dl class="dl mt-4">
+        <div class="wide"><dt>Soin</dt><dd>{{ d.get_type_soin_display }}</dd></div>
+        <div class="wide"><dt>Date souhaitée</dt><dd>{{ d.date_souhaitee|date:"l j F Y"|capfirst }} · {{ d.get_moment_display|lower }}</dd></div>
+        <div class="wide"><dt>Adresse</dt><dd>{{ d.adresse }}, {{ d.ville }}</dd></div>
+        {% if d.description %}<div class="wide"><dt>Précisions</dt><dd>{{ d.description|linebreaksbr }}</dd></div>{% endif %}
+        {% if d.consultation %}<div class="wide"><dt>Prescrit lors de</dt><dd>{{ d.consultation }}</dd></div>{% endif %}
+      </dl>
+    </section>
+  </aside>
+</div>
+{% endwith %}
+{% endblock %}

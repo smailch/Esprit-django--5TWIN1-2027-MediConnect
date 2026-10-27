@@ -1,0 +1,11 @@
+# MediConnect : Python 3.13 + Django 5.2
+# (le code reste compatible avec Python 3.11 et plus : testé en 3.10 et 3.13 ;
+#  pymongo 4.19 exige Python 3.11 ou plus ; Django 5.2 accepte 3.10 à 3.13)
+django>=5.2,<5.3
+django-mongodb-backend>=5.2,<5.3   # la ligne 5.2.x suit Django 5.2
+python-dotenv>=1.0
+fpdf2>=2.8,<3  # comptes rendus PDF du module médecins
+scikit-learn==1.9.1  # modèles de l'app ia ; même version que celle qui a enregistré les fichiers .joblib (sinon ils sont réentraînés au premier usage)
+celery[redis]>=5.4,<6  # tâches de fond (e-mails, analyses IA) ; sans REDIS_URL elles s'exécutent dans la requête
+whitenoise>=6.7,<7  # fichiers statiques servis en production
+gunicorn>=23,<24  # serveur WSGI de production (Railway, Docker)

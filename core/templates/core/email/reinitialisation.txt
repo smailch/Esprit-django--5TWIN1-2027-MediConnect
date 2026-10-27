@@ -1,0 +1,11 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+Vous avez demandé à réinitialiser le mot de passe de votre compte MediConnect (identifiant : {{ user.get_username }}).
+
+Pour choisir un nouveau mot de passe, ouvrez ce lien (valable deux heures) :
+{{ protocol }}://{{ domain }}{% url 'core:reinitialisation_confirmation' uidb64=uid token=token %}
+
+Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe ne changera pas.
+
+L'équipe MediConnect
+{% endautoescape %}

@@ -1,0 +1,53 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}{% if mesure %}Modifier une mesure{% else %}Ajouter une mesure{% endif %} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:mesures' %}" class="link text-sm">← Mes mesures</a>
+    <h1 class="page-title mt-2">{% if mesure %}Modifier la mesure{% else %}Ajouter une mesure{% endif %}</h1>
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% with field=form.type %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.valeur %}{% include "core/_champ.html" %}{% endwith %}
+  <div id="bloc-valeur2">
+    {% with field=form.valeur2 %}{% include "core/_champ.html" %}{% endwith %}
+  </div>
+  <p id="aide-unite" class="muted -mt-4 text-sm" aria-live="polite"></p>
+  {% with field=form.mesure_le %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.note %}{% include "core/_champ.html" %}{% endwith %}
+
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+    <a href="{% url 'patients:mesures' %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+
+{{ regles|json_script:"regles-mesures" }}
+<script>
+  (function () {
+    var regles = JSON.parse(document.getElementById("regles-mesures").textContent);
+    var type = document.getElementById("{{ form.type.id_for_label }}");
+    var aide = document.getElementById("aide-unite");
+    var bloc2 = document.getElementById("bloc-valeur2");
+    if (!type || !aide) return;
+    function maj() {
+      var r = regles[type.value];
+      aide.textContent = r ? "Unité : " + r.unite + " (entre " + r.min + " et " + r.max + ")." : "";
+      if (bloc2) bloc2.hidden = type.value !== "tension";  // second chiffre : tension uniquement
+    }
+    type.addEventListener("change", maj);
+    maj();
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,2 @@
+{# Pastille du statut d'une intervention (reprend les couleurs des statuts de rendez-vous). Paramètre : i. #}
+<span class="st {% if i.statut == 'demandee' %}st-en_attente{% elif i.statut == 'acceptee' %}st-en_consultation{% elif i.statut == 'realisee' %}st-termine{% else %}st-annule{% endif %}">{{ i.get_statut_display }}</span>

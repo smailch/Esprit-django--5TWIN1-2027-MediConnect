@@ -1,0 +1,91 @@
+{% extends "backoffice/layout.html" %}
+{% load suivi_filtres %}
+
+{% block title %}File d'attente — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">File d'attente</h1>
+    <p class="muted mt-2 max-w-2xl text-sm">Pour chaque médecin : l'ordre de passage et les rendez-vous fixés. Chaque niveau a un délai cible, et une garantie évite qu'une demande attende indéfiniment.</p>
+  </div>
+  <a href="{% url 'backoffice:parametres' %}" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="sliders-horizontal" class="h-4 w-4"></i>Régler les délais</a>
+</header>
+
+<section class="kpi-grid mt-8" aria-label="Situation de la file">
+  <div class="panel kpi"><p class="kpi-num">{{ chiffres.total }}</p><p class="kpi-label">Demandes en attente</p></div>
+  <div class="panel kpi {% if chiffres.en_retard %}kpi-alert{% endif %}"><p class="kpi-num">{{ chiffres.en_retard }}</p><p class="kpi-label">En retard (délai dépassé)</p></div>
+  <div class="panel kpi {% if chiffres.a_risque %}kpi-warn{% endif %}"><p class="kpi-num">{{ chiffres.a_risque }}</p><p class="kpi-label">À risque (délai bientôt atteint)</p></div>
+  <div class="panel kpi"><p class="kpi-num">{{ chiffres.planifies }}</p><p class="kpi-label">Rendez-vous fixés</p></div>
+</section>
+
+<section class="panel panel-pad mt-6" aria-labelledby="titre-regles">
+  <h2 id="titre-regles" class="section-title">Règles en vigueur</h2>
+  <ul class="rules mt-3">
+    {% for n, nom, minutes in delais %}
+    <li><span class="lv lv-{{ n }}">{{ n }}</span><span>{{ nom }} : prise en charge visée en <strong class="font-medium">{{ minutes|duree }}</strong> de présence du médecin</span></li>
+    {% endfor %}
+    <li><span class="lv lv-1">1</span><span>Vital : hors file, appel immédiat des secours</span></li>
+  </ul>
+  <p class="muted mt-3 text-sm">
+    Une demande de niveau 4 ou 5 ne peut être dépassée que <strong class="font-medium">{{ reglage.plafond }} fois</strong> : ensuite elle est protégée et seuls les niveaux 1 à 3 passent devant.
+    Si elle a attendu <strong class="font-medium">{{ reglage.facteur_garantie|floatformat:"0" }} fois</strong> son délai cible, elle passe même devant les urgents.
+    « À risque » à partir de {% widthratio reglage.seuil_risque 1 100 %}&nbsp;% du délai.
+  </p>
+</section>
+
+{% for s in sections %}
+<section class="panel mt-6" aria-labelledby="med-{{ s.medecin.id }}">
+  <div class="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
+    <div>
+      <h2 id="med-{{ s.medecin.id }}" class="section-title">{{ s.medecin.nom }}</h2>
+      <p class="muted text-sm">{{ s.medecin.specialite }}</p>
+    </div>
+    <p class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="count">{{ s.file|length }} en file</span>
+      <span class="count">{{ s.planning|length }} rendez-vous</span>
+      {% if s.en_retard %}<span class="sev sev-severe">{{ s.en_retard }} en retard</span>{% endif %}
+      {% if s.a_risque %}<span class="sev sev-moderee">{{ s.a_risque }} à risque</span>{% endif %}
+    </p>
+  </div>
+
+  {% if s.file %}
+  <div class="table-wrap mt-3">
+    <table class="tbl tbl-compact">
+      <caption class="sr-only">Ordre de passage des demandes de {{ s.medecin.nom }}</caption>
+      <thead><tr><th scope="col" class="num">#</th><th scope="col">Patient</th><th scope="col">Niveau</th><th scope="col">Attend depuis</th><th scope="col">Échéance</th><th scope="col">État</th><th scope="col">Dépassements</th></tr></thead>
+      <tbody>
+        {% for t in s.file %}
+        <tr>
+          <td class="num">{{ t.place.0 }}</td>
+          <td><a class="link" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a></td>
+          <td><span class="lv lv-{{ t.niveau_effectif }}">{{ t.niveau_effectif }}</span></td>
+          <td>{{ t.cree_le|timesince }}</td>
+          <td>{% if t.delai.echeance %}{{ t.delai.echeance|date:"D j M, H:i" }}{% else %}—{% endif %}</td>
+          <td><span class="sev {{ t.delai.etat|classe_etat }}">{{ t.delai.libelle }}</span></td>
+          <td>{% if t.protegee %}<span class="sev sev-info">protégée</span>{% else %}{{ t.nb_depassements|default:0 }} / {{ reglage.plafond }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted px-5 pb-1 pt-3 text-sm">Aucun patient dans la file.</p>
+  {% endif %}
+
+  {% if s.planning %}
+  <h3 class="px-5 pt-4 text-sm font-medium">Rendez-vous fixés</h3>
+  <ul class="mt-2">
+    {% for t in s.planning %}
+    <li class="item-row">
+      <span><strong class="font-medium">{{ t.creneau|date:"D j M, H:i" }}</strong>{% if t.retard_min >= 5 %} <span class="muted">→ prévu {{ t.heure_prevue|date:"H:i" }}</span>{% endif %} · <a class="link" href="{% url 'backoffice:rendez_vous_detail' t.pk %}">{{ t.patient }}</a> <span class="muted">· niveau {{ t.niveau_effectif }}</span></span>
+      <span class="sev {{ t.delai.etat|classe_etat }}">{{ t.delai.libelle }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <div class="pb-4"></div>
+</section>
+{% endfor %}
+{% endblock %}

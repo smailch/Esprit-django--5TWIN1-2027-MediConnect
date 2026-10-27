@@ -1,0 +1,24 @@
+{% extends "core/email/_base.html" %}
+{% block sujet %}Votre demande est enregistrée{% endblock %}
+{% block preheader %}Vous êtes {{ place.0 }}{% if place.0 == 1 %}re{% else %}e{% endif %} dans la file de {{ triage.medecin_nom }}. Prise en charge estimée vers {{ prevue|time:"H:i" }}.{% endblock %}
+{% block titre %}Votre demande est bien enregistrée{% endblock %}
+{% block corps %}
+<p style="margin:0 0 16px;">Vous n'avez pas d'heure fixée : vous passez dans l'ordre de la file de {{ triage.medecin_nom }}. Voici où vous en êtes.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F0FBFD;border-left:4px solid #0E7490;border-radius:6px;">
+  <tr><td style="padding:14px 18px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:15px;">
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Médecin</td><td style="padding:3px 0;font-weight:700;">{{ triage.medecin_nom }}{% if triage.medecin_specialite %}<span style="font-weight:400;color:#475569;"> · {{ triage.medecin_specialite }}</span>{% endif %}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Votre place</td><td style="padding:3px 0;font-weight:700;">{{ place.0 }}{% if place.0 == 1 %}re{% else %}e{% endif %} sur {{ place.1 }}</td></tr>
+      <tr><td style="padding:3px 18px 3px 0;color:#475569;">Prise en charge</td><td style="padding:3px 0;font-weight:700;">vers {{ prevue|time:"H:i" }} <span style="font-weight:400;color:#475569;">({{ prevue|date:"l j F"|lower }}, estimation)</span></td></tr>
+    </table>
+  </td></tr>
+</table>
+<p style="margin:20px 0 6px;font-weight:700;">Comment ça marche</p>
+<ul style="margin:0;padding-left:20px;color:#334155;">
+  <li style="margin:4px 0;">L'heure est une <strong>estimation</strong> : l'ordre de passage dépend de l'urgence médicale de chaque demande, elle peut donc bouger.</li>
+  <li style="margin:4px 0;">Nous vous écrirons de nouveau si elle change beaucoup. Vous pouvez aussi suivre votre place à tout moment dans votre espace.</li>
+  {% if peut_choisir %}<li style="margin:4px 0;">Vous préférez une heure précise ? Vous pouvez encore choisir un créneau depuis votre demande.</li>{% endif %}
+</ul>
+<p style="margin:18px 0 0;padding:12px 14px;background:#FEF2F2;border-radius:6px;font-size:14px;color:#7F1D1D;"><strong>Votre état s'aggrave ?</strong> N'attendez pas cet e-mail : contactez immédiatement les urgences (SAMU : 190).</p>
+{% endblock %}
+{% block bouton_texte %}Suivre ma demande{% endblock %}

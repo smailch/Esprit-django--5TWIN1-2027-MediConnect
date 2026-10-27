@@ -1,0 +1,139 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Mon dossier médical — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mon dossier médical</h1>
+    <p class="muted mt-2 max-w-xl text-sm">L'essentiel que votre médecin lit avant la consultation. Plus il est à jour, mieux il vous soigne.</p>
+  </div>
+  <a href="{% url 'patients:profil' %}" class="abtn abtn-outline">
+    <i aria-hidden="true" data-lucide="pencil" class="h-4 w-4"></i>Modifier mes informations
+  </a>
+</header>
+
+<dl class="stat-grid mt-8">
+  <div class="stat"><dt>Âge</dt><dd>{{ patient.age }} ans</dd></div>
+  <div class="stat"><dt>Sexe</dt><dd>{{ patient.get_sexe_display }}</dd></div>
+  <div class="stat"><dt>Groupe sanguin</dt><dd>{{ dossier.groupe_sanguin|default:"—" }}</dd></div>
+  <div class="stat"><dt>Contact d'urgence</dt><dd class="text-base">{% if patient.contact_urgence_nom %}{{ patient.contact_urgence_nom }}<span class="muted block text-sm font-normal">{{ patient.contact_urgence_tel }}</span>{% else %}—{% endif %}</dd></div>
+</dl>
+
+{% if severes %}
+<p class="alert alert-danger mt-6" role="note">
+  <strong class="font-medium">Allergie sévère :</strong>
+  {% for a in severes %}{{ a.substance }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+</p>
+{% endif %}
+
+<section class="panel panel-pad mt-6 vigilance vigilance-{{ analyse.vigilance }}" aria-labelledby="titre-analyse">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 id="titre-analyse" class="section-title">Analyse automatique de mon dossier</h2>
+      <span class="sev {% if analyse.vigilance == 'important' %}sev-severe{% elif analyse.vigilance == 'a_surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{% if analyse.vigilance == "important" %}Important{% elif analyse.vigilance == "a_surveiller" %}À surveiller{% else %}Calme{% endif %}</span>
+    </div>
+    <a href="{% url 'patients:analyse_dossier' %}" class="abtn abtn-primary"><i aria-hidden="true" data-lucide="sparkles" class="h-4 w-4"></i>Voir l'analyse</a>
+  </div>
+  <p class="muted mt-2 text-sm">{{ analyse.message }}{% if analyse.points %} {{ analyse.points|length }} remarque{{ analyse.points|length|pluralize }}.{% endif %}</p>
+</section>
+
+<div class="mt-6 grid gap-6 lg:grid-cols-2">
+
+  <section class="panel panel-pad" aria-labelledby="titre-allergies">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="titre-allergies" class="section-title">Allergies</h2>
+      <a href="{% url 'patients:allergies' %}" class="link text-sm">Gérer<span class="sr-only"> mes allergies</span></a>
+    </div>
+    {% if allergies %}
+    <ul class="mt-4 space-y-3">
+      {% for a in allergies %}
+      <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span><strong class="font-medium">{{ a.substance }}</strong>{% if a.reaction %}<span class="muted"> · {{ a.reaction }}</span>{% endif %}</span>
+        <span class="sev sev-{{ a.gravite }}">{{ a.get_gravite_display }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted mt-4 text-sm">Aucune allergie enregistrée.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel panel-pad" aria-labelledby="titre-mesures">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="titre-mesures" class="section-title">Dernières mesures</h2>
+      <a href="{% url 'patients:mesures' %}" class="link text-sm">Voir tout<span class="sr-only"> l'historique des mesures</span></a>
+    </div>
+    {% if mesures %}
+    <ul class="mt-4 space-y-3">
+      {% for m in mesures %}
+      <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span><strong class="font-medium">{{ m.get_type_display }} : {{ m.valeur_affichee }}</strong><span class="muted"> · {{ m.mesure_le|date:"d/m/Y" }}</span></span>
+        {% if m.alerte == "haute" %}<span class="sev sev-moderee">Élevée</span>{% elif m.alerte == "basse" %}<span class="sev sev-moderee">Basse</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted mt-4 text-sm">Aucune mesure enregistrée.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel panel-pad" aria-labelledby="titre-traitements">
+    <h2 id="titre-traitements" class="section-title">Traitements en cours</h2>
+    <p class="mt-4 whitespace-pre-line text-sm">{% if dossier.traitements_en_cours %}{{ dossier.traitements_en_cours }}{% else %}<span class="muted">Non renseigné.</span>{% endif %}</p>
+  </section>
+
+  <section class="panel panel-pad" aria-labelledby="titre-antecedents">
+    <h2 id="titre-antecedents" class="section-title">Antécédents médicaux</h2>
+    <p class="mt-4 whitespace-pre-line text-sm">{% if dossier.antecedents %}{{ dossier.antecedents }}{% else %}<span class="muted">Non renseigné.</span>{% endif %}</p>
+  </section>
+
+</div>
+
+<section class="panel panel-pad mt-6" aria-labelledby="titre-consultations">
+  <div class="flex items-center justify-between gap-3">
+    <h2 id="titre-consultations" class="section-title">Historique des consultations{% if nb_consultations %} <span class="count">{{ nb_consultations }}</span>{% endif %}</h2>
+    {% if nb_consultations %}<a href="{% url 'patients:consultations' %}" class="link text-sm">Voir tout<span class="sr-only"> l'historique des consultations</span></a>{% endif %}
+  </div>
+  {% if consultations %}
+  <ul class="mt-4 space-y-3">
+    {% for c in consultations %}
+    <li class="text-sm">
+      <strong class="font-medium">{{ c.date|date:"d/m/Y" }} · {{ c.medecin_nom }}</strong>
+      <span class="muted block">{% if c.diagnostic %}{{ c.diagnostic }}{% else %}{{ c.resume|truncatechars:90 }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted mt-4 text-sm">Aucune consultation terminée pour l'instant. Après chaque consultation, son compte rendu apparaît ici.</p>
+  {% endif %}
+</section>
+
+<section class="panel panel-pad mt-6" aria-labelledby="titre-derniere">
+  <h2 id="titre-derniere" class="section-title">Dernière demande de consultation</h2>
+  {% if derniere_demande %}
+  <p class="mt-4 text-sm">
+    <strong class="font-medium">{{ derniere_demande.medecin_nom }}</strong>
+    <span class="muted"> · {{ derniere_demande.cree_le|date:"d/m/Y" }} · {{ derniere_demande.get_statut_display|lower }}</span>
+  </p>
+  {% if derniere_demande.creneau %}<p class="mt-1 text-sm">Rendez-vous le <strong class="font-medium">{{ derniere_demande.creneau|date:"l j F" }} à {{ derniere_demande.creneau|date:"H:i" }}</strong></p>{% endif %}
+  <p class="muted mt-1 text-sm">
+    {% for s in derniere_demande.symptomes %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% empty %}Aucun symptôme coché{% endfor %}
+    {% if derniere_demande.niveau_effectif %}· urgence {{ derniere_demande.niveau_effectif }} sur 5{% endif %}
+  </p>
+  {% else %}
+  <p class="muted mt-4 text-sm">Vous n'avez pas encore demandé de consultation.</p>
+  {% endif %}
+</section>
+
+{% if manquants %}
+<section class="panel panel-pad mt-6" aria-labelledby="titre-completer">
+  <h2 id="titre-completer" class="section-title">À compléter</h2>
+  <p class="muted mt-2 text-sm">Ces informations aideraient votre médecin :</p>
+  <ul class="mt-3 list-disc space-y-1 pl-5 text-sm">
+    {% for libelle in manquants %}<li>{{ libelle }}</li>{% endfor %}
+  </ul>
+  <a href="{% url 'patients:profil' %}" class="abtn abtn-primary mt-4">Compléter mon dossier</a>
+</section>
+{% endif %}
+{% endblock %}

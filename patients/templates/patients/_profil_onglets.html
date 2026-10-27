@@ -1,0 +1,9 @@
+{# Onglets de « Mon profil » : informations / compte et sécurité. Paramètre : actif ("informations" ou "compte"). #}
+<nav class="mt-6 flex flex-wrap gap-2" aria-label="Sections du profil">
+  <a href="{% url 'patients:profil' %}" class="abtn {% if actif == 'informations' %}abtn-primary{% else %}abtn-outline{% endif %}"{% if actif == 'informations' %} aria-current="page"{% endif %}>
+    <i aria-hidden="true" data-lucide="user" class="h-4 w-4"></i>Mes informations
+  </a>
+  <a href="{% url 'patients:compte' %}" class="abtn {% if actif == 'compte' %}abtn-primary{% else %}abtn-outline{% endif %}"{% if actif == 'compte' %} aria-current="page"{% endif %}>
+    <i aria-hidden="true" data-lucide="shield-check" class="h-4 w-4"></i>Compte et sécurité
+  </a>
+</nav>

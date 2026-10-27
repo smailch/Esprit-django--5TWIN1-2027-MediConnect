@@ -1,0 +1,56 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Mon profil — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mon profil</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Gardez vos informations à jour : elles aident le médecin à mieux vous soigner.</p>
+  </div>
+  <a href="{% url 'patients:medecins' %}" class="abtn abtn-outline">
+    <i aria-hidden="true" data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous
+  </a>
+</header>
+
+{% include "patients/_profil_onglets.html" with actif="informations" %}
+
+<form method="post" novalidate class="mt-10">
+  {% csrf_token %}
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-identite">
+    <div class="lg:col-span-4">
+      <h2 id="titre-identite" class="section-title">Mes informations</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Vos coordonnées, utilisées pour vous joindre et trouver un infirmier près de chez vous.</p>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <div class="grid gap-5 sm:grid-cols-2">
+        {% for field in profil_form %}
+        <div class="{% if field.name == 'adresse' %}sm:col-span-2{% endif %}">
+          {% include "core/_champ.html" %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="settings lg:grid-cols-12" aria-labelledby="titre-dossier">
+    <div class="lg:col-span-4">
+      <h2 id="titre-dossier" class="section-title">Mon dossier médical</h2>
+      <p class="muted mt-2 max-w-xs text-sm">Antécédents et traitements : le médecin les consulte avant votre rendez-vous.</p>
+      <a href="{% url 'patients:allergies' %}" class="abtn abtn-outline mt-4">
+        <i aria-hidden="true" data-lucide="shield-alert" class="h-4 w-4"></i>Gérer mes allergies
+      </a>
+    </div>
+    <div class="panel panel-pad lg:col-span-8">
+      <div class="space-y-5">
+        {% for field in dossier_form %}{% include "core/_champ.html" %}{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div class="flex justify-end border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg w-full sm:w-auto">Enregistrer</button>
+  </div>
+</form>
+{% endblock %}

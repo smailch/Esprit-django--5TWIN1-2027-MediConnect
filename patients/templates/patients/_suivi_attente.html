@@ -1,0 +1,43 @@
+{% load suivi_filtres %}{# Suivi d'une demande en attente. Paramètre : t = demande annotée (place, delai, prise_en_charge_estimee, protegee). #}
+{% with d=t.delai %}{% if d %}
+<div class="suivi" aria-label="Suivi de la demande">
+  <p class="suivi-ligne">
+    <span class="sev {{ d.etat|classe_etat }}">{{ d.libelle }}</span>
+    {% if t.creneau %}
+    <span>Rendez-vous le <strong class="font-medium">{{ t.creneau|date:"l j F" }} à {{ t.creneau|date:"H:i" }}</strong></span>
+    {% elif t.place %}
+    <span>Votre place : <strong class="queue-pos">{{ t.place.0 }}{% if t.place.0 == 1 %}re{% else %}e{% endif %} sur {{ t.place.1 }}</strong></span>
+    {% endif %}
+  </p>
+
+  {% if t.creneau %}
+    {% if d.etat == "en_retard" %}<p class="alert alert-danger mt-3" role="alert">L'heure de votre rendez-vous est passée. Le médecin va vous recevoir dès que possible{% if t.heure_prevue %}, vers {{ t.heure_prevue|date:"H:i" }}{% endif %}.</p>
+    {% elif t.retard_min >= 5 %}<p class="alert alert-warn mt-3" role="status">Le médecin a du retard : votre rendez-vous est prévu vers <strong>{{ t.heure_prevue|date:"H:i" }}</strong> au lieu de {{ t.creneau|date:"H:i" }} (environ {{ t.retard_min }} minutes). Cette heure est une estimation, elle peut encore changer.</p>{% endif %}
+  {% elif d.etat == "immediat" %}
+    <p class="muted mt-3 text-sm">Pas de rendez-vous à fixer : un cas vital est pris en charge en tête de file, avant tous les autres patients.</p>
+    {% if t.prise_en_charge_estimee %}
+    <p class="muted mt-1 text-sm">Prise en charge estimée : <strong class="font-medium text-gray-800">{{ t.prise_en_charge_estimee|date:"l j F" }}, vers {{ t.prise_en_charge_estimee|date:"H:i" }}</strong>.</p>
+    {% endif %}
+  {% elif d.echeance %}
+    <div class="meter meter-{{ d.etat }}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ d.pourcentage }}"
+         aria-label="Part du délai cible écoulée"><span style="width: {{ d.pourcentage }}%"></span></div>
+    <p class="muted mt-2 text-sm">
+      Prise en charge visée avant <strong class="font-medium text-gray-800">{{ d.echeance|date:"l j F à H:i" }}</strong>
+      {% if d.etat == "en_retard" %}· délai dépassé de {{ d.reste_min|duree }}{% else %}· il reste {{ d.reste_min|duree }} de présence du médecin{% endif %}.
+    </p>
+    {% if t.prise_en_charge_estimee %}
+    <p class="muted mt-1 text-sm">Prise en charge estimée : <strong class="font-medium text-gray-800">{{ t.prise_en_charge_estimee|date:"l j F" }}, vers {{ t.prise_en_charge_estimee|date:"H:i" }}</strong>.</p>
+    {% endif %}
+    {% if t.protegee %}
+    <p class="note mt-3"><i data-lucide="shield-check" class="h-4 w-4" aria-hidden="true"></i>Votre demande est protégée : seuls les cas urgents peuvent encore passer devant vous, et vous passerez en priorité si l'attente se prolonge.</p>
+    {% elif t.nb_depassements %}
+    <p class="note mt-3"><i data-lucide="info" class="h-4 w-4" aria-hidden="true"></i>{{ t.nb_depassements }} personne{{ t.nb_depassements|pluralize }} plus urgente{{ t.nb_depassements|pluralize }} {{ t.nb_depassements|pluralize:"est,sont" }} passée{{ t.nb_depassements|pluralize }} devant vous.</p>
+    {% endif %}
+    {% if d.etat == "en_retard" %}
+    <p class="alert alert-danger mt-3" role="alert">Nous avons du retard sur votre demande ; l'équipe en est informée. Vous pouvez aussi <a class="link" href="{% url 'patients:medecins' %}">voir d'autres médecins</a>.</p>
+    {% elif d.etat == "a_risque" %}
+    <p class="alert alert-warn mt-3" role="note">Votre demande approche du délai visé. Vous serez pris en charge en priorité dès que le médecin est disponible.</p>
+    {% endif %}
+  {% endif %}
+</div>
+{% endif %}{% endwith %}

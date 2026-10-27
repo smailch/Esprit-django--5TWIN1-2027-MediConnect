@@ -1,0 +1,34 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}Envoyer mon ordonnance — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}" class="link text-sm">← Ordonnance {{ ordonnance.reference }}</a>
+    <h1 class="page-title mt-2">Envoyer à une pharmacie</h1>
+    <p class="muted mt-2 max-w-xl text-sm">La pharmacie prépare vos médicaments et vous prévient quand ils sont prêts. Vous pouvez changer de pharmacie tant que la préparation n'a pas commencé.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% if disponibles %}
+  <div>
+    <p class="f-label">Pharmacies qui ont vos médicaments en stock</p>
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for d in disponibles %}
+      <li><strong class="font-medium">{{ d.pharmacie.nom }}</strong><span class="muted"> · {{ d.pharmacie.ville }} · {% if d.complete %}tous vos médicaments{% else %}{{ d.nombre }} sur {{ ordonnance.lignes|length }} ({{ d.medicaments|join:", " }}){% endif %}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% with field=form.pharmacie %}{% include "core/_champ.html" %}{% endwith %}
+  <p class="muted text-sm"><a class="link" href="{% url 'pharmacies:pharmacies' %}">Voir l'annuaire des pharmacies</a> (adresses, horaires, gardes).</p>
+
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Envoyer l'ordonnance</button>
+    <a href="{% url 'pharmacies:ordonnance_detail' ordonnance.pk %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+{% endblock %}

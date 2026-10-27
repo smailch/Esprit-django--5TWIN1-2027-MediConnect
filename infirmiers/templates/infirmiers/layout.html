@@ -1,0 +1,25 @@
+{% extends "core/layout.html" %}
+
+{# Cadre des pages infirmier : le cadre commun + les onglets de l'espace infirmier. #}
+
+{% block nav %}
+{% if user.is_authenticated and user.infirmier %}
+{% with page=request.resolver_match.url_name %}
+<a href="{% url 'infirmiers:tableau_de_bord' %}" class="nav-item" {% if page == 'tableau_de_bord' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="layout-dashboard" class="h-5 w-5"></i><span>Tableau de bord</span>
+</a>
+<a href="{% url 'infirmiers:demandes' %}" class="nav-item" {% if page == 'demandes' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="inbox" class="h-5 w-5"></i><span>Demandes</span>
+</a>
+<a href="{% url 'infirmiers:planning' %}" class="nav-item" {% if page == 'planning' or page == 'intervention' or page == 'replanifier' or page == 'terminer' or page == 'annuler' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="calendar-days" class="h-5 w-5"></i><span>Planning</span>
+</a>
+<a href="{% url 'infirmiers:historique' %}" class="nav-item" {% if page == 'historique' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="history" class="h-5 w-5"></i><span>Historique</span>
+</a>
+<a href="{% url 'infirmiers:profil' %}" class="nav-item" {% if page == 'profil' or page == 'mot_de_passe' %}aria-current="page"{% endif %}>
+  <i aria-hidden="true" data-lucide="user" class="h-5 w-5"></i><span>Mon profil</span>
+</a>
+{% endwith %}
+{% endif %}
+{% endblock %}

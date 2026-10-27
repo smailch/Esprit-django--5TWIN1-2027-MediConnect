@@ -1,0 +1,196 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Analyse de mon dossier — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:dossier' %}" class="link text-sm">← Mon dossier médical</a>
+    <h1 class="page-title mt-2">Analyse de mon dossier</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Faite automatiquement à partir de ce que vous avez saisi : antécédents, traitements, allergies et mesures.</p>
+  </div>
+</header>
+
+{% if ia_en_cours %}
+<section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-en-cours" id="ia-en-cours" data-etat="{% url 'patients:analyse_etat' %}">
+  <div class="flex items-center gap-3">
+    <span class="chargement" aria-hidden="true"></span>
+    <h2 id="titre-ia-en-cours" class="section-title">L'assistant IA relit votre dossier…</h2>
+  </div>
+  <p class="muted mt-2 text-sm" role="status" aria-live="polite" id="ia-message">Cela prend quelques secondes. Voici déjà l'analyse des règles médicales ; la page se mettra à jour toute seule.</p>
+  <noscript><a href="{% url 'patients:analyse_dossier' %}" class="abtn abtn-outline mt-3">Actualiser</a></noscript>
+</section>
+{% endif %}
+
+{% if analyse.ia.disponible and not analyse.ia.consentement %}
+<section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-activer">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="max-w-2xl">
+      <h2 id="titre-ia-activer" class="section-title"><i data-lucide="sparkles" class="mr-1 inline h-5 w-5" aria-hidden="true"></i>L'analyse par intelligence artificielle est disponible</h2>
+      <p class="muted mt-2 text-sm">Activez-la pour que l'IA lise vos antécédents et traitements écrits avec vos mots, repère ce que les règles ne reconnaissent pas et résume votre analyse en langage simple. C'est facultatif : vous décidez, et vous pouvez la désactiver à tout moment.</p>
+    </div>
+    <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="abtn abtn-primary abtn-lg">Voir et activer l'IA</a>
+  </div>
+</section>
+{% elif analyse.ia.disponible and analyse.ia.consentement and analyse.ia.statut == "ok" and not analyse.ia.contenu_a_lire %}
+<section class="panel panel-pad ia-bloc mt-8" aria-labelledby="titre-ia-rien">
+  <h2 id="titre-ia-rien" class="section-title"><i data-lucide="sparkles" class="mr-1 inline h-5 w-5" aria-hidden="true"></i>L'IA est activée, mais elle n'a rien à lire</h2>
+  <p class="muted mt-2 text-sm">Votre dossier ne contient encore aucune information médicale. Ajoutez vos allergies et vos mesures de santé, et écrivez vos <strong class="font-medium text-gray-800">antécédents</strong> et vos <strong class="font-medium text-gray-800">traitements en cours</strong> avec vos mots (par exemple « asthme depuis l'enfance, tension haute » ou « Ventoline, Amoxypen 500 »), puis revenez ici : l'IA lira tout votre dossier.</p>
+  <a href="{% url 'patients:profil' %}" class="abtn abtn-outline mt-4">Compléter mon dossier</a>
+</section>
+{% endif %}
+
+<section class="panel panel-pad mt-8 vigilance vigilance-{{ analyse.vigilance }}" aria-labelledby="titre-vigilance">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 id="titre-vigilance" class="section-title">Niveau de vigilance</h2>
+    <span class="sev {% if analyse.vigilance == 'important' %}sev-severe{% elif analyse.vigilance == 'a_surveiller' %}sev-moderee{% else %}sev-legere{% endif %}">{% if analyse.vigilance == "important" %}Important{% elif analyse.vigilance == "a_surveiller" %}À surveiller{% else %}Calme{% endif %}</span>
+  </div>
+  <p class="mt-3">{{ analyse.message }}</p>
+  {% if analyse.vigilance != "calme" %}
+  <a href="{% url 'patients:medecins' %}" class="abtn abtn-primary mt-4"><i aria-hidden="true" data-lucide="calendar-plus" class="h-4 w-4"></i>Prendre rendez-vous</a>
+  {% endif %}
+  <p class="muted mt-4 text-sm">En cas de douleur dans la poitrine, de difficulté à respirer ou de malaise, appelez immédiatement le 190, le 15 ou le 112.</p>
+</section>
+
+<div class="mt-6 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <div class="space-y-6 lg:col-span-8">
+    {% if analyse.en_clair %}
+    <section class="panel panel-pad ia-bloc" aria-labelledby="titre-clair">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="titre-clair" class="section-title">En clair</h2>
+        <span class="tag tag-ia"><i data-lucide="sparkles" class="mr-1 inline h-3 w-3" aria-hidden="true"></i>Reformulé par l'IA</span>
+      </div>
+      <p class="mt-3 text-sm">{{ analyse.en_clair }}</p>
+      <p class="muted mt-2 text-xs">Ce résumé reprend l'ensemble de votre dossier et les remarques ci-dessous, sans rien ajouter.</p>
+    </section>
+    {% endif %}
+
+    <section class="panel panel-pad" aria-labelledby="titre-resume">
+      <h2 id="titre-resume" class="section-title">Résumé</h2>
+      <p class="mt-3 text-sm">{{ analyse.resume }}</p>
+      {% if analyse.profil %}
+      <ul class="tags mt-4" aria-label="Antécédents repérés">
+        {% for p in analyse.profil %}<li class="tag{% if p in analyse.profil_ia %} tag-ia{% endif %}">{{ p }}{% if p in analyse.profil_ia %} · IA, à confirmer{% endif %}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    {% for titre, code, elements in groupes %}
+    {% if elements %}
+    <section aria-labelledby="g-{{ code }}">
+      <h2 id="g-{{ code }}" class="section-title">{{ titre }} <span class="count">{{ elements|length }}</span></h2>
+      <ul class="panel mt-3">
+        {% for e in elements %}
+        <li class="remarque remarque-{{ code }}">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <p class="item-name">{{ e.point.titre }}</p>
+            <span class="sev {% if code == 'important' %}sev-severe{% elif code == 'attention' %}sev-moderee{% else %}sev-info{% endif %}">{{ titre }}</span>
+          </div>
+          <p class="mt-2 text-sm">{{ e.point.detail }}</p>
+          <details class="mt-2 text-sm">
+            <summary class="link cursor-pointer">Pourquoi cette remarque ?</summary>
+            <p class="muted mt-1">{{ e.point.pourquoi }}</p>
+          </details>
+          {% if e.url %}
+          <a href="{{ e.url }}" class="abtn abtn-outline mt-3">{% if e.point.action == "rdv" %}Prendre rendez-vous{% elif e.point.action == "completer" %}Compléter mon dossier{% elif e.point.action == "allergies" %}Gérer mes allergies{% else %}Ajouter une mesure{% endif %}</a>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    {% endfor %}
+
+    {% if not analyse.points %}
+    <p class="panel panel-pad muted text-sm">Aucune remarque : votre dossier est complet et rien d'inhabituel n'a été repéré.</p>
+    {% endif %}
+  </div>
+
+  <aside class="space-y-6 lg:col-span-4">
+    <section class="panel panel-pad" aria-labelledby="titre-completude">
+      <h2 id="titre-completude" class="section-title">Dossier rempli à {{ analyse.completude }} %</h2>
+      <div class="meter meter-dans_les_temps" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ analyse.completude }}" aria-label="Complétude du dossier"><span style="width: {{ analyse.completude }}%"></span></div>
+      {% if analyse.manquants %}
+      <p class="muted mt-3 text-sm">Il manque : {{ analyse.manquants|join:", "|lower }}.</p>
+      <a href="{% url 'patients:profil' %}" class="abtn abtn-outline mt-3">Compléter</a>
+      {% else %}
+      <p class="muted mt-3 text-sm">Toutes les informations utiles au médecin sont renseignées.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-lu">
+      <h2 id="titre-lu" class="section-title">Ce que l'analyse a lu</h2>
+      <dl class="dl mt-3">
+        <div><dt>Antécédents repérés</dt><dd>{{ analyse.lu.antecedents }}</dd></div>
+        <div><dt>Traitements reconnus</dt><dd>{{ analyse.lu.traitements }}</dd></div>
+        <div><dt>Allergies actives</dt><dd>{{ analyse.lu.allergies }}</dd></div>
+        <div><dt>Mesures du mois</dt><dd>{{ analyse.lu.mesures }}</dd></div>
+      </dl>
+    </section>
+
+    {% if analyse.ia.disponible %}
+    <section class="panel panel-pad" aria-labelledby="titre-ia">
+      <h2 id="titre-ia" class="section-title">Analyse par IA</h2>
+      {% if analyse.ia.consentement %}
+      <p class="mt-3 text-sm">
+        {% if analyse.ia.statut == "ok" %}<span class="sev sev-legere">Active</span> L'IA a lu votre dossier complet.
+        {% else %}<span class="sev sev-moderee">Indisponible</span> L'IA n'a pas pu répondre cette fois : l'analyse ci-dessus vient des règles seules.{% endif %}
+      </p>
+      {% if analyse.ia.lu %}
+      <ul class="ia-lu mt-3 text-sm" aria-label="Ce que l'IA a lu de votre dossier">
+        {% for rubrique, detail, renseignee in analyse.ia.lu %}
+        <li{% if not renseignee %} class="ia-lu-vide"{% endif %}><span class="font-medium">{{ rubrique }}</span><span class="muted">{{ detail }}</span></li>
+        {% endfor %}
+      </ul>
+      <details class="mt-3 text-sm">
+        <summary class="link cursor-pointer">Voir exactement ce qui est envoyé</summary>
+        <pre class="ia-envoye mt-2">{{ analyse.ia.envoye }}</pre>
+        <p class="muted mt-2 text-xs">Votre nom, votre date de naissance, votre téléphone, votre adresse, votre e-mail et votre contact d'urgence ne sont jamais envoyés.</p>
+      </details>
+      {% endif %}
+      <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="link mt-3 inline-block text-sm">Désactiver ou en savoir plus</a>
+      {% else %}
+      <p class="muted mt-3 text-sm">Désactivée. Activée, elle lit l'ensemble de votre dossier (profil, antécédents, traitements, allergies, mesures, consultations, demandes de rendez-vous) et le résume en langage simple.</p>
+      <a href="{% url 'patients:ia_consentement' %}?retour=analyse" class="abtn abtn-outline mt-3">Découvrir et décider</a>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="panel panel-pad" aria-labelledby="titre-limites">
+      <h2 id="titre-limites" class="section-title">À savoir</h2>
+      <ul class="muted mt-3 list-disc space-y-2 pl-5 text-sm">
+        <li>Cette analyse est faite par des <strong class="font-medium text-gray-800">règles médicales simples</strong>, sur le serveur de MediConnect.{% if analyse.ia.consentement %} Comme vous avez activé l'IA, votre dossier (sans nom, téléphone, adresse ni date de naissance) est aussi transmis au service d'IA.{% else %} Vos données ne sont envoyées à aucun service externe.{% endif %}</li>
+        <li>Elle <strong class="font-medium text-gray-800">ne remplace pas un médecin</strong> et peut se tromper ou ne pas reconnaître un mot.</li>
+        <li>Plus votre dossier est précis, plus elle est utile.</li>
+      </ul>
+    </section>
+  </aside>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if ia_en_cours %}
+<script>
+  // Suit l'analyse IA lancée en arrière-plan (Celery) puis recharge la page, qui lira le résultat en cache.
+  (function () {
+    var bloc = document.getElementById("ia-en-cours");
+    var message = document.getElementById("ia-message");
+    var essais = 0;
+    function suivre() {
+      essais += 1;
+      fetch(bloc.dataset.etat, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (etat) {
+          if (!etat.en_cours) { window.location.reload(); return; }
+          if (essais < 45) { setTimeout(suivre, 2000); }
+          else { message.textContent = "L'IA met plus de temps que prévu. L'analyse des règles ci-dessous reste valable ; rechargez la page dans un instant."; }
+        })
+        .catch(function () { message.textContent = "Connexion perdue : rechargez la page pour voir le résultat de l'IA."; });
+    }
+    setTimeout(suivre, 1500);
+  })();
+</script>
+{% endif %}
+{% endblock %}

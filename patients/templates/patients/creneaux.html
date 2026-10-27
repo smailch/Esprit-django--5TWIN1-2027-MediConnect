@@ -1,0 +1,70 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Choisir un créneau — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:resultat' triage.pk %}" class="link text-sm">← Ma demande</a>
+    <h1 class="page-title mt-2">Choisir un créneau</h1>
+    <p class="muted mt-2 text-sm">{{ triage.medecin_nom }} · {{ triage.medecin_specialite }} · consultations de {{ duree }} minutes</p>
+  </div>
+</header>
+
+{% include "patients/_etapes.html" with etape=3 %}
+
+{% if triage.creneau %}
+<p class="alert mt-6" role="note">Votre créneau actuel : <strong class="font-medium">{{ triage.creneau|date:"l j F" }} à {{ triage.creneau|date:"H:i" }}</strong>. Choisir un autre créneau le remplace.</p>
+{% endif %}
+
+{% if total %}
+<form method="post" class="mt-8 max-w-3xl space-y-4">
+  {% csrf_token %}
+  <p class="muted text-sm">{{ total }} créneau{{ total|pluralize:"x" }} disponible{{ total|pluralize }} dans les 15 prochains jours. Les créneaux barrés sont déjà réservés par d'autres patients.</p>
+
+  {% for j in jours %}
+  <details class="panel" {% if forloop.first %}open{% endif %}>
+    <summary class="slot-day">
+      <span class="item-name">{{ j.jour|date:"l j F" }}</span>
+      <span class="muted text-sm">{% if j.total %}{{ j.total }} créneau{{ j.total|pluralize:"x" }} libre{{ j.total|pluralize }}{% else %}complet{% endif %}</span>
+    </summary>
+    <div class="slot-body">
+      {% for g in j.groupes %}
+      <fieldset class="slot-group">
+        <legend class="muted text-sm">{{ g.nom }}</legend>
+        <div class="slot-grid">
+          {% for c in g.creneaux %}
+          {% if c.libre %}
+          <label class="slot">
+            <input type="radio" name="debut" value="{{ c.debut|date:'c' }}" required>
+            <span>{{ c.debut|date:"H:i" }}</span>
+          </label>
+          {% else %}
+          <span class="slot slot-pris" title="Déjà réservé par un autre patient">
+            <span><s>{{ c.debut|date:"H:i" }}</s><small class="sr-only"> déjà pris</small></span>
+          </span>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </fieldset>
+      {% endfor %}
+    </div>
+  </details>
+  {% endfor %}
+
+  <div class="flex flex-wrap gap-3 pt-2">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Réserver ce créneau</button>
+    <button type="submit" formaction="{% url 'patients:rester_dans_la_file' triage.pk %}" formnovalidate class="abtn abtn-ghost abtn-lg">Passer : rester dans la file</button>
+  </div>
+</form>
+{% else %}
+<div class="panel panel-pad mt-8 max-w-2xl text-center">
+  <p class="text-sm">Aucun créneau disponible pour le moment chez {{ triage.medecin_nom }}.</p>
+  <p class="muted mt-1 text-sm">Votre demande reste dans la file : le médecin vous recevra dans l'ordre d'arrivée.</p>
+  <form method="post" action="{% url 'patients:rester_dans_la_file' triage.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="abtn abtn-primary mt-4">Continuer dans la file</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

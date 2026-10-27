@@ -1,0 +1,113 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Compte rendu de soin — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'infirmiers:intervention' intervention.pk %}" class="link text-sm">← {{ intervention.get_type_soin_display }} · {{ intervention.patient }}</a>
+    <h1 class="page-title mt-2">Compte rendu de soin</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Écrivez ou dictez votre note comme à un collègue, puis « Analyser » : les constantes sont repérées et les signes d'alerte signalés. Vous relisez tout avant d'enregistrer.</p>
+  </div>
+</header>
+
+<form method="post" novalidate class="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+  {% csrf_token %}
+  <div class="space-y-8 lg:col-span-7">
+    {% include "infirmiers/_erreurs.html" %}
+
+    <section class="panel panel-pad space-y-5" aria-labelledby="titre-soin">
+      <h2 id="titre-soin" class="section-title">Le soin</h2>
+      {% with field=form.realisee_le %}{% include "core/_champ.html" %}{% endwith %}
+      {% with field=form.compte_rendu %}{% include "core/_champ.html" %}{% endwith %}
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" id="dicter" class="abtn abtn-outline" aria-pressed="false" hidden>
+          <i aria-hidden="true" data-lucide="mic" class="h-4 w-4"></i><span>Dicter</span>
+        </button>
+        <button type="submit" name="action" value="analyser" class="abtn abtn-outline" formnovalidate>
+          <i aria-hidden="true" data-lucide="sparkles" class="h-4 w-4"></i>Analyser la note
+        </button>
+        <p id="dictee-etat" class="muted text-sm" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-constantes">
+      <h2 id="titre-constantes" class="section-title">Constantes relevées</h2>
+      <p class="muted mt-1 text-sm">Facultatif. Vérifiez les valeurs pré-remplies par l'analyse : ce sont elles qui sont enregistrées.</p>
+      {% if preremplis %}<p class="note mt-3"><i aria-hidden="true" data-lucide="info" class="h-4 w-4"></i><span>Pré-rempli d'après la note : {{ preremplis|join:", " }}.</span></p>{% endif %}
+      <div class="mt-5 grid gap-5 sm:grid-cols-2">
+        {% with field=form.temperature %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.saturation_oxygene %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.tension_systolique %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.tension_diastolique %}{% include "core/_champ.html" %}{% endwith %}
+        {% with field=form.frequence_cardiaque %}{% include "core/_champ.html" %}{% endwith %}
+      </div>
+    </section>
+
+    <div class="flex flex-wrap gap-3">
+      <button type="submit" name="action" value="enregistrer" class="abtn abtn-primary abtn-lg">Enregistrer et terminer</button>
+      <a href="{% url 'infirmiers:intervention' intervention.pk %}" class="abtn abtn-ghost abtn-lg">Retour</a>
+    </div>
+  </div>
+
+  <aside class="lg:col-span-5" aria-labelledby="titre-analyse">
+    <section class="panel panel-pad">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="titre-analyse" class="section-title">Analyse de la note</h2>
+        {% if analyse %}{% include "infirmiers/_niveau.html" with niveau=analyse.niveau libelle=analyse.libelle %}{% endif %}
+      </div>
+      {% if analyse %}
+        {% if analyse.niveau == 'signaler' %}
+        <p class="alert alert-danger mt-4" role="alert">Signes à signaler au médecin. Ils seront mis en évidence une fois le compte rendu enregistré.</p>
+        {% elif analyse.niveau == 'surveiller' %}
+        <p class="alert alert-warn mt-4" role="note">Des points sont à surveiller lors du prochain passage.</p>
+        {% else %}
+        <p class="mt-4 text-sm">Rien d'inquiétant n'a été repéré.</p>
+        {% endif %}
+        {% include "infirmiers/_signes.html" with signes=analyse.signes %}
+        <p class="muted mt-5 text-xs">{{ analyse.message_ia }} Un repère, pas un diagnostic : votre jugement prime.</p>
+      {% else %}
+      <p class="muted mt-3 text-sm">Cliquez sur « Analyser la note » pour repérer les constantes et les signes d'alerte. L'analyse est aussi faite à l'enregistrement.</p>
+      {% endif %}
+    </section>
+  </aside>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Dictée vocale du navigateur (aucun envoi par MediConnect) : le bouton n'apparaît que si le navigateur la propose.
+  (function () {
+    var Reconnaissance = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var bouton = document.getElementById("dicter");
+    var zone = document.getElementById("{{ form.compte_rendu.id_for_label }}");
+    var etat = document.getElementById("dictee-etat");
+    if (!Reconnaissance || !bouton || !zone) return;
+    var reco = new Reconnaissance();
+    reco.lang = "fr-FR";
+    reco.continuous = true;
+    reco.interimResults = false;
+    var actif = false;
+    function basculer(valeur) {
+      actif = valeur;
+      bouton.setAttribute("aria-pressed", String(valeur));
+      bouton.querySelector("span").textContent = valeur ? "Arrêter la dictée" : "Dicter";
+      etat.textContent = valeur ? "Dictée en cours : parlez…" : "";
+    }
+    reco.onresult = function (e) {
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          var phrase = e.results[i][0].transcript.trim();
+          zone.value = (zone.value.trim() ? zone.value.trim() + " " : "") + phrase.charAt(0).toUpperCase() + phrase.slice(1) + ".";
+        }
+      }
+    };
+    reco.onend = function () { basculer(false); };
+    reco.onerror = function (e) { basculer(false); etat.textContent = e.error === "not-allowed" ? "Micro refusé par le navigateur." : "La dictée s'est interrompue."; };
+    bouton.hidden = false;
+    bouton.addEventListener("click", function () {
+      if (actif) { reco.stop(); } else { reco.start(); basculer(true); }
+    });
+  })();
+</script>
+{% endblock %}

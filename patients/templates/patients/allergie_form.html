@@ -1,0 +1,52 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}{% if allergie %}Modifier une allergie{% else %}Ajouter une allergie{% endif %} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:allergies' %}" class="link text-sm">← Mes allergies</a>
+    <h1 class="page-title mt-2">{% if allergie %}Modifier l'allergie{% else %}Ajouter une allergie{% endif %}</h1>
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% with field=form.substance %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.type %}{% include "core/_champ.html" %}{% endwith %}
+
+  <fieldset>
+    <legend class="f-label">{{ form.gravite.label }} <span aria-hidden="true">*</span></legend>
+    <div class="scale-grid scale-grid-3">
+      {% for radio in form.gravite %}
+      <label for="{{ radio.id_for_label }}" class="scale-opt {% if radio.data.value == 'severe' %}sc-4{% elif radio.data.value == 'moderee' %}sc-2{% else %}sc-0{% endif %}">
+        {{ radio.tag }}
+        <span class="scale-num">{{ radio.choice_label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% for erreur in form.gravite.errors %}<p class="f-error" role="alert">{{ erreur }}</p>{% endfor %}
+  </fieldset>
+
+  {% with field=form.reaction %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.decouverte_le %}{% include "core/_champ.html" %}{% endwith %}
+
+  <div>
+    <label class="check-row" for="{{ form.active.id_for_label }}">
+      {{ form.active }}<span>{{ form.active.label }}</span>
+    </label>
+    {% for erreur in form.active.errors %}<p class="f-error" role="alert">{{ erreur }}</p>{% endfor %}
+  </div>
+
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+    <a href="{% url 'patients:allergies' %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+{% endblock %}

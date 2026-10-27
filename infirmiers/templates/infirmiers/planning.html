@@ -1,0 +1,40 @@
+{% extends "infirmiers/layout.html" %}
+
+{% block title %}Mon planning — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Mon planning</h1>
+    <p class="muted mt-2 max-w-xl text-sm">Les soins que vous avez acceptés, jour par jour. Ouvrez une intervention pour la déplacer, saisir le compte rendu ou l'annuler.</p>
+  </div>
+  <a href="{% url 'infirmiers:demandes' %}" class="abtn abtn-outline">
+    <i aria-hidden="true" data-lucide="inbox" class="h-4 w-4"></i>Nouvelles demandes
+  </a>
+</header>
+
+{% if jours %}
+<div class="mt-8 space-y-8">
+  {% for j in jours %}
+  <section aria-labelledby="jour-{{ forloop.counter }}">
+    <h2 id="jour-{{ forloop.counter }}" class="section-title">
+      {% if j.jour == aujourdhui %}Aujourd'hui{% else %}{{ j.jour|date:"l j F"|capfirst }}{% endif %}
+      <span class="count">{{ j.interventions|length }}</span>
+      {% if j.jour < aujourdhui %}<span class="sev sev-moderee ml-2">Passé</span>{% endif %}
+    </h2>
+    <ul class="panel mt-4">
+      {% for i in j.interventions %}{% include "infirmiers/_ligne.html" with heure=True %}{% endfor %}
+    </ul>
+    {% if j.optimisable %}
+    <p class="mt-3"><a href="{% url 'infirmiers:tournee' j.jour|date:'Y-m-d' %}" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="route" class="h-4 w-4"></i>Optimiser la tournée<span class="sr-only"> du {{ j.jour|date:"j F" }}</span></a></p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<div class="panel panel-pad mt-8 text-center">
+  <p class="muted text-sm">Votre planning est vide.</p>
+  <a href="{% url 'infirmiers:demandes' %}" class="abtn abtn-primary mt-4">Voir les demandes de ma zone</a>
+</div>
+{% endif %}
+{% endblock %}

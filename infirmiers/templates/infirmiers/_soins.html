@@ -1,0 +1,11 @@
+{# Soins pratiqués : pastilles à cocher. Paramètre : field. #}
+<fieldset>
+  <legend class="f-label">{{ field.label }}</legend>
+  <p class="f-help">{{ field.help_text }}</p>
+  <div class="mt-3 flex flex-wrap gap-2">
+    {% for checkbox in field %}
+    <label for="{{ checkbox.id_for_label }}" class="chip-select">{{ checkbox.tag }}<span>{{ checkbox.choice_label }}</span></label>
+    {% endfor %}
+  </div>
+  {% for erreur in field.errors %}<p class="f-error" role="alert">{{ erreur }}</p>{% endfor %}
+</fieldset>

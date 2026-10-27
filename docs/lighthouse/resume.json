@@ -1,0 +1,85 @@
+{
+  "outil": "Lighthouse 12.8.2",
+  "date": "2026-10-26",
+  "conditions": "pile Docker en mode production (DEBUG=False, gunicorn, WhiteNoise, Redis), Chrome sans interface ; pages connectées ouvertes avec la session d'un compte de démonstration du rôle",
+  "pages": [
+    {
+      "page": "accueil",
+      "adresse": "/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "admin-comptes",
+      "adresse": "/backoffice/comptes/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "admin-tableau",
+      "adresse": "/backoffice/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "connexion",
+      "adresse": "/comptes/connexion/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "infirmier-planning",
+      "adresse": "/infirmiers/planning/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "infirmier-tableau",
+      "adresse": "/infirmiers/tableau-de-bord/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "inscription-infirmier",
+      "adresse": "/infirmiers/inscription/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "inscription-patient",
+      "adresse": "/patients/inscription/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "medecin-file",
+      "adresse": "/medecins/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "patient-analyse",
+      "adresse": "/patients/dossier/analyse/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "patient-soin",
+      "adresse": "/infirmiers/soins/nouveau/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "patient-tableau",
+      "adresse": "/patients/tableau-de-bord/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    },
+    {
+      "page": "pharmacie-stock",
+      "adresse": "/pharmacies/stock/",
+      "accessibilite": 100,
+      "bonnes_pratiques": 100
+    }
+  ]
+}

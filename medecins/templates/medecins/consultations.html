@@ -1,0 +1,28 @@
+{% extends "medecins/layout.html" %}
+
+{% block title %}Consultations — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Consultations</h1>
+    <p class="muted mt-2 text-sm">Les comptes rendus que vous avez versés au dossier des patients.</p>
+  </div>
+</header>
+
+<ul class="mt-8 space-y-4">
+  {% for c in consultations %}
+  <li class="panel panel-pad">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p class="item-name"><a href="{% url 'medecins:consultation_detail' c.pk %}" class="link">{{ c.patient }}</a></p>
+        <p class="muted mt-1 text-sm">{{ c.date|date:"d/m/Y à H:i" }}{% if c.motif %} · {{ c.motif }}{% endif %}</p>
+      </div>
+      {% if c.diagnostic %}<p class="text-sm">{{ c.diagnostic }}</p>{% endif %}
+    </div>
+  </li>
+  {% empty %}
+  <li class="panel panel-pad muted text-sm">Aucune consultation enregistrée.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

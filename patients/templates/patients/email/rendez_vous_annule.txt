@@ -1,0 +1,9 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+{% if creneau %}Nous confirmons l'annulation de votre rendez-vous avec {{ triage.medecin_nom }}, prévu le {{ creneau|date:"l j F Y" }} à {{ creneau|time:"H:i" }}. Aucune action n'est nécessaire de votre part.{% else %}Nous confirmons l'annulation de votre demande auprès de {{ triage.medecin_nom }} : vous ne figurez plus dans sa file d'attente. Aucune action n'est nécessaire de votre part.{% endif %}
+
+Vous avez encore besoin d'une consultation ? Vous pouvez refaire une demande à tout moment depuis votre espace MediConnect{% if lien %} :
+{{ lien }}{% else %}.{% endif %}
+
+L'équipe MediConnect
+{% endautoescape %}

@@ -1,0 +1,47 @@
+{% extends "pharmacies/layout.html" %}
+
+{% block title %}{% if pharmacie %}Modifier une pharmacie{% else %}Ajouter une pharmacie{% endif %} — MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    {% if pharmacie %}
+    <a href="{% url 'pharmacies:pharmacie_detail' pharmacie.pk %}" class="link text-sm">← {{ pharmacie.nom }}</a>
+    {% else %}
+    <a href="{% url 'pharmacies:pharmacies' %}" class="link text-sm">← Toutes les pharmacies</a>
+    {% endif %}
+    <h1 class="page-title mt-2">{% if pharmacie %}Modifier la fiche{% else %}Ajouter une pharmacie{% endif %}</h1>
+    {% if not pharmacie %}<p class="muted mt-2 max-w-xl text-sm">Créez d'abord le compte (rôle « pharmacie ») dans l'administration, puis rattachez-le ici.</p>{% endif %}
+  </div>
+</header>
+
+<form method="post" novalidate class="panel panel-pad mt-8 max-w-2xl space-y-6">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div role="alert" class="alert alert-danger">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if form.user %}{% with field=form.user %}{% include "core/_champ.html" %}{% endwith %}{% endif %}
+  {% with field=form.nom %}{% include "core/_champ.html" %}{% endwith %}
+  {% with field=form.adresse %}{% include "core/_champ.html" %}{% endwith %}
+  <div class="grid gap-6 sm:grid-cols-2">
+    {% with field=form.ville %}{% include "core/_champ.html" %}{% endwith %}
+    {% with field=form.telephone %}{% include "core/_champ.html" %}{% endwith %}
+  </div>
+  {% with field=form.horaires %}{% include "core/_champ.html" %}{% endwith %}
+
+  <div>
+    <label class="check-row" for="{{ form.de_garde.id_for_label }}">
+      {{ form.de_garde }}<span>{{ form.de_garde.label }}</span>
+    </label>
+    <p class="f-help">{{ form.de_garde.help_text }}</p>
+  </div>
+
+  <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-6">
+    <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+    <a href="{% if pharmacie %}{% url 'pharmacies:pharmacie_detail' pharmacie.pk %}{% else %}{% url 'pharmacies:pharmacies' %}{% endif %}" class="abtn abtn-ghost abtn-lg">Annuler</a>
+  </div>
+</form>
+{% endblock %}

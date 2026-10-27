@@ -1,0 +1,78 @@
+{% extends "backoffice/layout.html" %}
+
+{% block title %}Paramètres — Administration MediConnect{% endblock %}
+
+{% block page %}
+<header class="page-head">
+  <div>
+    <p class="muted text-sm">Espace administrateur</p>
+    <h1 class="page-title mt-1">Paramètres</h1>
+  </div>
+</header>
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <form method="post" novalidate class="panel panel-pad space-y-5 lg:col-span-7" aria-labelledby="titre-file">
+    {% csrf_token %}
+    <div>
+      <h2 id="titre-file" class="section-title">File d'attente</h2>
+      <p class="muted mt-1 text-sm">Les délais sont comptés en minutes de présence du médecin. Un patient arrivé la nuit n'est donc pas « en retard » à l'ouverture.</p>
+    </div>
+    {% if form.non_field_errors %}
+    <div role="alert" class="alert alert-danger">{% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+    {% endif %}
+    {% for field in form %}{% include "core/_champ.html" %}{% endfor %}
+    <div class="flex flex-wrap gap-3 border-t border-gray-300/60 pt-5">
+      <button type="submit" class="abtn abtn-primary abtn-lg">Enregistrer</button>
+      <button type="submit" name="defaut" value="1" formnovalidate class="abtn abtn-ghost abtn-lg">Valeurs par défaut</button>
+    </div>
+  </form>
+
+  <div class="space-y-6 lg:col-span-5">
+    <section class="panel panel-pad" aria-labelledby="titre-aide">
+      <h2 id="titre-aide" class="section-title">Comment ça marche</h2>
+      <ul class="muted mt-3 list-disc space-y-2 pl-5 text-sm">
+        <li>Chaque demande a une <strong class="font-medium text-gray-800">échéance</strong> : l'heure de la demande plus le délai de son niveau.</li>
+        <li>La file est triée par échéance : les cas urgents (niveaux 2 et 3) restent prioritaires, et les demandes plus anciennes passent devant les plus récentes de même rang.</li>
+        <li>Une demande de niveau 4 ou 5 dépassée autant de fois que le <strong class="font-medium text-gray-800">plafond</strong> devient protégée : seuls les niveaux 1 à 3 passent devant elle.</li>
+        <li>Si elle attend <strong class="font-medium text-gray-800">la garantie</strong> (3 fois son délai par défaut), elle passe même devant les urgents : aucune demande n'attend indéfiniment.</li>
+        <li>Si le médecin est surchargé, aucun ordre de passage ne suffit : surveillez les demandes « en retard » et orientez les patients vers d'autres médecins.</li>
+        <li>Un rendez-vous fixé sort de la file : le créneau est un engagement.</li>
+      </ul>
+      <p class="muted mt-3 text-sm">Ces valeurs sont des réglages de démonstration : à faire valider par un professionnel de santé.</p>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-ia">
+      <h2 id="titre-ia" class="section-title">Intelligence artificielle</h2>
+      <dl class="dl mt-3">
+        <div><dt>Fournisseur</dt><dd>{{ ia.nom }}</dd></div>
+        <div><dt>État</dt><dd>{% if ia.active %}<span class="sev sev-legere">Configurée</span>{% else %}<span class="sev sev-moderee">Désactivée</span>{% endif %}</dd></div>
+        {% if ia.active %}
+        <div><dt>Modèle</dt><dd>{{ ia.modele }}</dd></div>
+        <div><dt>Service</dt><dd>{{ ia.hote }}</dd></div>
+        {% endif %}
+        {% if ia.cle_requise %}<div class="wide"><dt>Clé d'API</dt><dd>{% if ia.cle_presente %}présente dans le fichier .env{% else %}<strong class="font-medium">absente</strong> : ajoutez GROQ_API_KEY dans le fichier .env{% endif %}</dd></div>{% endif %}
+      </dl>
+      {% if ia.active %}
+      <form method="post" class="mt-4">
+        {% csrf_token %}
+        <button type="submit" name="tester_ia" value="1" class="abtn abtn-outline"><i aria-hidden="true" data-lucide="plug-zap" class="h-4 w-4"></i>Tester la connexion</button>
+      </form>
+      {% else %}
+      <p class="muted mt-3 text-sm">Pour l'activer (gratuit) : créez une clé sur console.groq.com, puis dans le fichier .env ajoutez <code>IA_FOURNISSEUR=groq</code> et <code>GROQ_API_KEY=…</code>, et redémarrez le serveur.</p>
+      {% endif %}
+      <p class="muted mt-3 text-xs">Chaque patient décide s'il active l'IA pour lui-même. La clé n'est jamais affichée.</p>
+    </section>
+
+    <section class="panel panel-pad" aria-labelledby="titre-raccourcis">
+      <h2 id="titre-raccourcis" class="section-title">Autres réglages</h2>
+      <ul class="mt-3 space-y-2">
+        <li><a class="abtn abtn-outline abtn-block" href="{% url 'backoffice:modele_texte' %}"><i aria-hidden="true" data-lucide="cpu" class="h-4 w-4"></i>Modèle de lecture du texte</a></li>
+        <li><a class="abtn abtn-outline abtn-block" href="{% url 'backoffice:symptomes' %}"><i aria-hidden="true" data-lucide="clipboard-list" class="h-4 w-4"></i>Catalogue des symptômes et pondérations</a></li>
+        <li><a class="abtn abtn-outline abtn-block" href="{% url 'admin:index' %}"><i aria-hidden="true" data-lucide="settings" class="h-4 w-4"></i>Administration Django</a></li>
+      </ul>
+    </section>
+  </div>
+
+</div>
+{% endblock %}

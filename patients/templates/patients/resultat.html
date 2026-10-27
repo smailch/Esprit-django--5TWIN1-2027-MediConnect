@@ -1,0 +1,149 @@
+{% extends "patients/layout.html" %}
+
+{% block title %}Votre demande — MediConnect{% endblock %}
+
+{% block page %}
+{% with n=triage.niveau_effectif %}
+<header class="page-head">
+  <div>
+    <a href="{% url 'patients:tableau_de_bord' %}" class="link text-sm">← Tableau de bord</a>
+    <h1 class="page-title mt-2">Votre demande a été envoyée</h1>
+    <p class="muted mt-2 text-sm">Médecin : {{ triage.medecin_nom }} ({{ triage.medecin_specialite }})</p>
+  </div>
+</header>
+
+{% include "patients/_etapes.html" with etape=4 %}
+
+<div class="mt-8 grid gap-6 lg:grid-cols-12 lg:items-start">
+
+  <!-- Colonne principale : niveau, explication, ce que le patient a indiqué -->
+  <div class="space-y-6 lg:col-span-7">
+    <section class="panel result req-{{ n }}" aria-labelledby="titre-niveau">
+      <div class="result-hero">
+        <span class="result-num" aria-hidden="true">{{ n }}</span>
+        <div>
+          <p id="titre-niveau" class="muted text-sm">Niveau d'urgence</p>
+          <p class="result-label">{{ triage.get_niveau_display|slice:"4:" }}</p>
+        </div>
+      </div>
+      <p class="mt-4 text-sm">{{ message }}</p>
+    </section>
+
+    {% if triage.statut == "en_consultation" %}
+    <section class="panel panel-pad" aria-labelledby="t-visio">
+      <h2 id="t-visio" class="section-title">Téléconsultation</h2>
+      <p class="muted mt-2 text-sm">{{ triage.medecin_nom }} a ouvert la consultation. La salle est la même que la sienne.</p>
+      <a href="{% url 'patients:visio' triage.pk %}" class="abtn abtn-primary mt-4">Rejoindre la téléconsultation</a>
+    </section>
+    {% endif %}
+
+    {% if triage.statut == "en_attente" %}
+    <section class="panel panel-pad" aria-labelledby="t-suivi">
+      <h2 id="t-suivi" class="section-title">Suivi de votre demande</h2>
+      <div class="mt-3">{% include "patients/_suivi_attente.html" with t=triage %}</div>
+    </section>
+    {% endif %}
+
+    {% if consultation %}
+    <section class="panel panel-pad" aria-labelledby="t-compte-rendu">
+      <h2 id="t-compte-rendu" class="section-title">Compte rendu de la consultation</h2>
+      <p class="muted mt-1 text-sm">{{ consultation.date|date:"l j F Y" }} · {{ consultation.medecin_nom }}</p>
+      <div class="mt-4">{% include "patients/_consultation.html" with c=consultation %}</div>
+    </section>
+    {% endif %}
+
+    <section class="panel panel-pad" aria-labelledby="t-expl">
+      <h2 id="t-expl" class="section-title">Comment ce niveau a été calculé</h2>
+      <p class="muted mt-2 text-sm">{{ triage.explication }}</p>
+
+      <div class="mt-5 grid gap-5 sm:grid-cols-2">
+        {% if triage.symptomes %}
+        <div>
+          <h3 class="text-sm font-medium">Symptômes déclarés</h3>
+          <ul class="muted mt-1 list-disc pl-5 text-sm">
+            {% for s in triage.symptomes %}<li>{{ s.nom }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if triage.modele_releve %}
+        <div class="sm:col-span-2">
+          <h3 class="text-sm font-medium"><i data-lucide="cpu" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Lecture de votre texte <span class="muted font-normal">(à confirmer par le médecin)</span></h3>
+          <p class="muted mt-1 text-sm">Un modèle installé sur le serveur a lu votre texte et a relevé votre niveau d'urgence{% if triage.modele_mots %} (mots repérés : {{ triage.modele_mots|join:", " }}){% endif %}.</p>
+        </div>
+        {% endif %}
+
+        {% if triage.ia_signes %}
+        <div class="sm:col-span-2">
+          <h3 class="text-sm font-medium"><i data-lucide="sparkles" class="mr-1 inline h-4 w-4" aria-hidden="true"></i>Repéré par l'IA dans votre texte <span class="muted font-normal">(à confirmer par le médecin)</span></h3>
+          <ul class="muted mt-1 list-disc pl-5 text-sm">
+            {% for s in triage.ia_signes %}<li>{{ s }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% with resume=triage.auto_evaluation_resume %}
+        {% if resume %}
+        <div>
+          <h3 class="text-sm font-medium">Ce que vous avez indiqué</h3>
+          <ul class="muted mt-1 list-disc pl-5 text-sm">
+            {% for e in resume %}<li>{{ e.nom|capfirst }} : {{ e.libelle|lower }} ({{ e.valeur }}/5)</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% endwith %}
+      </div>
+    </section>
+  </div>
+
+  <!-- Colonne latérale : médecins proposés, avertissement, actions -->
+  <div class="space-y-6 lg:col-span-5">
+    {% include "patients/_propositions.html" %}
+
+    <section class="panel panel-pad" aria-labelledby="titre-rdv">
+      <h2 id="titre-rdv" class="section-title">Votre rendez-vous</h2>
+      {% if triage.creneau %}
+      <p class="item-name mt-3">{{ triage.creneau|date:"l j F" }} à {{ triage.creneau|date:"H:i" }}</p>
+      <p class="muted mt-1 text-sm">Avec {{ triage.medecin_nom }}. Présentez-vous quelques minutes avant.</p>
+      {% if triage.statut == "en_attente" %}
+      <div class="mt-4 flex flex-wrap gap-3">
+        <a href="{% url 'patients:creneaux' triage.pk %}" class="abtn abtn-outline">Changer de créneau</a>
+        <form method="post" action="{% url 'patients:creneau_retirer' triage.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="abtn abtn-ghost">Retirer le créneau</button>
+        </form>
+      </div>
+      {% endif %}
+      {% elif can_book %}
+      <p class="muted mt-2 text-sm">Vous pouvez choisir le jour et l'heure de votre consultation, ou rester dans la file : le médecin vous recevra dans l'ordre d'arrivée.</p>
+      <a href="{% url 'patients:creneaux' triage.pk %}" class="abtn abtn-primary mt-4">
+        <i aria-hidden="true" data-lucide="calendar-clock" class="h-4 w-4"></i>Choisir un créneau
+      </a>
+      {% elif triage.statut == "en_attente" %}
+      <p class="muted mt-2 text-sm">Votre cas est pris en charge en priorité : il n'y a pas de créneau à choisir. L'heure estimée de prise en charge est indiquée dans le suivi ci-dessus.</p>
+      {% else %}
+      <p class="muted mt-2 text-sm">Aucun créneau n'est réservé pour cette demande.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel panel-pad">
+      <p class="muted text-sm">
+        Cette évaluation est indicative et ne remplace pas un avis médical. Le médecin garde la décision finale et peut modifier le niveau.
+      </p>
+      <div class="mt-5 flex flex-wrap gap-3">
+        <a href="{% url 'patients:tableau_de_bord' %}" class="abtn abtn-primary">Retour à mon tableau de bord</a>
+        {% if triage.statut == "en_attente" %}
+        <form method="post" action="{% url 'patients:annuler' triage.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="abtn abtn-danger">Annuler ma demande</button>
+        </form>
+        {% else %}
+        <p class="muted inline-flex min-h-[44px] items-center text-sm">Statut : {{ triage.get_statut_display }}</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+</div>
+{% endwith %}
+{% endblock %}

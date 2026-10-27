@@ -1,0 +1,21 @@
+{# Une intervention dans une liste. Paramètres : i, et facultativement heure (affiche l'heure de passage au lieu de la date). #}
+<li class="item-row">
+  <div>
+    <p class="item-name">
+      <a href="{% url 'infirmiers:intervention' i.pk %}" class="link">{{ i.get_type_soin_display }}</a>{% if i.libelle_serie %} <span class="tag">{{ i.libelle_serie }}</span>{% endif %}
+      <span class="muted"> · {{ i.patient }}</span>
+    </p>
+    <p class="muted mt-1 text-sm">
+      {% if i.date_prevue %}
+        {% if heure %}{{ i.date_prevue|date:"H:i" }}{% else %}{{ i.date_prevue|date:"D j M à H:i" }}{% endif %}
+      {% else %}
+        Souhaité le {{ i.date_souhaitee|date:"D j M" }}{% if i.moment != 'indifferent' %} ({{ i.get_moment_display|lower }}){% endif %}
+      {% endif %}
+      · {{ i.ville }}
+    </p>
+  </div>
+  <div class="flex flex-wrap items-center gap-3">
+    {% if i.a_cloturer %}<span class="sev sev-moderee">Compte rendu à saisir</span>{% endif %}
+    {% include "infirmiers/_statut.html" %}
+  </div>
+</li>

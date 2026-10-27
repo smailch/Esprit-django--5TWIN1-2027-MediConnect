@@ -1,0 +1,18 @@
+{% autoescape off %}Bonjour {{ user.get_full_name|default:user.get_username }},
+
+{% if modifie %}Votre rendez-vous a changé d'heure. Voici le récapitulatif :{% else %}C'est noté, votre créneau est réservé. Voici le récapitulatif :{% endif %}
+
+  Médecin : {{ triage.medecin_nom }}{% if triage.medecin_specialite %} ({{ triage.medecin_specialite }}){% endif %}
+  Date : {{ creneau|date:"l j F Y" }}
+  Heure : {{ creneau|time:"H:i" }}
+
+Bon à savoir :
+- Arrivez quelques minutes avant l'heure prévue.
+- Si le médecin prend du retard, nous vous écrirons avec la nouvelle heure prévue.
+- Un empêchement ? Vous pouvez changer ou annuler ce rendez-vous depuis votre espace :
+  {{ lien }}
+
+Pour votre confidentialité, ce message ne contient aucune information médicale.
+
+L'équipe MediConnect
+{% endautoescape %}

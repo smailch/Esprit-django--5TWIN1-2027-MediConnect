@@ -1,0 +1,17 @@
+{% if sms %}
+<form method="post" action="{% url 'medecins:envoyer_sms' consultation.pk %}" class="mt-6 max-w-3xl">
+  {% csrf_token %}
+  <button type="submit" class="abtn abtn-primary">Envoyer au patient par SMS</button>
+  <p class="muted mt-2 text-sm">
+    {% if essai %}
+    Le SMS part du {{ expediteur }} et le patient le reçoit au {{ telephone }}.
+    {% else %}
+    Un clic envoie le compte rendu par SMS au {{ telephone }}.
+    {% endif %}
+  </p>
+</form>
+{% elif telephone %}
+<p class="muted mt-6 max-w-3xl text-sm">Le numéro {{ telephone }} ne permet pas d'envoyer un SMS.</p>
+{% else %}
+<p class="muted mt-6 max-w-3xl text-sm">Ce patient n'a pas de numéro pour un envoi par SMS.</p>
+{% endif %}

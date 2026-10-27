@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<a href="#contenu" class="skip-link">Aller au contenu principal</a>
+<section class="min-h-[100dvh] relative overflow-hidden flex flex-col bg-soft">
+
+  <!-- Vidéo de fond -->
+  <video id="hero-video" class="hero-video absolute inset-0 w-full h-full object-cover" autoplay loop muted playsinline
+         poster="{% static 'img/doctor-poster.jpg' %}" aria-hidden="true">
+    <source src="{% static 'video/doctor.mp4' %}" type="video/mp4">
+  </video>
+
+  <!-- Teinte cyan de la vidéo (sans l'éclaircir) -->
+  <div class="hero-tint absolute inset-0" aria-hidden="true"></div>
+
+  <!-- Voile sombre, côté texte, pour la lisibilité -->
+  <div class="hero-veil absolute inset-0" aria-hidden="true"></div>
+
+  <!-- NAV -->
+  <header class="relative z-10">
+    <nav class="flex items-center justify-between px-5 sm:px-8 md:px-12 py-5" aria-label="Navigation principale">
+      <a href="{% url 'home' %}" class="fade-down flex items-center gap-2 min-h-[44px]" style="--i:0">
+        <span class="logo-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="font-medium text-base">MediConnect</span>
+      </a>
+
+      <ul class="glass glass-pill hidden xl:flex items-center gap-8 px-8 py-2.5 text-sm text-slate-100 whitespace-nowrap">
+        <li class="fade-down" style="--i:1"><a href="{% url 'home' %}" class="hover:text-accent transition-colors">Accueil</a></li>
+        <li class="fade-down" style="--i:2"><a href="{% url 'patients:medecins' %}" class="hover:text-accent transition-colors">Spécialités</a></li>
+        <li class="fade-down" style="--i:3"><a href="{% url 'patients:medecins' %}" class="hover:text-accent transition-colors">Médecins</a></li>
+        <li class="fade-down" style="--i:4"><a href="#a-propos" class="hover:text-accent transition-colors">À propos</a></li>
+        <li class="fade-down" style="--i:5"><a href="#contact" class="hover:text-accent transition-colors">Contact</a></li>
+        <li class="fade-down" style="--i:6"><a href="{% url 'medecins:inscription' %}" class="hover:text-accent transition-colors">Espace médecin</a></li>
+      </ul>
+
+      <div class="flex items-center gap-3">
+        <div class="fade-down hidden sm:flex items-center gap-3" style="--i:6">
+          <a href="{% url 'core:connexion' %}" class="btn btn-glass">Connexion</a>
+          <a href="{% url 'patients:inscription' %}" class="btn btn-primary">Prendre rendez-vous</a>
+        </div>
+        <button type="button" id="menu-open" class="btn btn-glass btn-icon xl:hidden"
+                aria-label="Ouvrir le menu" aria-controls="mobile-menu" aria-expanded="false">
+          <i aria-hidden="true" data-lucide="menu" class="h-6 w-6"></i>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- MENU MOBILE -->
+  <div id="mobile-menu" class="menu-panel hidden fixed inset-0 z-50 flex-col px-5 sm:px-8 py-5" role="dialog" aria-modal="true" aria-label="Menu">
+    <div class="flex items-center justify-between">
+      <a href="{% url 'home' %}" class="flex items-center gap-2 min-h-[44px]">
+        <span class="logo-mark"><i aria-hidden="true" data-lucide="stethoscope" class="h-5 w-5"></i></span>
+        <span class="font-medium text-base">MediConnect</span>
+      </a>
+      <button type="button" id="menu-close" class="btn btn-glass btn-icon" aria-label="Fermer le menu">
+        <i aria-hidden="true" data-lucide="x" class="h-6 w-6"></i>
+      </button>
+    </div>
+    <ul class="flex flex-col gap-6 mt-12 text-xl font-light text-slate-100">
+      <li><a href="{% url 'home' %}" class="menu-link">Accueil</a></li>
+      <li><a href="{% url 'patients:medecins' %}" class="menu-link">Spécialités</a></li>
+      <li><a href="{% url 'patients:medecins' %}" class="menu-link">Médecins</a></li>
+      <li><a href="#a-propos" class="menu-link">À propos</a></li>
+      <li><a href="#contact" class="menu-link">Contact</a></li>
+      <li><a href="{% url 'medecins:inscription' %}" class="menu-link">Espace médecin</a></li>
+    </ul>
+    <a href="{% url 'core:connexion' %}" class="menu-link btn btn-glass mt-auto mb-3 w-full">Connexion</a>
+    <a href="{% url 'patients:inscription' %}" class="menu-link btn btn-primary w-full">Prendre rendez-vous</a>
+  </div>
+
+  <!-- HERO -->
+  <main id="contenu" class="relative z-10 flex-1 flex items-center px-5 sm:px-8 md:px-12 py-8">
+    <div class="max-w-xl w-full">
+      <span class="chip fade-up" style="--i:1">Santé connectée, simplement</span>
+
+      <h1 class="mt-5 font-light leading-tight text-gray-800" style="font-size: clamp(1.9rem, 4.4vw, 3.25rem);">
+        <span class="block overflow-hidden"><span class="line block" style="--w:0">Votre médecin,</span></span>
+        <span class="block overflow-hidden"><span class="line block" style="--w:1">à portée de clic</span></span>
+      </h1>
+
+      <p class="fade-up mt-5 text-sm sm:text-base text-gray-700 font-light max-w-md" style="--i:5">
+        Trouvez un spécialiste, prenez rendez-vous et suivez votre dossier médical en toute sécurité.
+      </p>
+
+      <div class="fade-up mt-7 flex flex-col sm:flex-row gap-3" style="--i:6">
+        <a href="{% url 'patients:inscription' %}" class="btn btn-primary">
+          Prendre rendez-vous
+          <i aria-hidden="true" data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+        <a href="{% url 'patients:medecins' %}" class="btn btn-glass">Découvrir les médecins</a>
+      </div>
+
+      <ul class="fade-up mt-6 flex flex-wrap gap-2" style="--i:7" aria-label="Nos points forts">
+        <li class="chip"><i aria-hidden="true" data-lucide="activity" class="h-3.5 w-3.5"></i>Triage intelligent</li>
+        <li class="chip"><i aria-hidden="true" data-lucide="shield-check" class="h-3.5 w-3.5"></i>Médecins vérifiés</li>
+        <li class="chip"><i aria-hidden="true" data-lucide="lock" class="h-3.5 w-3.5"></i>Dossier sécurisé</li>
+      </ul>
+    </div>
+  </main>
+
+  <!-- STATS -->
+  <div class="relative z-10 px-5 sm:px-8 md:px-12 pb-8 md:pb-12">
+    <dl aria-label="Chiffres clés" class="grid grid-cols-3 gap-3 max-w-xl">
+      <div class="glass fade-up flex flex-col-reverse p-3 sm:p-4" style="--i:8">
+        <dt class="text-xs text-gray-700">Médecins</dt>
+        <dd class="text-xl sm:text-2xl font-light text-accent">500+</dd>
+      </div>
+      <div class="glass fade-up flex flex-col-reverse p-3 sm:p-4" style="--i:9">
+        <dt class="text-xs text-gray-700">Patients</dt>
+        <dd class="text-xl sm:text-2xl font-light text-accent">10 000+</dd>
+      </div>
+      <div class="glass fade-up flex flex-col-reverse p-3 sm:p-4" style="--i:10">
+        <dt class="text-xs text-gray-700">Disponibilité</dt>
+        <dd class="text-xl sm:text-2xl font-light text-accent">24/7</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<footer class="px-5 sm:px-8 md:px-12 py-10 text-sm text-gray-600" style="border-top: 1px solid rgba(120, 160, 220, 0.18);">
+  <div class="grid gap-8 md:grid-cols-2" style="max-width: 64rem;">
+    <section id="a-propos" aria-labelledby="titre-a-propos">
+      <h2 id="titre-a-propos" class="text-base font-medium text-gray-800">À propos</h2>
+      <p class="mt-2">MediConnect met en relation patients et médecins, et classe chaque demande selon son urgence pour que les cas graves passent d'abord.</p>
+    </section>
+    <section id="contact" aria-labelledby="titre-contact">
+      <h2 id="titre-contact" class="text-base font-medium text-gray-800">Contact</h2>
+      <div class="mt-2">{% include "core/_pied.html" %}</div>
+    </section>
+  </div>
+</footer>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/hero.js' %}"></script>
+{% endblock %}
